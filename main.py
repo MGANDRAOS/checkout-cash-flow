@@ -57,6 +57,27 @@ def dashboard():
     closings = db.session.execute(
         db.select(DailyClosing).order_by(DailyClosing.date.desc()).limit(30)
     ).scalars().all()
+    
+    last_close = db.session.execute(
+    db.select(DailyClosing).order_by(DailyClosing.date.desc())
+    ).scalars().first()
+    
+    last_data = None
+    
+    if last_close:
+        last_data = {
+            "fixed": last_close.fixed_allocation_cents / 100,
+            "ops": last_close.ops_allocation_cents / 100,
+            "inventory": last_close.inventory_allocation_cents / 100,
+            "buffer": last_close.buffer_allocation_cents / 100,
+        }
+        
+    # Fetch last closing (yesterday's sale suggestion)
+    last_closing = db.session.execute(
+        db.select(DailyClosing).order_by(DailyClosing.date.desc())
+    ).scalars().first()
+
+    suggested_sale = last_closing.sales_cents / 100 if last_closing else ""
 
     return render_template(
         "dashboard.html",
@@ -66,7 +87,11 @@ def dashboard():
         currency=CURRENCY,
         funded_pct=funded_pct,
         month_target_cents=month_target,
+        suggested_sale=suggested_sale,
+        last_data=last_data,
+        today=date.today()
     )
+
 
 
 @app.post("/daily-close")
@@ -153,6 +178,7 @@ def fixed_bills():
         } for b in bills
     ])
     
+    
 @app.post("/set-custom-start")
 def set_custom_start():
     try:
@@ -170,6 +196,7 @@ def set_custom_start():
         flash(f"Error: {e}", "danger")
     return redirect(url_for("dashboard"))
 
+
 @app.post("/delete-fixed-bill/<int:bill_id>")
 def delete_fixed_bill(bill_id):
     """Delete a fixed bill."""
@@ -186,7 +213,93 @@ def delete_fixed_bill(bill_id):
     return redirect(url_for("dashboard"))
 
 
+@app.post("/toggle-fixed-bill/<int:bill_id>")
+def toggle_fixed_bill(bill_id):
+    """Toggle the active/inactive state of a fixed bill."""
+    try:
+        bill = db.session.get(FixedBill, bill_id)
+        if not bill:
+            flash("Fixed bill not found.", "warning")
+            return redirect(url_for("dashboard"))
+        bill.is_active = not bill.is_active
+        db.session.commit()
+        status = "activated" if bill.is_active else "deactivated"
+        flash(f"{bill.name} {status}.", "info")
+    except Exception as e:
+        flash(f"Error toggling bill: {e}", "danger")
+    return redirect(url_for("dashboard"))
 
+
+@app.post("/void-closing/<int:closing_id>")
+def void_closing(closing_id):
+    """Void a daily closing and reverse its envelope allocations."""
+    closing = db.session.get(DailyClosing, closing_id)
+    if not closing:
+        flash("Closing not found.", "warning")
+        return redirect(url_for("dashboard"))
+
+    # Reverse envelope allocations
+    try:
+        post_envelope_tx("FIXED", -closing.fixed_allocation_cents, "void", f"Void {closing.date}")
+        post_envelope_tx("OPS", -closing.ops_allocation_cents, "void", f"Void {closing.date}")
+        post_envelope_tx("INVENTORY", -closing.inventory_allocation_cents, "void", f"Void {closing.date}")
+        post_envelope_tx("BUFFER", -closing.buffer_allocation_cents, "void", f"Void {closing.date}")
+
+        db.session.delete(closing)
+        db.session.commit()
+        flash(f"Closing for {closing.date} voided.", "danger")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error voiding closing: {e}", "danger")
+
+    return redirect(url_for("dashboard"))
+
+
+@app.post("/edit-closing/<int:closing_id>")
+def edit_closing(closing_id):
+    """Edit a daily closing (update sale/notes and reallocate)."""
+    closing = db.session.get(DailyClosing, closing_id)
+    if not closing:
+        flash("Closing not found.", "warning")
+        return redirect(url_for("dashboard"))
+
+    try:
+        # Read new values
+        new_sale_cents = dollars_to_cents(request.form["sale"])
+        new_notes = request.form.get("notes", "").strip() or None
+        inventory_rate = float(request.form.get("inventory_rate", DEFAULT_INVENTORY_RATE))
+        ops_rate = float(request.form.get("ops_rate", DEFAULT_OPS_RATE))
+
+        # Reverse old allocations
+        post_envelope_tx("FIXED", -closing.fixed_allocation_cents, "edit_reversal", f"Edit reversal {closing.date}")
+        post_envelope_tx("OPS", -closing.ops_allocation_cents, "edit_reversal", f"Edit reversal {closing.date}")
+        post_envelope_tx("INVENTORY", -closing.inventory_allocation_cents, "edit_reversal", f"Edit reversal {closing.date}")
+        post_envelope_tx("BUFFER", -closing.buffer_allocation_cents, "edit_reversal", f"Edit reversal {closing.date}")
+
+        # Compute new allocation
+        alloc, _ = compute_allocation(new_sale_cents, closing.date, inventory_rate, ops_rate)
+
+        # Apply updates
+        closing.sales_cents = new_sale_cents
+        closing.notes = new_notes
+        closing.fixed_allocation_cents = alloc.fixed_cents
+        closing.ops_allocation_cents = alloc.ops_cents
+        closing.inventory_allocation_cents = alloc.inventory_cents
+        closing.buffer_allocation_cents = alloc.buffer_cents
+
+        # Post new allocations
+        post_envelope_tx("FIXED", alloc.fixed_cents, "edit_allocation", f"Edit update {closing.date}")
+        post_envelope_tx("OPS", alloc.ops_cents, "edit_allocation", f"Edit update {closing.date}")
+        post_envelope_tx("INVENTORY", alloc.inventory_cents, "edit_allocation", f"Edit update {closing.date}")
+        post_envelope_tx("BUFFER", alloc.buffer_cents, "edit_allocation", f"Edit update {closing.date}")
+
+        db.session.commit()
+        flash(f"Closing for {closing.date} updated successfully.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error editing closing: {e}", "danger")
+
+    return redirect(url_for("dashboard"))
 
 # ───────────────────────────────
 # App entry
