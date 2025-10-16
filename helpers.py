@@ -134,20 +134,20 @@ def compute_allocation(sales_cents: int, on_date: date) -> Tuple[Allocation, Dic
     month_target = sum(b.monthly_amount_cents for b in fixed_bills)
     fixed_daily_goal = month_target // days_in_period
 
-    # --- 3️⃣  Allocate ---
-    remaining = sales_cents
+      # --- 3️⃣ Allocate ---
 
-    # Reserve fixed first (non-negotiable)
-    fixed_alloc = min(fixed_daily_goal, remaining)
-    remaining -= fixed_alloc
+    # 1. Reserve fixed first
+    fixed_alloc = min(fixed_daily_goal, sales_cents)
+    remaining = max(sales_cents - fixed_alloc, 0)
 
-    # Split remaining into ops / inventory / buffer
-    ops_alloc = min(int(round(ops_rate * remaining)), remaining)
-    remaining -= ops_alloc
-
-    inv_alloc = min(int(round(inventory_rate * remaining)), remaining)
+    # 2. Apply inventory and ops percentages to the remaining amount
+    inv_alloc = int(round(remaining * inventory_rate))
     remaining -= inv_alloc
 
+    ops_alloc = int(round(remaining * ops_rate))
+    remaining -= ops_alloc
+
+    # 3. Whatever is still left becomes buffer
     buffer_alloc = max(remaining, 0)
 
     # --- 4️⃣  Debug info for diagnostics ---
