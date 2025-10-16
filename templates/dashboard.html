@@ -6,16 +6,20 @@
     <!-- Sales Input Form -->
     <div class="card shadow-sm mb-4">
         <div class="card-body">
-            <form method="POST" action="/daily-close">
+            <form method="POST" action="{{ url_for('daily_close') }}">
                 <div class="row align-items-end">
                     <div class="col-md-4">
+                        <div class="alert alert-secondary shadow-sm text-center">
+                            You're submitting a closing for:</br> <strong>{{ suggested_date.strftime('%A, %B %d, %Y')
+                                }}</strong>
+                        </div>
                         <label for="sales" class="form-label fw-bold">Today's Sales (USD)</label>
                         <input type="number" name="sales" id="sales" class="form-control" min="0" step="0.01" required
                             value="{{ suggested_sale }}">
                     </div>
-                    <div class="mb-3">
+                    <div class="col-md-4">
                         <label for="date" class="form-label">Closing Date</label>
-                        <input type="date" name="date" id="date" class="form-control" required>
+                        <input type="date" name="date" class="form-control" required value="{{ suggested_date }}">
                     </div>
                     <div class="col-md-3">
                         <button type="submit" class="btn btn-success mt-3 w-100">Submit Closing</button>

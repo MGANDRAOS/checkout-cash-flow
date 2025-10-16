@@ -1,4 +1,5 @@
-import calendar
+import calendar 
+from calendar import monthrange
 from datetime import date
 from dataclasses import dataclass
 from typing import Dict, Tuple, Optional
@@ -102,35 +103,71 @@ def current_month_target_cents(on_date: date) -> int:
 
 
 def compute_allocation(sales_cents: int, on_date: date) -> Tuple[Allocation, Dict[str, int]]:
-    """Split a sale amount into envelope allocations using current settings."""
+    """Split a sale amount into envelope allocations using current settings.
+    Fixed expenses are reserved first, using custom start dates if defined.
+    """
+
     # Get configured percentages from settings
     inventory_rate = float(get_setting("inventory_pct", "0.5"))
     ops_rate = float(get_setting("ops_pct", "0.03"))
 
-    month_target = current_month_target_cents(on_date)
-    dim = days_in_month(on_date.year, on_date.month)
-    fixed_daily_goal = month_target // dim if dim else 0
+    # --- 1️⃣  Determine Fixed Bills Period ---
+    fixed_bills = db.session.execute(
+        db.select(FixedBill).where(FixedBill.is_active == True)
+    ).scalars().all()
 
+    if fixed_bills:
+        # Find earliest custom_start_date (or fallback to month start)
+        earliest_start = min(
+            b.custom_start_date or date(on_date.year, on_date.month, 1)
+            for b in fixed_bills
+        )
+    else:
+        earliest_start = date(on_date.year, on_date.month, 1)
+
+    # Total days in this active period (from start to end of month)
+    month_end = date(on_date.year, on_date.month, days_in_month(on_date.year, on_date.month))
+    days_in_period = (month_end - earliest_start).days + 1
+    days_in_period = max(days_in_period, 1)
+
+    # --- 2️⃣  Compute total fixed target for current month ---
+    month_target = sum(b.monthly_amount_cents for b in fixed_bills)
+    fixed_daily_goal = month_target // days_in_period
+
+    # --- 3️⃣  Allocate ---
     remaining = sales_cents
 
+    # Reserve fixed first (non-negotiable)
     fixed_alloc = min(fixed_daily_goal, remaining)
     remaining -= fixed_alloc
 
-    ops_alloc = min(int(round(ops_rate * sales_cents)), remaining)
+    # Split remaining into ops / inventory / buffer
+    ops_alloc = min(int(round(ops_rate * remaining)), remaining)
     remaining -= ops_alloc
 
-    inv_alloc = min(int(round(inventory_rate * sales_cents)), remaining)
+    inv_alloc = min(int(round(inventory_rate * remaining)), remaining)
     remaining -= inv_alloc
 
     buffer_alloc = max(remaining, 0)
 
+    # --- 4️⃣  Debug info for diagnostics ---
     debug = {
         "month_target": month_target,
-        "days_in_month": dim,
+        "days_in_period": days_in_period,
         "fixed_daily_goal": fixed_daily_goal,
         "inventory_rate": inventory_rate,
         "ops_rate": ops_rate,
+        "period_start": earliest_start.isoformat(),
     }
+    
+    print("Settings → inventory_pct:", get_setting("inventory_pct", "0.5"))
+    print("Settings → ops_pct:", get_setting("ops_pct", "0.03"))
 
     return Allocation(fixed_alloc, ops_alloc, inv_alloc, buffer_alloc), debug
 
+
+
+
+def days_in_month(year: int, month: int) -> int:
+    """Returns number of days in a given month."""
+    return monthrange(year, month)[1]

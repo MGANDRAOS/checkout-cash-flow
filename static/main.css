@@ -1,19 +1,18 @@
 /* ——— GLOBAL RESET & TYPOGRAPHY ——— */
-html,
-body {
+html, body {
     font-family: 'Inter', sans-serif;
     background-color: #f6f8fb;
     color: #222;
     font-size: 18px;
     padding-top: 56px;
-    /* space for fixed top navbar */
     background-color: #f9f9f9;
 }
 
 .navbar {
     background: linear-gradient(90deg, #101010, #232323);
 }
-.navbar img{
+
+.navbar img {
     max-width: 120px;
 }
 
@@ -149,6 +148,10 @@ h2.h4 {
     border: none;
     border-radius: 0.75rem;
     font-size: 1.05rem;
+    background-color: #dcfce7;
+    position: fixed;
+    top: 60px;
+    right: 30px;
 }
 
 .alert-success {

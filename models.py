@@ -68,3 +68,14 @@ class AppSetting(db.Model):
 
     def __repr__(self):
         return f"<AppSetting {self.key}={self.value}>"
+    
+    
+class FixedCollection(db.Model):
+    """Manual log of actual Fixed envelope cash collected."""
+    __tablename__ = "fixed_collections"
+
+    id = db.Column(db.Integer, primary_key=True)
+    amount_cents = db.Column(db.Integer, nullable=False)
+    collected_on = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

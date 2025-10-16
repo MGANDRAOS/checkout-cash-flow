@@ -1,11 +1,11 @@
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 
 # Local imports
-from models import db, Envelope, DailyClosing, FixedBill, AppSetting
+from models import db, Envelope, DailyClosing, FixedBill, FixedCollection
 from helpers import (
     dollars_to_cents,
     cents_to_dollars,
@@ -14,7 +14,8 @@ from helpers import (
     compute_allocation,
     current_month_target_cents,
     get_setting,
-    set_setting
+    set_setting,
+    days_in_month
 )
 
 # ───────────────────────────────
@@ -83,8 +84,10 @@ def dashboard():
     last_closing = db.session.execute(
         db.select(DailyClosing).order_by(DailyClosing.date.desc())
     ).scalars().first()
-
+    
+    suggested_date = (last_closing.date + timedelta(days=1)) if last_closing else date.today()
     suggested_sale = last_closing.sales_cents / 100 if last_closing else ""
+    
 
     return render_template(
         "dashboard.html",
@@ -95,11 +98,11 @@ def dashboard():
         funded_pct=funded_pct,
         month_target_cents=month_target,
         suggested_sale=suggested_sale,
+        suggested_date=suggested_date,
         last_data=last_data,
-        last_closing=last_closing,  # 👈 ADD THIS
+        last_closing=last_closing,
         today=date.today()
     )
-
 
 
 @app.post("/daily-close")
@@ -108,7 +111,7 @@ def daily_close():
     ensure_default_envelopes()
     try:
         close_date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
-        sale_cents = dollars_to_cents(request.form["sale"])
+        sale_cents = dollars_to_cents(request.form["sales"])
         notes = request.form.get("notes", "").strip() or None
     except Exception as e:
         flash(f"Invalid input: {e}", "danger")
@@ -144,9 +147,16 @@ def daily_close():
     post_envelope_tx("BUFFER", alloc.buffer_cents, "allocation", f"Daily Close {close_date}", closing.id)
 
     db.session.commit()
+    
+    if close_date > date.today():
+        flash("You cannot submit a slip for a future date.", "danger")
+        return redirect(url_for("dashboard"))
+    if close_date < date(2025, 10, 13):
+        flash("You cannot submit slips before the business officially started.", "danger")
+        return redirect(url_for("dashboard"))
 
     flash(
-        f"Closed {close_date}: "
+        f"Successfully submitted closing for {close_date.strftime('%B %d, %Y')}: "
         f"Fixed ${cents_to_dollars(alloc.fixed_cents)}, "
         f"Ops ${cents_to_dollars(alloc.ops_cents)}, "
         f"Inventory ${cents_to_dollars(alloc.inventory_cents)}, "
@@ -346,11 +356,9 @@ def envelope_view():
     return render_template("envelopes.html", envelopes=envelopes)
 
 
-
 @app.route("/reports")
 def reports():
     return render_template("reports.html")
-
 
 
 @app.route("/settings", methods=["GET", "POST"])
@@ -378,6 +386,82 @@ def settings():
         inventory_pct=inv_pct,
         ops_pct=ops_pct
     )
+    
+    
+@app.route("/fixed-collections")
+def fixed_collections():
+    today = date.today()
+
+    # 1. Get all closings this month and sum the fixed allocations
+    month_start = today.replace(day=1)
+    closings = db.session.execute(
+        db.select(DailyClosing)
+        .where(DailyClosing.date >= month_start)
+        .order_by(DailyClosing.date.desc()) # This is the crucial line
+    ).scalars().all()
+
+    total_allocated = sum(c.fixed_allocation_cents for c in closings)
+
+    # 2. Get all FixedCollection entries for this month
+    collections = db.session.execute(
+        db.select(FixedCollection).where(FixedCollection.collected_on >= month_start)
+    ).scalars().all()
+
+    total_collected = sum(c.amount_cents for c in collections)
+
+    # 3. Daily fixed goal
+    month_target = current_month_target_cents(today)
+    dim = days_in_month(today.year, today.month)
+    daily_goal = month_target // dim if dim else 0
+    
+    
+    outstanding = total_allocated - total_collected
+
+    progress_pct = (total_collected / total_allocated * 100) if total_allocated > 0 else 0
+
+
+    return render_template(
+        "fixed_collections.html",
+        total_allocated=total_allocated,
+        total_collected=total_collected,
+        daily_goal=daily_goal,
+        progress_pct=progress_pct,
+        closings=closings,
+        outstanding=outstanding,
+        collections=collections,
+        currency=CURRENCY,
+        today=today
+    )
+    
+@app.post("/mark-fixed-collected")
+def mark_fixed_collected():
+    try:
+        collect_date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
+        amount_cents = int(request.form["amount"])
+        
+        exists = db.session.scalar(
+            db.select(db.func.count())
+            .select_from(FixedCollection)
+            .where(FixedCollection.collected_on == collect_date)
+        )
+        if exists:
+            flash(f"Already collected for {collect_date}.", "warning")
+        else:
+            fc = FixedCollection(
+                collected_on=collect_date,
+                amount_cents=amount_cents
+            )
+            db.session.add(fc)
+            db.session.commit()
+            flash(f"Collected for {collect_date} successfully recorded.", "success")
+    except Exception as e:
+        flash(f"Error recording collection: {e}", "danger")
+
+    return redirect(url_for("fixed_collections"))
+
+
+
+    
 # ───────────────────────────────
 # App entry
 # ───────────────────────────────
