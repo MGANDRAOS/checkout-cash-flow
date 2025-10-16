@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">💰 Envelope Balances</h2>
+
+    <div class="row">
+        {% for e in envelopes %}
+        <div class="col-md-3 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h5 class="card-title">{{ e.name }}</h5>
+                    <p class="display-6 text-success fw-bold">
+                        ${{ "%.2f"|format(e.balance_cents / 100) }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12 text-center text-muted">
+            No envelopes yet.
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

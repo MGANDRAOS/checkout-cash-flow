@@ -1,8 +1,8 @@
 import calendar
 from datetime import date
 from dataclasses import dataclass
-from typing import Dict, Tuple
-from models import db, Envelope, EnvelopeTransaction, FixedBill
+from typing import Dict, Tuple, Optional
+from models import db, Envelope, EnvelopeTransaction, FixedBill, AppSetting
 
 
 # ───────────────────────────────
@@ -62,6 +62,23 @@ def post_envelope_tx(code: str, amount: int, tx_type: str, desc: str, closing_id
             description=desc,
         )
     )
+# ───────────────────────────────
+# App settings
+# ───────────────────────────────
+    
+def get_setting(key: str, default: Optional[str] = None) -> str:
+    setting = db.session.get(AppSetting, key)
+    return setting.value if setting else default
+
+
+def set_setting(key: str, value: str) -> None:
+    setting = db.session.get(AppSetting, key)
+    if setting:
+        setting.value = value
+    else:
+        setting = AppSetting(key=key, value=value)
+        db.session.add(setting)
+    db.session.commit()
 
 
 # ───────────────────────────────
@@ -84,44 +101,16 @@ def current_month_target_cents(on_date: date) -> int:
     return int(total or 0)
 
 
-def compute_allocation(
-    sales_cents: int,
-    on_date: date,
-    inventory_rate: float,
-    ops_rate: float,
-) -> Tuple[Allocation, Dict[str, int]]:
-    """Split a sale amount into envelope allocations, optionally using a custom start date for this month."""
+def compute_allocation(sales_cents: int, on_date: date) -> Tuple[Allocation, Dict[str, int]]:
+    """Split a sale amount into envelope allocations using current settings."""
+    # Get configured percentages from settings
+    inventory_rate = float(get_setting("inventory_pct", "0.5"))
+    ops_rate = float(get_setting("ops_pct", "0.03"))
+
     month_target = current_month_target_cents(on_date)
-
-    # ───────────────────────────────
-    # Check for a custom start date override
-    # ───────────────────────────────
-    from models import FixedBill  # local import to avoid circular import
-
-    custom_start_date = db.session.scalar(
-        db.select(FixedBill.custom_start_date)
-        .where(FixedBill.custom_start_date.isnot(None))
-        .order_by(FixedBill.custom_start_date.desc())
-        .limit(1)
-    )
-
-    if custom_start_date and custom_start_date.month == on_date.month and custom_start_date.year == on_date.year:
-        # Calculate number of active days since custom start
-        from datetime import timedelta
-        last_day = date(on_date.year, on_date.month, 1).replace(
-            day=calendar.monthrange(on_date.year, on_date.month)[1]
-        )
-        days_active = (last_day - custom_start_date).days + 1
-        dim = max(days_active, 1)
-    else:
-        # Default: full month
-        dim = days_in_month(on_date.year, on_date.month)
-
+    dim = days_in_month(on_date.year, on_date.month)
     fixed_daily_goal = month_target // dim if dim else 0
 
-    # ───────────────────────────────
-    # Allocation calculation
-    # ───────────────────────────────
     remaining = sales_cents
 
     fixed_alloc = min(fixed_daily_goal, remaining)
@@ -139,7 +128,9 @@ def compute_allocation(
         "month_target": month_target,
         "days_in_month": dim,
         "fixed_daily_goal": fixed_daily_goal,
-        "custom_start_date": str(custom_start_date) if custom_start_date else None,
+        "inventory_rate": inventory_rate,
+        "ops_rate": ops_rate,
     }
 
     return Allocation(fixed_alloc, ops_alloc, inv_alloc, buffer_alloc), debug
+

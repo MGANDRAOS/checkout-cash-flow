@@ -5,6 +5,35 @@ body {
     background-color: #f6f8fb;
     color: #222;
     font-size: 18px;
+    padding-top: 56px;
+    /* space for fixed top navbar */
+    background-color: #f9f9f9;
+}
+
+.navbar {
+    background: linear-gradient(90deg, #101010, #232323);
+}
+.navbar img{
+    max-width: 120px;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    font-size: 1.4rem;
+}
+
+main {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
+footer {
+    font-size: 0.9rem;
+    color: #888;
+    text-align: center;
+    margin-top: 3rem;
+    padding: 1rem 0;
 }
 
 h2.h4 {
@@ -36,6 +65,34 @@ h2.h4 {
     padding: 0.9rem 1rem;
     border-radius: 0.6rem;
     font-weight: 700;
+}
+
+
+/* ——— Off Canvas menu ——— */
+
+.sidebar-link {
+    font-size: 1.1rem;
+    padding: 10px 15px;
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: #fff;
+    transition: background 0.3s;
+}
+
+.sidebar-link:hover {
+    background: rgba(255, 255, 255, 0.1);
+    text-decoration: none;
+}
+
+.sidebar-link i {
+    margin-right: 10px;
+}
+
+.offcanvas-start {
+    width: 220px;
+    background-color: #212529;
+    color: white;
 }
 
 /* ——— BALANCE TILES ——— */
@@ -109,11 +166,6 @@ h2.h4 {
     color: #92400e;
 }
 
-/* ——— FOOTER ——— */
-footer {
-    color: #6b7280;
-    font-size: 0.9rem;
-}
 
 /* ——— RESPONSIVE TWEAKS ——— */
 @media (max-width: 768px) {

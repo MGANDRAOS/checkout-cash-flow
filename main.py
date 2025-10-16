@@ -1,12 +1,11 @@
 import os
 from datetime import date, datetime
-
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 
 # Local imports
-from models import db, Envelope, DailyClosing, FixedBill
+from models import db, Envelope, DailyClosing, FixedBill, AppSetting
 from helpers import (
     dollars_to_cents,
     cents_to_dollars,
@@ -14,6 +13,8 @@ from helpers import (
     post_envelope_tx,
     compute_allocation,
     current_month_target_cents,
+    get_setting,
+    set_setting
 )
 
 # ───────────────────────────────
@@ -42,7 +43,13 @@ DEFAULT_OPS_RATE = float(os.getenv("OPS_RATE", "0.03"))
 # Routes
 # ───────────────────────────────
 
-@app.route("/")
+
+@app.context_processor
+def inject_request():
+    return dict(request=request)
+
+
+@app.route("/", methods=["GET", "POST"])
 def dashboard():
     """Main dashboard: balances, bills, recent closings."""
     ensure_default_envelopes()
@@ -89,6 +96,7 @@ def dashboard():
         month_target_cents=month_target,
         suggested_sale=suggested_sale,
         last_data=last_data,
+        last_closing=last_closing,  # 👈 ADD THIS
         today=date.today()
     )
 
@@ -101,8 +109,6 @@ def daily_close():
     try:
         close_date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
         sale_cents = dollars_to_cents(request.form["sale"])
-        inventory_rate = float(request.form.get("inventory_rate", DEFAULT_INVENTORY_RATE))
-        ops_rate = float(request.form.get("ops_rate", DEFAULT_OPS_RATE))
         notes = request.form.get("notes", "").strip() or None
     except Exception as e:
         flash(f"Invalid input: {e}", "danger")
@@ -117,7 +123,7 @@ def daily_close():
         return redirect(url_for("dashboard"))
 
     # Compute allocation
-    alloc, debug = compute_allocation(sale_cents, close_date, inventory_rate, ops_rate)
+    alloc, debug = compute_allocation(sale_cents, close_date)
 
     closing = DailyClosing(
         date=close_date,
@@ -277,7 +283,7 @@ def edit_closing(closing_id):
         post_envelope_tx("BUFFER", -closing.buffer_allocation_cents, "edit_reversal", f"Edit reversal {closing.date}")
 
         # Compute new allocation
-        alloc, _ = compute_allocation(new_sale_cents, closing.date, inventory_rate, ops_rate)
+        alloc, _ = compute_allocation(new_sale_cents, closing.date)
 
         # Apply updates
         closing.sales_cents = new_sale_cents
@@ -301,6 +307,77 @@ def edit_closing(closing_id):
 
     return redirect(url_for("dashboard"))
 
+
+@app.route("/closings")
+def closings():
+    from main import DailyClosing
+    all_closings = DailyClosing.query.order_by(DailyClosing.date.desc()).all()
+    return render_template("closings.html", closings=all_closings)
+
+
+@app.route("/bills", methods=["GET", "POST"])
+def bills():
+    from main import db, FixedBill
+
+    if request.method == "POST":
+        name = request.form["name"]
+        amount = float(request.form["amount"])
+        active = "active" in request.form
+
+        new_bill = FixedBill(
+            name=name,
+            monthly_amount_cents=int(round(amount * 100)),
+            is_active=active
+        )
+        db.session.add(new_bill)
+        db.session.commit()
+        flash("New fixed bill added!", "success")
+        return redirect(url_for("bills"))
+
+    all_bills = FixedBill.query.order_by(FixedBill.name).all()
+    return render_template("bills.html", bills=all_bills)
+
+
+@app.route("/envelopes")
+def envelope_view():
+    from main import Envelope
+
+    envelopes = Envelope.query.order_by(Envelope.name).all()
+    return render_template("envelopes.html", envelopes=envelopes)
+
+
+
+@app.route("/reports")
+def reports():
+    return render_template("reports.html")
+
+
+
+@app.route("/settings", methods=["GET", "POST"])
+def settings():
+    if request.method == "POST":
+        try:
+            inv_pct = float(request.form["inventory_pct"])
+            ops_pct = float(request.form["ops_pct"])
+            if inv_pct + ops_pct >= 1.0:
+                flash("Inventory + Ops % must be less than 100%", "danger")
+            else:
+                set_setting("inventory_pct", str(inv_pct))
+                set_setting("ops_pct", str(ops_pct))
+                flash("Settings updated successfully!", "success")
+        except Exception as e:
+            flash(f"Error saving settings: {e}", "danger")
+        return redirect(url_for("settings"))
+
+    # GET method
+    inv_pct = float(get_setting("inventory_pct", "0.5"))
+    ops_pct = float(get_setting("ops_pct", "0.03"))
+
+    return render_template(
+        "settings.html",
+        inventory_pct=inv_pct,
+        ops_pct=ops_pct
+    )
 # ───────────────────────────────
 # App entry
 # ───────────────────────────────

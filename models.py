@@ -57,3 +57,14 @@ class FixedBill(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     custom_start_date = db.Column(db.Date)  # optional: override start-of-month
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class AppSetting(db.Model):
+    """Key-value settings for app configuration."""
+    __tablename__ = "app_settings"
+
+    key = db.Column(db.String(64), primary_key=True)
+    value = db.Column(db.String(255), nullable=False)
+
+    def __repr__(self):
+        return f"<AppSetting {self.key}={self.value}>"

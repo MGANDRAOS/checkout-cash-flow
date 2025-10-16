@@ -1,347 +1,130 @@
 {% extends "base.html" %}
 {% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">🧾 Daily Closing — {{ today.strftime('%B %d, %Y') }}</h2>
 
-<div class="row g-4">
-    <!-- DAILY CLOSE FORM -->
-    <div class="col-12 col-xl-4">
-        <div class="card border-0 shadow-lg h-100">
-            <div class="card-body p-4">
-                <h2 class="h4 fw-bold mb-3 text-primary">💰 Daily Close</h2>
-                <form id="dailyCloseForm" method="post" action="{{ url_for('daily_close') }}" class="big-form">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Date</label>
-                        <input type="date" name="date" class="form-control form-control-lg"
-                            value="{{ today.isoformat() }}" required>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Sale ({{ currency }})</label>
-                        <input type="text" name="sale" class="form-control form-control-lg" placeholder="e.g. 250.00"
-                            value="{{ suggested_sale }}" required>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-6 mb-3">
-                            <label class="form-label fw-semibold">Inventory %</label>
-                            <input type="number" step="0.01" name="inventory_rate" value="0.50"
-                                class="form-control form-control-lg">
-                        </div>
-                        <div class="col-6 mb-3">
-                            <label class="form-label fw-semibold">Ops %</label>
-                            <input type="number" step="0.01" name="ops_rate" value="0.03"
-                                class="form-control form-control-lg">
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Notes</label>
-                        <input type="text" name="notes" class="form-control form-control-lg" placeholder="optional">
-                    </div>
-
-                    <button class="btn btn-primary btn-lg w-100 shadow-sm">Allocate & Save</button>
-                    <div class="form-text mt-2 text-center">Priority: <strong>Fixed → Ops → Inventory → Buffer</strong>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- ENVELOPES + FIXED BILLS + RECENT CLOSINGS -->
-    <div class="col-12 col-xl-8">
-        <!-- Envelope Balances -->
-        <div class="card border-0 shadow-lg mb-4">
-            <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h4 fw-bold text-success mb-0">📦 Envelope Balances</h2>
-                </div>
-                <div class="row g-3 text-center">
-                    {% for e in envelopes %}
-                    <div class="col-6 col-md-3">
-                        <div class="balance-tile shadow-sm p-3 rounded-4 bg-white">
-                            <div class="small text-muted">{{ e.name }}</div>
-                            <div class="fs-2 fw-bold text-dark">${{ '%.2f'|format(e.balance_cents/100) }}</div>
-                            <div class="small text-secondary">{{ e.code }}</div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Fixed Bills -->
-        <div class="card border-0 shadow-lg mb-4">
-            <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h4 fw-bold text-danger mb-0">📋 Fixed Bills</h2>
-                    <span class="badge bg-secondary fs-6">
-                        Target: ${{ '%.2f'|format(month_target_cents / 100) }}
-                    </span>
-                </div>
-
-                <div class="progress mb-4" style="height: 1.2rem;">
-                    <div class="progress-bar"
-                        style="--fill: {{ funded_pct }}%; width: var(--fill); background: linear-gradient(90deg, #16a34a, #22c55e);">
-                        {{ funded_pct|round(1) }}%
-                    </div>
-                </div>
-
-                <ul class="list-group list-group-flush mb-3">
-                    {% for b in bills %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center py-3">
-                        <div>
-                            <strong>{{ b.name }}</strong>
-                            {% if not b.is_active %}
-                            <span class="badge bg-warning text-dark ms-2">inactive</span>
-                            {% endif %}
-                        </div>
-
-                        <div class="d-flex align-items-center gap-3">
-                            <span class="fw-semibold">${{ '%.2f'|format(b.monthly_amount_cents / 100) }}</span>
-
-                            <!-- Toggle -->
-                            <form method="post" action="{{ url_for('toggle_fixed_bill', bill_id=b.id) }}" class="m-0">
-                                <button type="submit"
-                                    class="btn btn-sm {{ 'btn-outline-success' if not b.is_active else 'btn-outline-secondary' }}"
-                                    title="Toggle active status">
-                                    {% if b.is_active %}
-                                    <i class="bi bi-toggle-on fs-5"></i>
-                                    {% else %}
-                                    <i class="bi bi-toggle-off fs-5"></i>
-                                    {% endif %}
-                                </button>
-                            </form>
-
-                            <!-- Delete -->
-                            <form method="post" action="{{ url_for('delete_fixed_bill', bill_id=b.id) }}"
-                                onsubmit="return confirm('Delete this bill?')" class="m-0">
-                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-circle"
-                                    title="Delete">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </form>
-                        </div>
-                    </li>
-
-                    {% else %}
-                    <li class="list-group-item py-3 text-muted">No fixed bills yet. Add one below.</li>
-                    {% endfor %}
-                </ul>
-
-                <!-- Add New Bill Form -->
-                <form method="post" action="{{ url_for('fixed_bills') }}" class="row g-2 align-items-end big-form mt-3">
-                    <div class="col-md-5">
-                        <label class="form-label fw-semibold">Bill name</label>
-                        <input type="text" name="name" class="form-control form-control-lg" placeholder="e.g. Salaries"
-                            required>
-                    </div>
+    <!-- Sales Input Form -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="POST" action="/daily-close">
+                <div class="row align-items-end">
                     <div class="col-md-4">
-                        <label class="form-label fw-semibold">Monthly amount</label>
-                        <input type="text" name="monthly_amount" class="form-control form-control-lg"
-                            placeholder="700.00" required>
+                        <label for="sales" class="form-label fw-bold">Today's Sales (USD)</label>
+                        <input type="number" name="sales" id="sales" class="form-control" min="0" step="0.01" required
+                            value="{{ suggested_sale }}">
                     </div>
-                    <div class="col-md-2">
-                        <div class="form-check mt-4">
-                            <input class="form-check-input" type="checkbox" name="is_active" id="active" checked>
-                            <label class="form-check-label" for="active">Active</label>
-                        </div>
+                    <div class="mb-3">
+                        <label for="date" class="form-label">Closing Date</label>
+                        <input type="date" name="date" id="date" class="form-control" required>
                     </div>
-                    <div class="col-md-1 d-grid">
-                        <button class="btn btn-outline-primary btn-lg">Add</button>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-success mt-3 w-100">Submit Closing</button>
                     </div>
-                </form>
-                <hr class="my-4">
-                <form method="post" action="{{ url_for('set_custom_start') }}" class="row g-2 align-items-end">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Custom Start Date (this month only)</label>
-                        <input type="date" name="custom_start_date" class="form-control form-control-lg" required>
-                    </div>
-                    <div class="col-md-2 d-grid">
-                        <button class="btn btn-outline-danger btn-lg">Set</button>
-                    </div>
-                </form>
-                <p class="text-muted small mt-2">Use this if the month began mid-cycle (e.g. started operations on Oct
-                    13).</p>
-
-            </div>
+                </div>
+            </form>
         </div>
+    </div>
 
+    <!-- Today's Allocation -->
+    {% if last_data %}
+    <div class="mb-4">
+        <h5 class="mb-2 text-muted">
+            📌 Last Recorded Closing — {{ last_closing.date.strftime('%B %d, %Y') }}
+            <span class="ms-2 badge bg-light text-dark">Sales: ${{ "%.2f"|format(last_closing.sales_cents /
+                100)}}</span>
+        </h5>
 
-        <!-- Recent Closings -->
-        <div class="card border-0 shadow-lg">
-            <div class="card-body p-4">
-                <h2 class="h4 fw-bold text-dark mb-3">🧾 Recent Closings</h2>
-                <div class="mb-4 text-center">
-                    <button class="btn btn-outline-secondary btn-lg shadow-sm mb-3" type="button"
-                        data-bs-toggle="collapse" data-bs-target="#cashFlowGaugeWrapper" aria-expanded="false"
-                        aria-controls="cashFlowGaugeWrapper">
-                        📊 Show Cash-Flow Gauge
-                    </button>
-
-                    <div class="collapse" id="cashFlowGaugeWrapper">
-                        <div class="card card-body border-0 shadow-sm">
-                            <canvas id="cashFlowGauge" width="250" height="250"></canvas>
-                            <div class="small text-muted mt-2">
-                                Last Closing Distribution (Fixed / Ops / Inventory / Buffer)
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-striped align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Date</th>
-                                <th>Sales</th>
-                                <th>Fixed</th>
-                                <th>Ops</th>
-                                <th>Inventory</th>
-                                <th>Buffer</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for c in closings %}
-                            <tr>
-                                <td class="fw-semibold">{{ c.date }}</td>
-                                <td>${{ '%.2f'|format(c.sales_cents/100) }}</td>
-                                <td>${{ '%.2f'|format(c.fixed_allocation_cents/100) }}</td>
-                                <td>${{ '%.2f'|format(c.ops_allocation_cents/100) }}</td>
-                                <td>${{ '%.2f'|format(c.inventory_allocation_cents/100) }}</td>
-                                <td>${{ '%.2f'|format(c.buffer_allocation_cents/100) }}</td>
-                                <td>
-                                    <div class="d-flex gap-2">
-                                        <!-- Edit placeholder -->
-                                        <!-- Edit -->
-                                        <button type="button" class="btn btn-sm btn-outline-secondary"
-                                            data-bs-toggle="modal" data-bs-target="#editClosingModal"
-                                            data-id="{{ c.id }}" data-date="{{ c.date }}"
-                                            data-sale="{{ '%.2f'|format(c.sales_cents/100) }}"
-                                            data-notes="{{ c.notes or '' }}">
-                                            <i class="bi bi-pencil"></i>
-                                        </button>
-
-                                        <!-- Void -->
-                                        <form method="post" action="{{ url_for('void_closing', closing_id=c.id) }}"
-                                            onsubmit="return confirm('Void closing for {{ c.date }}? This will reverse allocations.')">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                <i class="bi bi-x-circle"></i>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="6" class="text-center text-muted">No closings yet.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <!-- Edit Closing Modal -->
-                <div class="modal fade" id="editClosingModal" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog modal-dialog-centered">
-                        <div class="modal-content border-0 shadow-lg">
-                            <div class="modal-header">
-                                <h5 class="modal-title">Edit Closing</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                    aria-label="Close"></button>
-                            </div>
-                            <form id="editClosingForm" method="post">
-                                <div class="modal-body">
-                                    <div class="mb-3">
-                                        <label class="form-label">Date</label>
-                                        <input type="text" id="editDate" class="form-control" disabled>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Sale ({{ currency }})</label>
-                                        <input type="text" name="sale" id="editSale" class="form-control" required>
-                                    </div>
-                                    <div class="row">
-                                        <div class="col-6 mb-3">
-                                            <label class="form-label">Inventory %</label>
-                                            <input type="number" step="0.01" name="inventory_rate" id="editInv"
-                                                value="0.50" class="form-control">
-                                        </div>
-                                        <div class="col-6 mb-3">
-                                            <label class="form-label">Ops %</label>
-                                            <input type="number" step="0.01" name="ops_rate" id="editOps" value="0.03"
-                                                class="form-control">
-                                        </div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Notes</label>
-                                        <input type="text" name="notes" id="editNotes" class="form-control">
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary"
-                                        data-bs-dismiss="modal">Cancel</button>
-                                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
+        <div class="row">
+            <div class="col-md-3">
+                <div class="alert alert-primary shadow-sm">💸 Fixed: ${{ "%.2f"|format(last_data.fixed) }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="alert alert-warning shadow-sm">🛠️ Ops: ${{ "%.2f"|format(last_data.ops) }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="alert alert-info shadow-sm">📦 Inventory: ${{ "%.2f"|format(last_data.inventory) }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="alert alert-success shadow-sm">🧠 Buffer: ${{ "%.2f"|format(last_data.buffer) }}</div>
             </div>
         </div>
     </div>
+    {% endif %}
+
+
+    <!-- Envelope Balances -->
+    <h4 class="mt-5 mb-3">💰 Envelopes</h4>
+    <div class="row">
+        {% for e in envelopes %}
+        <div class="col-md-3 mb-3">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h5>{{ e.name }}</h5>
+                    <p class="fs-4 fw-bold text-success">${{ "%.2f"|format(e.balance_cents / 100) }}</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Recent Closings -->
+    <h4 class="mt-5 mb-3">📅 Last 5 Closings</h4>
+    <table class="table table-bordered bg-white shadow-sm">
+        <thead class="table-light">
+            <tr>
+                <th>Date</th>
+                <th>Sales</th>
+                <th>Fixed</th>
+                <th>Ops</th>
+                <th>Inventory</th>
+                <th>Buffer</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in closings[:5] %}
+            <tr>
+                <td>{{ c.date }}</td>
+                <td>${{ "%.2f"|format(c.sales_cents / 100) }}</td>
+                <td>${{ "%.2f"|format(c.fixed_allocation_cents / 100) }}</td>
+                <td>${{ "%.2f"|format(c.ops_allocation_cents / 100) }}</td>
+                <td>${{ "%.2f"|format(c.inventory_allocation_cents / 100) }}</td>
+                <td>${{ "%.2f"|format(c.buffer_allocation_cents / 100) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Fixed Bills Summary -->
+    <h4 class="mt-5 mb-3">📑 Fixed Bills</h4>
+    <table class="table table-bordered bg-white shadow-sm">
+        <thead class="table-light">
+            <tr>
+                <th>Name</th>
+                <th>Monthly Amount</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for bill in bills %}
+            <tr>
+                <td>{{ bill.name }}</td>
+                <td>${{ "%.2f"|format(bill.monthly_amount_cents / 100) }}</td>
+                <td>
+                    {% if bill.is_active %}
+                    <span class="badge bg-success">Active</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inactive</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3" class="text-center text-muted">No fixed bills yet</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+
 </div>
-
-
-{% if last_data %}
-<script>
-
-    const editModal = document.getElementById('editClosingModal');
-    editModal.addEventListener('show.bs.modal', event => {
-        const btn = event.relatedTarget;
-        const id = btn.getAttribute('data-id');
-        const date = btn.getAttribute('data-date');
-        const sale = btn.getAttribute('data-sale');
-        const notes = btn.getAttribute('data-notes');
-
-        document.getElementById('editDate').value = date;
-        document.getElementById('editSale').value = sale;
-        document.getElementById('editNotes').value = notes;
-        document.getElementById('editClosingForm').action = `/edit-closing/${id}`;
-    });
-
-    const lastData = JSON.parse(`{{ last_data | tojson | safe }}`);
-
-    const renderGauge = () => {
-        const ctx = document.getElementById('cashFlowGauge').getContext('2d');
-        new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Fixed', 'Ops', 'Inventory', 'Buffer'],
-                datasets: [{
-                    data: [lastData.fixed, lastData.ops, lastData.inventory, lastData.buffer],
-                    backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#6b7280'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                cutout: '70%',
-                animation: { animateScale: true },
-                plugins: {
-                    legend: { display: true, position: 'bottom' },
-                    tooltip: {
-                        callbacks: { label: c => `${c.label}: $${c.formattedValue}` }
-                    }
-                }
-            }
-        });
-    };
-
-    // Only draw when collapse opens
-    const gaugeWrapper = document.getElementById('cashFlowGaugeWrapper');
-    gaugeWrapper.addEventListener('shown.bs.collapse', renderGauge);
-
-</script>
-{% endif %}
-
-
-
-
 {% endblock %}

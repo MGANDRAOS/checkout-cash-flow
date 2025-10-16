@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid">
+  <h2 class="mb-4">📅 Daily Closings History</h2>
+
+  <table class="table table-bordered bg-white shadow-sm">
+    <thead class="table-light">
+      <tr>
+        <th>Date</th>
+        <th>Sales</th>
+        <th>Fixed</th>
+        <th>Ops</th>
+        <th>Inventory</th>
+        <th>Buffer</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in closings %}
+      <tr>
+        <td>{{ c.date }}</td>
+        <td>${{ "%.2f"|format(c.sales_cents / 100) }}</td>
+        <td>${{ "%.2f"|format(c.fixed_allocation_cents / 100) }}</td>
+        <td>${{ "%.2f"|format(c.ops_allocation_cents / 100) }}</td>
+        <td>${{ "%.2f"|format(c.inventory_allocation_cents / 100) }}</td>
+        <td>${{ "%.2f"|format(c.buffer_allocation_cents / 100) }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="text-center text-muted">No closings found</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">📑 Fixed Bills</h2>
+
+    <!-- Add new bill -->
+    <form method="POST" class="row g-3 mb-4">
+        <div class="col-md-4">
+            <input type="text" name="name" class="form-control" placeholder="Bill name" required>
+        </div>
+        <div class="col-md-2">
+            <input type="number" name="amount" step="0.01" class="form-control" placeholder="Amount (USD)" required>
+        </div>
+        <div class="col-md-2">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="active" id="active" checked>
+                <label class="form-check-label" for="active">Active</label>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-success w-100">Add Bill</button>
+        </div>
+    </form>
+
+    <!-- Bill table -->
+    <table class="table table-bordered bg-white shadow-sm">
+        <thead class="table-light">
+            <tr>
+                <th>Name</th>
+                <th>Amount (USD)</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for bill in bills %}
+            <tr>
+                <td>{{ bill.name }}</td>
+                <td>${{ "%.2f"|format(bill.monthly_amount_cents / 100) }}</td>
+                <td>
+                    {% if bill.is_active %}
+                    <span class="badge bg-success">Active</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inactive</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3" class="text-center text-muted">No fixed bills yet</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
