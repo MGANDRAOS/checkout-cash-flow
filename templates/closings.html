@@ -1,7 +1,42 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container-fluid">
-  <h2 class="mb-4">📅 Daily Closings History</h2>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>📅 Daily Closings</h2>
+  </div>
+  <!-- Sales Input Form -->
+  <div class="card shadow-sm mb-4 border-0">
+    <div class="card-body py-4">
+      <form method="POST" action="{{ url_for('daily_close') }}" class="text-center">
+        <div class="row justify-content-center g-4">
+          <!-- Sales Input -->
+          <div class="col-md-4 col-sm-6">
+            <label for="sales" class="form-label text-muted fw-semibold fs-6">Today's Sales (USD)</label>
+            <div class="input-group input-group-lg">
+              <span class="input-group-text bg-light fw-bold">$</span>
+              <input type="number" name="sales" id="sales"
+                class="form-control text-center display-5 fw-bold py-3 sale-input" min="0" step="0.01"
+                placeholder="0.00" required autofocus>
+            </div>
+          </div>
+
+          <!-- Date Input -->
+          <div class="col-md-3 col-sm-6">
+            <label for="date" class="form-label text-muted fw-semibold fs-6">Closing Date</label>
+            <input type="date" name="date" id="date" class="form-control text-center fs-4 fw-semibold py-3 date-input"
+              value="{{ today.isoformat() }}" required>
+          </div>
+
+          <!-- Submit -->
+          <div class="col-md-3 col-sm-6 d-flex align-items-end">
+            <button type="submit" class="btn btn-success btn-lg w-100 py-3 fw-bold">
+              Submit Closing
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <table class="table table-bordered bg-white shadow-sm">
     <thead class="table-light">
@@ -22,7 +57,12 @@
         <td>${{ "%.2f"|format(c.fixed_allocation_cents / 100) }}</td>
         <td>${{ "%.2f"|format(c.ops_allocation_cents / 100) }}</td>
         <td>${{ "%.2f"|format(c.inventory_allocation_cents / 100) }}</td>
-        <td>${{ "%.2f"|format(c.buffer_allocation_cents / 100) }}</td>
+        <td>
+          <span
+            class="badge bg-{% if c.buffer_allocation_cents / c.sales_cents >= 0.4 %}success{% elif c.buffer_allocation_cents / c.sales_cents >= 0.2 %}warning{% else %}danger{% endif %}">
+            ${{ "%.2f"|format(c.buffer_allocation_cents / 100) }}
+          </span>
+        </td>
       </tr>
       {% else %}
       <tr>
@@ -30,6 +70,28 @@
       </tr>
       {% endfor %}
     </tbody>
+    <tfoot class="table-light fw-bold">
+      <tr>
+        <td>Total</td>
+        <td>
+          ${{ '%.2f' % ((closings | sum(attribute='sales_cents', start=0)) / 100) }}
+        </td>
+        <td>
+          ${{ '%.2f' % ((closings | sum(attribute='fixed_allocation_cents', start=0)) / 100) }}
+        </td>
+        <td>
+          ${{ '%.2f' % ((closings | sum(attribute='ops_allocation_cents', start=0)) / 100) }}
+        </td>
+        <td>
+          ${{ '%.2f' % ((closings | sum(attribute='inventory_allocation_cents', start=0)) / 100) }}
+        </td>
+        <td>
+          ${{ '%.2f' % ((closings | sum(attribute='buffer_allocation_cents', start=0)) / 100) }}
+        </td>
+      </tr>
+    </tfoot>
+
   </table>
+
 </div>
 {% endblock %}

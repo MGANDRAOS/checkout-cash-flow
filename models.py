@@ -43,6 +43,7 @@ class DailyClosing(db.Model):
     ops_allocation_cents = db.Column(db.Integer, default=0)
     inventory_allocation_cents = db.Column(db.Integer, default=0)
     buffer_allocation_cents = db.Column(db.Integer, default=0)
+    payment_mode = db.Column(db.String(20))
     notes = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

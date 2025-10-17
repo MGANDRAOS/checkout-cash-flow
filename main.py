@@ -87,7 +87,51 @@ def dashboard():
     
     suggested_date = (last_closing.date + timedelta(days=1)) if last_closing else date.today()
     suggested_sale = last_closing.sales_cents / 100 if last_closing else ""
-    
+
+    # Smart alert: missing yesterday's closing
+    yesterday = today - timedelta(days=1)
+    missing_yesterday = db.session.scalar(
+        db.select(db.func.count()).select_from(DailyClosing).where(DailyClosing.date == yesterday)
+    ) == 0
+
+    # Smart alert: outstanding Fixed not yet collected (month-to-date)
+    month_start = today.replace(day=1)
+    closings_mtd = db.session.execute(
+        db.select(DailyClosing).where(DailyClosing.date >= month_start)
+    ).scalars().all()
+    total_allocated_fixed = sum(c.fixed_allocation_cents for c in closings_mtd)
+    total_collected_fixed = db.session.execute(
+        db.select(db.func.coalesce(db.func.sum(FixedCollection.amount_cents), 0))
+        .where(FixedCollection.collected_on >= month_start)
+    ).scalar() or 0
+    outstanding_fixed_cents = max(total_allocated_fixed - (total_collected_fixed or 0), 0)
+
+    # Mini chart: last 7 days sales vs. buffer
+    last7 = db.session.execute(
+        db.select(DailyClosing).order_by(DailyClosing.date.desc()).limit(7)
+    ).scalars().all()
+    last7 = list(reversed(last7))
+    chart_labels = [c.date.strftime('%b %d') for c in last7]
+    chart_sales = [round(c.sales_cents / 100, 2) for c in last7]
+    chart_buffer = [round(c.buffer_allocation_cents / 100, 2) for c in last7]
+
+    # Highlight: largest sale this week and running average (last 7 days)
+    week_start = today - timedelta(days=6)
+    last7_window = db.session.execute(
+        db.select(DailyClosing)
+        .where(DailyClosing.date >= week_start)
+        .order_by(DailyClosing.date)
+    ).scalars().all()
+    if last7_window:
+        top_closing = max(last7_window, key=lambda c: c.sales_cents)
+        largest_sale_cents = top_closing.sales_cents
+        largest_sale_date = top_closing.date
+        avg_sales_cents = int(sum(c.sales_cents for c in last7_window) / len(last7_window))
+    else:
+        largest_sale_cents = 0
+        largest_sale_date = None
+        avg_sales_cents = 0
+
 
     return render_template(
         "dashboard.html",
@@ -101,7 +145,20 @@ def dashboard():
         suggested_date=suggested_date,
         last_data=last_data,
         last_closing=last_closing,
-        today=date.today()
+        today=date.today(),
+        # Smart alerts
+        missing_yesterday=missing_yesterday,
+        yesterday=yesterday,
+        outstanding_fixed_cents=outstanding_fixed_cents,
+        outstanding_fixed_dollars=cents_to_dollars(outstanding_fixed_cents),
+        # Mini chart data
+        chart_labels=chart_labels,
+        chart_sales=chart_sales,
+        chart_buffer=chart_buffer,
+        # Highlights
+        largest_sale_dollars=cents_to_dollars(largest_sale_cents),
+        largest_sale_date=largest_sale_date,
+        avg_sales_dollars=cents_to_dollars(avg_sales_cents),
     )
 
 
@@ -123,7 +180,7 @@ def daily_close():
     )
     if exists:
         flash("A closing for this date already exists.", "warning")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("closings"))
 
     # Compute allocation
     alloc, debug = compute_allocation(sale_cents, close_date)
@@ -150,10 +207,10 @@ def daily_close():
     
     if close_date > date.today():
         flash("You cannot submit a slip for a future date.", "danger")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("closings"))
     if close_date < date(2025, 10, 13):
         flash("You cannot submit slips before the business officially started.", "danger")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("closings"))
 
     flash(
         f"Successfully submitted closing for {close_date.strftime('%B %d, %Y')}: "
@@ -163,7 +220,7 @@ def daily_close():
         f"Buffer ${cents_to_dollars(alloc.buffer_cents)}.",
         "success",
     )
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("closings"))
 
 
 @app.route("/fixed-bills", methods=["GET", "POST"])
@@ -322,7 +379,7 @@ def edit_closing(closing_id):
 def closings():
     from main import DailyClosing
     all_closings = DailyClosing.query.order_by(DailyClosing.date.desc()).all()
-    return render_template("closings.html", closings=all_closings)
+    return render_template("closings.html", closings=all_closings, today=date.today())
 
 
 @app.route("/bills", methods=["GET", "POST"])

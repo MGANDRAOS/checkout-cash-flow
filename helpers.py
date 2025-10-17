@@ -36,7 +36,7 @@ def ensure_default_envelopes():
     defaults = [
         ("INVENTORY", "Inventory"),
         ("FIXED", "Fixed Reserve"),
-        ("OPS", "Operations (3%)"),
+        ("OPS", "Operations"),
         ("BUFFER", "Buffer"),
     ]
     for code, name in defaults:
@@ -136,19 +136,17 @@ def compute_allocation(sales_cents: int, on_date: date) -> Tuple[Allocation, Dic
 
       # --- 3️⃣ Allocate ---
 
-    # 1. Reserve fixed first
+    # Reserve fixed first
     fixed_alloc = min(fixed_daily_goal, sales_cents)
-    remaining = max(sales_cents - fixed_alloc, 0)
+    base = max(sales_cents - fixed_alloc, 0)
 
-    # 2. Apply inventory and ops percentages to the remaining amount
-    inv_alloc = int(round(remaining * inventory_rate))
-    remaining -= inv_alloc
+    # Apply both inventory and ops percentages on the same post-fixed base
+    inv_alloc = int(round(base * inventory_rate))
+    ops_alloc = int(round(base * ops_rate))
 
-    ops_alloc = int(round(remaining * ops_rate))
-    remaining -= ops_alloc
+    # Whatever remains becomes buffer
+    buffer_alloc = max(base - inv_alloc - ops_alloc, 0)
 
-    # 3. Whatever is still left becomes buffer
-    buffer_alloc = max(remaining, 0)
 
     # --- 4️⃣  Debug info for diagnostics ---
     debug = {

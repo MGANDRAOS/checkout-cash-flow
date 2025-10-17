@@ -1,33 +1,63 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container-fluid">
-    <h2 class="mb-4">🧾 Daily Closing — {{ today.strftime('%B %d, %Y') }}</h2>
+    <!-- Smart Alerts -->
+    <div class="mb-3">
+        {% if missing_yesterday %}
+        <div class="alert alert-warning shadow-sm d-flex justify-content-between align-items-center">
+            <div>
+                No closing submitted for yesterday ({{ yesterday.strftime('%b %d') }}) — click to add.
+            </div>
+            <a href="#closing-form" class="btn btn-sm btn-outline-warning">Add Closing</a>
+        </div>
+        {% endif %}
 
-    <!-- Sales Input Form -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <form method="POST" action="{{ url_for('daily_close') }}">
-                <div class="row align-items-end">
-                    <div class="col-md-4">
-                        <div class="alert alert-secondary shadow-sm text-center">
-                            You're submitting a closing for:</br> <strong>{{ suggested_date.strftime('%A, %B %d, %Y')
-                                }}</strong>
-                        </div>
-                        <label for="sales" class="form-label fw-bold">Today's Sales (USD)</label>
-                        <input type="number" name="sales" id="sales" class="form-control" min="0" step="0.01" required
-                            value="{{ suggested_sale }}">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="date" class="form-label">Closing Date</label>
-                        <input type="date" name="date" class="form-control" required value="{{ suggested_date }}">
-                    </div>
-                    <div class="col-md-3">
-                        <button type="submit" class="btn btn-success mt-3 w-100">Submit Closing</button>
-                    </div>
+        {% if outstanding_fixed_cents and outstanding_fixed_cents > 0 %}
+        <div class="alert alert-info shadow-sm d-flex justify-content-between align-items-center">
+            <div>
+                You have ${{ outstanding_fixed_dollars }} in Fixed not yet collected.
+            </div>
+            <a href="{{ url_for('fixed_collections') }}" class="btn btn-sm btn-outline-primary">View Collections</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="d-flex gap-2 mb-4">
+        <a href="{{ url_for('fixed_collections') }}" class="btn btn-outline-primary"><i class="bi bi-wallet2"></i> View
+            Collections</a>
+        <a href="{{ url_for('bills') }}" class="btn btn-outline-primary"><i class="bi bi-receipt"></i> View
+            Expenses</a>
+    </div>
+
+    <!-- Mini Chart: 7-day Sales vs Buffer -->
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <!-- Chart Container -->
+            <div class="card mt-4 shadow-sm">
+                <div class="card-body" style="height: 320px;">
+                    <canvas id="salesBufferChart"></canvas>
                 </div>
-            </form>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Highlight of the Week</h5>
+                    <p class="mb-1">Largest sale: <strong>${{ largest_sale_dollars }}</strong>
+                        {% if largest_sale_date %} on {{ largest_sale_date.strftime('%a, %b %d') }}{% endif %}
+                    </p>
+                    <p class="mb-0">7‑day average: <strong>${{ avg_sales_dollars }}</strong></p>
+                </div>
+            </div>
         </div>
     </div>
+
+    <!-- Chart Data -->
+    <script id="chart-data" type="application/json">
+        {{ {'labels': chart_labels, 'sales': chart_sales}|tojson|safe }}
+    </script>
+
 
     <!-- Today's Allocation -->
     {% if last_data %}
