@@ -264,3 +264,46 @@ h2.h4 {
 .date-input:focus {
     box-shadow: 0 0 0 0.25rem rgba(25, 135, 84, 0.25);
 }
+
+.modal-content.border-danger {
+    border-width: 2px !important;
+}
+
+.btn-sm i {
+    font-size: 1rem;
+    vertical-align: middle;
+}
+
+.list-group-item {
+    border-left: 5px solid transparent;
+    transition: all 0.2s ease-in-out;
+}
+
+.list-group-item:hover {
+    border-left: 5px solid #198754;
+    background-color: #fafafa;
+}
+
+.progress {
+    background-color: #f3f4f6;
+}
+
+
+.dashboard h5,
+.dashboard h4 {
+    font-family: "Inter", sans-serif;
+    font-weight: 600;
+}
+
+.dashboard .card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dashboard .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.75rem 1.25rem rgba(0, 0, 0, 0.08);
+}
+
+.display-6 {
+    font-size: 2.25rem;
+}

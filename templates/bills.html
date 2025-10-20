@@ -1,55 +1,91 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container-fluid">
-    <h2 class="mb-4">📑 Fixed Bills</h2>
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">💵 Monthly Fixed Expenses</h2>
+    </div>
 
-    <!-- Add new bill -->
-    <form method="POST" class="row g-3 mb-4">
-        <div class="col-md-4">
-            <input type="text" name="name" class="form-control" placeholder="Bill name" required>
+    <!-- Add New Bill -->
+    <div class="card shadow-sm mb-4 border-0 ">
+        <div class="card-body">
+            <form method="POST" class="row g-3 align-items-end">
+                <div class="col-md-4 col-sm-6">
+                    <label class="form-label fw-semibold">Expense Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="e.g., Salaries" required>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <label class="form-label fw-semibold">Monthly Amount (USD)</label>
+                    <input type="number" name="amount" step="0.01" class="form-control" placeholder="e.g., 1000"
+                        required>
+                </div>
+                <div class="col-md-2 col-sm-4">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input" type="checkbox" name="active" id="active" checked>
+                        <label class="form-check-label fw-semibold" for="active">Active</label>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-8 text-end">
+                    <button type="submit" class="btn btn-success w-100 fw-bold">
+                        <i class="bi bi-plus-lg"></i> Add Bill
+                    </button>
+                </div>
+            </form>
         </div>
-        <div class="col-md-2">
-            <input type="number" name="amount" step="0.01" class="form-control" placeholder="Amount (USD)" required>
-        </div>
-        <div class="col-md-2">
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="active" id="active" checked>
-                <label class="form-check-label" for="active">Active</label>
+    </div>
+
+    <!-- Coverage donut -->
+
+</div>
+<div class="row">
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body text-center">
+                <h5 class="fw-semibold mb-3">💵 Fixed Envelope Coverage</h5>
+                <div class="display-6 fw-bold text-success mb-1">{{ kpis.funded_pct }}%</div>
+                <small class="text-muted d-block mb-3">
+                    ${{ '%.2f' % kpis.balance }} of ${{ '%.2f' % kpis.total_target }}
+                </small>
+                <canvas id="fixedDonutSmall" height="180"></canvas>
             </div>
         </div>
-        <div class="col-md-2">
-            <button type="submit" class="btn btn-success w-100">Add Bill</button>
-        </div>
-    </form>
+    </div>
 
-    <!-- Bill table -->
-    <table class="table table-bordered bg-white shadow-sm">
-        <thead class="table-light">
-            <tr>
-                <th>Name</th>
-                <th>Amount (USD)</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for bill in bills %}
-            <tr>
-                <td>{{ bill.name }}</td>
-                <td>${{ "%.2f"|format(bill.monthly_amount_cents / 100) }}</td>
-                <td>
+
+    <!-- Bill List -->
+    {% if bills %}
+    <div class="list-group shadow-sm col-md-6">
+        {% for bill in bills %}
+        <div class="list-group-item py-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <div>
+                    <h5 class="mb-1 fw-bold">{{ bill.name }}</h5>
+                    <small class="text-muted">Total: ${{ "%.2f"|format(bill.monthly_amount_cents / 100) }}</small>
+                </div>
+                <div class="text-end">
                     {% if bill.is_active %}
                     <span class="badge bg-success">Active</span>
                     {% else %}
                     <span class="badge bg-secondary">Inactive</span>
                     {% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="3" class="text-center text-muted">No fixed bills yet</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="alert alert-light border text-center py-4">
+    <p class="mb-0 text-muted">No fixed bills yet. Add one above to start tracking your monthly obligations.</p>
+</div>
+{% endif %}
+
+<!-- FIXED ENVELOPE STATUS WIDGETS -->
+<hr class="my-5">
+
+<div class="row g-4 align-items-stretch">
+
+    <script>
+        window.fixedKpis = {{ kpis | tojson }};
+    </script>
 </div>
 {% endblock %}

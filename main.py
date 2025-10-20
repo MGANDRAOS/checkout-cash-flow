@@ -15,6 +15,7 @@ from helpers import (
     current_month_target_cents,
     get_setting,
     set_setting,
+    get_sales_overview_data,
     days_in_month
 )
 
@@ -131,6 +132,8 @@ def dashboard():
         largest_sale_cents = 0
         largest_sale_date = None
         avg_sales_cents = 0
+        
+    kpis, data_points = get_sales_overview_data()
 
 
     return render_template(
@@ -159,6 +162,9 @@ def dashboard():
         largest_sale_dollars=cents_to_dollars(largest_sale_cents),
         largest_sale_date=largest_sale_date,
         avg_sales_dollars=cents_to_dollars(avg_sales_cents),
+        # New 30-day analytics
+        kpis=kpis,
+        data_points=data_points,
     )
 
 
@@ -222,8 +228,104 @@ def daily_close():
     )
     return redirect(url_for("closings"))
 
+@app.route("/bills", methods=["GET", "POST"])
+def bills():
+    """Add or list monthly fixed bills with funding progress."""
+    from main import db, FixedBill, DailyClosing, FixedCollection, Envelope
+    from datetime import date
 
-@app.route("/fixed-bills", methods=["GET", "POST"])
+    # POST → Add new bill
+    if request.method == "POST":
+        name = request.form["name"].strip()
+        amount = float(request.form["amount"])
+        active = "active" in request.form
+
+        new_bill = FixedBill(
+            name=name,
+            monthly_amount_cents=int(round(amount * 100)),
+            is_active=active
+        )
+        db.session.add(new_bill)
+        db.session.commit()
+        flash(f"New fixed bill '{name}' added!", "success")
+        return redirect(url_for("bills"))
+
+    # GET → List all bills with progress
+    today = date.today()
+    month_start = today.replace(day=1)
+
+    # 1. Get all bills
+    all_bills = FixedBill.query.order_by(FixedBill.name).all()
+
+    # 2. Calculate monthly fixed funds (allocated + collected)
+    closings = db.session.execute(
+        db.select(DailyClosing).where(DailyClosing.date >= month_start)
+    ).scalars().all()
+    total_allocated_fixed = sum(c.fixed_allocation_cents for c in closings)
+
+    total_collected_fixed = db.session.execute(
+        db.select(db.func.coalesce(db.func.sum(FixedCollection.amount_cents), 0))
+        .where(FixedCollection.collected_on >= month_start)
+    ).scalar() or 0
+
+    # 3. Compute funding progress for each bill (proportional allocation)
+    active_bills = [b for b in all_bills if b.is_active]
+    total_target_cents = sum(b.monthly_amount_cents for b in active_bills) or 1
+
+    for bill in all_bills:
+        target = bill.monthly_amount_cents or 1
+
+        # Allocate funds proportionally by target weight
+        bill_share_ratio = target / total_target_cents
+        allocated_share = total_collected_fixed * bill_share_ratio
+
+        # Cap at target (don't exceed 100%)
+        funded = min(allocated_share, target)
+        pct = round((funded / target) * 100, 1)
+        remaining = max(target - funded, 0)
+
+        bill.funded = funded / 100
+        bill.remaining = remaining / 100
+        bill.pct = pct
+        
+    fixed_balance = db.session.scalar(
+        db.select(Envelope.balance_cents).where(Envelope.code == "FIXED")
+    ) or 0
+    active_bills = [b for b in all_bills if b.is_active]
+    total_target = sum(b.monthly_amount_cents for b in active_bills) or 1
+    funded_pct = round((fixed_balance / total_target) * 100, 1)
+
+    today = date.today()
+    last30 = db.session.execute(
+        db.select(DailyClosing.date, DailyClosing.fixed_allocation_cents)
+        .where(DailyClosing.date >= today - timedelta(days=30))
+        .order_by(DailyClosing.date)
+    ).all()
+    running, points = 0, []
+    for d, f in last30:
+        running += f or 0
+        points.append({"date": d.strftime("%b %d"), "balance": running / 100})
+
+    if not all_bills:
+        kpis = {"funded_pct": 0, "balance": 0, "total_target": 0}
+        points = []
+    
+    kpis = {
+        "funded_pct": funded_pct,
+        "balance": fixed_balance / 100,
+        "total_target": total_target / 100,
+    }
+    
+    return render_template(
+        "bills.html",
+        bills=all_bills,
+        currency="USD",
+        today=today,
+        points=points,
+        kpis=kpis
+    )
+
+@app.post("/fixed-bills")
 def fixed_bills():
     """Add or list monthly fixed bills."""
     if request.method == "POST":
@@ -305,45 +407,82 @@ def toggle_fixed_bill(bill_id):
 
 @app.post("/void-closing/<int:closing_id>")
 def void_closing(closing_id):
-    """Void a daily closing and reverse its envelope allocations."""
+    """Void a daily closing, reverse allocations, and remove related data."""
     closing = db.session.get(DailyClosing, closing_id)
     if not closing:
         flash("Closing not found.", "warning")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("closings"))
 
-    # Reverse envelope allocations
     try:
+        # --- Step 1: Reverse Envelope Allocations ---
         post_envelope_tx("FIXED", -closing.fixed_allocation_cents, "void", f"Void {closing.date}")
         post_envelope_tx("OPS", -closing.ops_allocation_cents, "void", f"Void {closing.date}")
         post_envelope_tx("INVENTORY", -closing.inventory_allocation_cents, "void", f"Void {closing.date}")
         post_envelope_tx("BUFFER", -closing.buffer_allocation_cents, "void", f"Void {closing.date}")
 
+        # --- Step 2: Delete Related FixedCollection (if any) ---
+        fixed_collections = db.session.execute(
+            db.select(FixedCollection).where(FixedCollection.collected_on == closing.date)
+        ).scalars().all()
+
+        if fixed_collections:
+            for fc in fixed_collections:
+                db.session.delete(fc)
+            flash(f"Also removed {len(fixed_collections)} related Fixed Collection(s).", "info")
+
+        # --- Step 3: Delete Envelope Transactions linked to this closing ---
+        from models import EnvelopeTransaction
+        related_tx = db.session.execute(
+            db.select(EnvelopeTransaction).where(EnvelopeTransaction.daily_closing_id == closing.id)
+        ).scalars().all()
+        if related_tx:
+            for tx in related_tx:
+                db.session.delete(tx)
+            flash(f"Removed {len(related_tx)} linked envelope transaction(s).", "info")
+
+        # --- Step 4: Delete the Closing record itself ---
         db.session.delete(closing)
         db.session.commit()
-        flash(f"Closing for {closing.date} voided.", "danger")
+
+        flash(f"Closing for {closing.date} fully voided and cleaned up.", "danger")
+
     except Exception as e:
         db.session.rollback()
-        flash(f"Error voiding closing: {e}", "danger")
+        flash(f"Error while voiding closing: {e}", "danger")
 
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("closings"))
+
 
 
 @app.post("/edit-closing/<int:closing_id>")
 def edit_closing(closing_id):
-    """Edit a daily closing (update sale/notes and reallocate)."""
+    """Edit a daily closing (update sale/notes and reallocate safely)."""
     closing = db.session.get(DailyClosing, closing_id)
     if not closing:
         flash("Closing not found.", "warning")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("closings"))
 
     try:
-        # Read new values
+        # Parse new form data
         new_sale_cents = dollars_to_cents(request.form["sale"])
         new_notes = request.form.get("notes", "").strip() or None
         inventory_rate = float(request.form.get("inventory_rate", DEFAULT_INVENTORY_RATE))
         ops_rate = float(request.form.get("ops_rate", DEFAULT_OPS_RATE))
 
-        # Reverse old allocations
+        # Check for existing fixed collection
+        fixed_collections = db.session.execute(
+            db.select(FixedCollection).where(FixedCollection.collected_on == closing.date)
+        ).scalars().all()
+
+        if fixed_collections:
+            flash(
+                f"Cannot edit closing for {closing.date} — fixed collection already recorded. "
+                "Please void the collection first if you need to modify this closing.",
+                "warning",
+            )
+            return redirect(url_for("closings"))
+
+        # Reverse old allocations from envelopes
         post_envelope_tx("FIXED", -closing.fixed_allocation_cents, "edit_reversal", f"Edit reversal {closing.date}")
         post_envelope_tx("OPS", -closing.ops_allocation_cents, "edit_reversal", f"Edit reversal {closing.date}")
         post_envelope_tx("INVENTORY", -closing.inventory_allocation_cents, "edit_reversal", f"Edit reversal {closing.date}")
@@ -352,7 +491,7 @@ def edit_closing(closing_id):
         # Compute new allocation
         alloc, _ = compute_allocation(new_sale_cents, closing.date)
 
-        # Apply updates
+        # Update closing record
         closing.sales_cents = new_sale_cents
         closing.notes = new_notes
         closing.fixed_allocation_cents = alloc.fixed_cents
@@ -368,11 +507,12 @@ def edit_closing(closing_id):
 
         db.session.commit()
         flash(f"Closing for {closing.date} updated successfully.", "success")
+
     except Exception as e:
         db.session.rollback()
         flash(f"Error editing closing: {e}", "danger")
 
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("closings"))
 
 
 @app.route("/closings")
@@ -382,27 +522,7 @@ def closings():
     return render_template("closings.html", closings=all_closings, today=date.today())
 
 
-@app.route("/bills", methods=["GET", "POST"])
-def bills():
-    from main import db, FixedBill
 
-    if request.method == "POST":
-        name = request.form["name"]
-        amount = float(request.form["amount"])
-        active = "active" in request.form
-
-        new_bill = FixedBill(
-            name=name,
-            monthly_amount_cents=int(round(amount * 100)),
-            is_active=active
-        )
-        db.session.add(new_bill)
-        db.session.commit()
-        flash("New fixed bill added!", "success")
-        return redirect(url_for("bills"))
-
-    all_bills = FixedBill.query.order_by(FixedBill.name).all()
-    return render_template("bills.html", bills=all_bills)
 
 
 @app.route("/envelopes")
@@ -517,6 +637,68 @@ def mark_fixed_collected():
     return redirect(url_for("fixed_collections"))
 
 
+@app.route("/reports/fixed-coverage")
+def fixed_coverage_report():
+    from datetime import date, timedelta
+    today = date.today()
+    month_start = today.replace(day=1)
+    next_month = (month_start + timedelta(days=32)).replace(day=1)
+    days_in_month = (next_month - month_start).days
+    days_elapsed = (today - month_start).days + 1
+    days_remaining = days_in_month - days_elapsed
+
+    # Data sources
+    fixed_balance = db.session.scalar(
+        db.select(Envelope.balance_cents).where(Envelope.code == "FIXED")
+    ) or 0
+    bills = db.session.execute(
+        db.select(FixedBill).where(FixedBill.is_active == True)
+    ).scalars().all()
+
+    total_target = sum(b.monthly_amount_cents for b in bills) or 1
+    funded_pct = round((fixed_balance / total_target) * 100, 1)
+
+    # Average daily fixed inflow (last 30 days)
+    last30 = db.session.execute(
+        db.select(DailyClosing.fixed_allocation_cents)
+        .where(DailyClosing.date >= today - timedelta(days=30))
+    ).scalars().all()
+    avg_daily_inflow_cents = sum(last30) / max(len(last30), 1)
+    avg_daily_inflow = avg_daily_inflow_cents / 100
+
+    # Forecasting
+    remaining_cents = max(total_target - fixed_balance, 0)
+    if avg_daily_inflow_cents > 0:
+        projected_days = int(remaining_cents / avg_daily_inflow_cents)
+        projected_date = (today + timedelta(days=projected_days)).strftime("%b %d")
+    else:
+        projected_date = "—"
+
+    expected_end_balance = fixed_balance + (avg_daily_inflow_cents * days_remaining)
+    gap_cents = expected_end_balance - total_target
+
+    kpis = {
+        "total_target": total_target / 100,
+        "balance": fixed_balance / 100,
+        "funded_pct": funded_pct,
+        "avg_daily_inflow": avg_daily_inflow,
+        "projected_date": projected_date,
+        "days_remaining": days_remaining,
+        "gap": gap_cents / 100,
+    }
+
+    # For line chart: daily cumulative fixed inflow (last 30 days)
+    last30_closings = db.session.execute(
+        db.select(DailyClosing.date, DailyClosing.fixed_allocation_cents)
+        .where(DailyClosing.date >= today - timedelta(days=30))
+        .order_by(DailyClosing.date)
+    ).all()
+    running, points = 0, []
+    for d, f in last30_closings:
+        running += f or 0
+        points.append({"date": d.strftime("%b %d"), "balance": running / 100})
+
+    return render_template("report_fixed_coverage.html", kpis=kpis, points=points, today=today )
 
     
 # ───────────────────────────────

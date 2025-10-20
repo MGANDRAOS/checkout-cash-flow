@@ -1,8 +1,4 @@
-// static/js/main.js
-// ============================================================================
-//  Main JavaScript Entry Point for the Checkout App
-//  Handles: Charts, Forms, UI behavior
-// ============================================================================
+// Modularized JavaScript for Checkout Cash Flow Application
 
 // ----------------------------- Utility Module -------------------------------
 const Utils = (() => {
@@ -46,15 +42,6 @@ const DashboardChart = (() => {
                         borderWidth: 2,
                         pointRadius: 2,
                     },
-                    {
-                        label: "Buffer",
-                        data: data.buffer,
-                        borderColor: "rgba(16,185,129,1)",
-                        backgroundColor: "rgba(16,185,129,0.1)",
-                        tension: 0.25,
-                        borderWidth: 2,
-                        pointRadius: 2,
-                    },
                 ],
             },
             options: {
@@ -94,17 +81,180 @@ const DailyCloseForm = (() => {
     return { init };
 })();
 
+
+// ----------------------------- Edit Closing Modal Module --------------------
+const EditClosingModal = (() => {
+    let modalElement, formElement;
+
+    // Populate modal fields when it opens
+    function handleShowModal(event) {
+        const button = event.relatedTarget;
+        if (!button) return;
+
+        const id = button.getAttribute("data-id");
+        const date = button.getAttribute("data-date");
+        const sales = button.getAttribute("data-sales");
+        const notes = button.getAttribute("data-notes");
+
+        formElement.querySelector("#editClosingId").value = id;
+        formElement.querySelector("#editDate").value = date;
+        formElement.querySelector("#editSale").value = sales;
+        formElement.querySelector("#editNotes").value = notes || "";
+    }
+
+    // Handle form submission (dynamic action)
+    function handleSubmit(event) {
+        event.preventDefault();
+        const id = formElement.querySelector("#editClosingId").value;
+        formElement.action = `/edit-closing/${id}`;
+        formElement.submit();
+    }
+
+    // Initialize event bindings
+    function init() {
+        modalElement = document.getElementById("editClosingModal");
+        formElement = document.getElementById("editClosingForm");
+
+        if (!modalElement || !formElement) return;
+
+        modalElement.addEventListener("show.bs.modal", handleShowModal);
+        formElement.addEventListener("submit", handleSubmit);
+
+        Utils.log("EditClosingModal initialized");
+    }
+
+    return { init };
+})();
+
+
+// ----------------------------- Delete Confirmation Module -------------------
+const DeleteClosingModal = (() => {
+    let modalElement, formElement, dateLabel;
+
+    // Fill modal when it opens
+    function handleShowModal(event) {
+        const button = event.relatedTarget;
+        if (!button) return;
+
+        const id = button.getAttribute("data-id");
+        const date = button.getAttribute("data-date");
+
+        formElement.action = `/void-closing/${id}`;
+        dateLabel.textContent = date;
+    }
+
+    function init() {
+        modalElement = document.getElementById("deleteClosingModal");
+        formElement = document.getElementById("deleteClosingForm");
+        dateLabel = document.getElementById("deleteClosingDate");
+
+        if (!modalElement || !formElement) return;
+
+        modalElement.addEventListener("show.bs.modal", handleShowModal);
+        Utils.log("DeleteClosingModal initialized");
+    }
+
+    return { init };
+})();
+
+
+// ----------------------------- Chart Fixed Expenses -------------------
+
+const FixedCoverageReport = (() => {
+    function render(kpis, points) {
+        const dctx = document.getElementById("fixedDonut");
+        if (dctx)
+            new Chart(dctx, {
+                type: "doughnut",
+                data: {
+                    labels: ["Funded", "Remaining"],
+                    datasets: [{
+                        data: [kpis.funded_pct, 100 - kpis.funded_pct],
+                        backgroundColor: ["#198754", "#dee2e6"]
+                    }]
+                },
+                options: { cutout: "75%", plugins: { legend: { display: false } } }
+            });
+
+        const tctx = document.getElementById("fixedTrend");
+        if (tctx)
+            new Chart(tctx, {
+                type: "line",
+                data: {
+                    labels: points.map(p => p.date),
+                    datasets: [{
+                        label: "Cumulative Fixed ($)", data: points.map(p => p.balance),
+                        borderColor: "#0d6efd", fill: false, tension: 0.3
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } } }
+            });
+    }
+    function init(kpis, points) { render(kpis, points); }
+    return { init };
+})();
+
+// ----------------------------- Fixed Widget Module --------------------------
+const FixedWidget = (() => {
+  function init(kpis, points) {
+    if (!kpis) return;
+
+    const donut = document.getElementById("fixedDonutSmall");
+    if (donut)
+      new Chart(donut, {
+        type: "doughnut",
+        data: {
+          labels: ["Funded", "Remaining"],
+          datasets: [{
+            data: [kpis.funded_pct, 100 - kpis.funded_pct],
+            backgroundColor: ["#198754", "#e9ecef"]
+          }]
+        },
+        options: { cutout: "70%", plugins: { legend: { display: false } } }
+      });
+
+    const trend = document.getElementById("fixedTrendSmall");
+    if (trend && points?.length)
+      new Chart(trend, {
+        type: "line",
+        data: {
+          labels: points.map(p => p.date),
+          datasets: [{
+            label: "Cumulative Fixed ($)",
+            data: points.map(p => p.balance),
+            borderColor: "#0d6efd",
+            borderWidth: 2,
+            fill: false,
+            tension: 0.3
+          }]
+        },
+        options: { plugins: { legend: { display: false } }, responsive: true }
+      });
+  }
+  return { init };
+})();
+
 // ----------------------------- App Bootstrap -------------------------------
 document.addEventListener("DOMContentLoaded", function () {
     Utils.log("App initialized");
     DashboardChart.init();
     DailyCloseForm.init();
+    EditClosingModal.init();
+    DeleteClosingModal.init();
+    FixedCoverageReport.init(window.fixedKpis, window.fixedPoints)
+    if (window.fixedKpis) FixedWidget.init(window.fixedKpis, window.fixedPoints);
+
+
+
 
 
     const salesInput = document.getElementById("sales");
-    salesInput.addEventListener("focus", () => salesInput.select());
-    // Allow Enter key to submit immediately
-    salesInput.form.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") e.target.form.submit();
-    });
+    if (salesInput && salesInput.form) {
+
+        salesInput.addEventListener("focus", () => salesInput.select());
+        // Allow Enter key to submit immediately
+        salesInput.form.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") e.target.form.submit();
+        });
+    }
 });

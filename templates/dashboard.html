@@ -1,164 +1,177 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container-fluid">
-    <!-- Smart Alerts -->
-    <div class="mb-3">
-        {% if missing_yesterday %}
-        <div class="alert alert-warning shadow-sm d-flex justify-content-between align-items-center">
-            <div>
-                No closing submitted for yesterday ({{ yesterday.strftime('%b %d') }}) — click to add.
-            </div>
-            <a href="#closing-form" class="btn btn-sm btn-outline-warning">Add Closing</a>
-        </div>
-        {% endif %}
+<div class="container-fluid py-4 dashboard">
 
-        {% if outstanding_fixed_cents and outstanding_fixed_cents > 0 %}
-        <div class="alert alert-info shadow-sm d-flex justify-content-between align-items-center">
-            <div>
-                You have ${{ outstanding_fixed_dollars }} in Fixed not yet collected.
-            </div>
-            <a href="{{ url_for('fixed_collections') }}" class="btn btn-sm btn-outline-primary">View Collections</a>
-        </div>
-        {% endif %}
-    </div>
-
-    <!-- Quick Actions -->
-    <div class="d-flex gap-2 mb-4">
-        <a href="{{ url_for('fixed_collections') }}" class="btn btn-outline-primary"><i class="bi bi-wallet2"></i> View
-            Collections</a>
-        <a href="{{ url_for('bills') }}" class="btn btn-outline-primary"><i class="bi bi-receipt"></i> View
-            Expenses</a>
-    </div>
-
-    <!-- Mini Chart: 7-day Sales vs Buffer -->
-    <div class="row g-3">
-        <div class="col-lg-8">
-            <!-- Chart Container -->
-            <div class="card mt-4 shadow-sm">
-                <div class="card-body" style="height: 320px;">
-                    <canvas id="salesBufferChart"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4">
-            <div class="card shadow-sm mb-4">
-                <div class="card-body">
-                    <h5 class="card-title mb-3">Highlight of the Week</h5>
-                    <p class="mb-1">Largest sale: <strong>${{ largest_sale_dollars }}</strong>
-                        {% if largest_sale_date %} on {{ largest_sale_date.strftime('%a, %b %d') }}{% endif %}
-                    </p>
-                    <p class="mb-0">7‑day average: <strong>${{ avg_sales_dollars }}</strong></p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Chart Data -->
-    <script id="chart-data" type="application/json">
-        {{ {'labels': chart_labels, 'sales': chart_sales}|tojson|safe }}
-    </script>
-
-
-    <!-- Today's Allocation -->
-    {% if last_data %}
-    <div class="mb-4">
-        <h5 class="mb-2 text-muted">
-            📌 Last Recorded Closing — {{ last_closing.date.strftime('%B %d, %Y') }}
-            <span class="ms-2 badge bg-light text-dark">Sales: ${{ "%.2f"|format(last_closing.sales_cents /
-                100)}}</span>
-        </h5>
-
-        <div class="row">
-            <div class="col-md-3">
-                <div class="alert alert-primary shadow-sm">💸 Fixed: ${{ "%.2f"|format(last_data.fixed) }}</div>
-            </div>
-            <div class="col-md-3">
-                <div class="alert alert-warning shadow-sm">🛠️ Ops: ${{ "%.2f"|format(last_data.ops) }}</div>
-            </div>
-            <div class="col-md-3">
-                <div class="alert alert-info shadow-sm">📦 Inventory: ${{ "%.2f"|format(last_data.inventory) }}</div>
-            </div>
-            <div class="col-md-3">
-                <div class="alert alert-success shadow-sm">🧠 Buffer: ${{ "%.2f"|format(last_data.buffer) }}</div>
-            </div>
-        </div>
+  <!-- SMART ALERTS -->
+  {% if missing_yesterday or (outstanding_fixed_cents and outstanding_fixed_cents > 0) %}
+  <div class="mb-4">
+    {% if missing_yesterday %}
+    <div class="alert alert-warning shadow-sm d-flex justify-content-between align-items-center mb-2">
+      <div>
+        ⚠️ No closing submitted for <strong>{{ yesterday.strftime('%b %d') }}</strong> — click to add.
+      </div>
+      <a href="{{ url_for('closings') }}" class="btn btn-sm btn-outline-warning">Add Closing</a>
     </div>
     {% endif %}
+    {% if outstanding_fixed_cents and outstanding_fixed_cents > 0 %}
+    <div class="alert alert-info shadow-sm d-flex justify-content-between align-items-center">
+      <div>
+        💵 You have <strong>${{ outstanding_fixed_dollars }}</strong> in Fixed not yet collected.
+      </div>
+      <a href="{{ url_for('fixed_collections') }}" class="btn btn-sm btn-outline-primary">View Collections</a>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
 
-
-    <!-- Envelope Balances -->
-    <h4 class="mt-5 mb-3">💰 Envelopes</h4>
-    <div class="row">
-        {% for e in envelopes %}
-        <div class="col-md-3 mb-3">
-            <div class="card text-center shadow-sm">
-                <div class="card-body">
-                    <h5>{{ e.name }}</h5>
-                    <p class="fs-4 fw-bold text-success">${{ "%.2f"|format(e.balance_cents / 100) }}</p>
-                </div>
-            </div>
+  <!-- TOP GRID: SALES INSIGHT + WEEKLY HIGHLIGHT -->
+  <div class="row g-4 align-items-stretch mb-4">
+    <div class="col-lg-8">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-transparent border-0 pb-0">
+          <h5 class="fw-semibold mb-0">📊 7-Day Sales vs Buffer</h5>
         </div>
-        {% endfor %}
+        <div class="card-body pt-2" style="height: 300px;">
+          <canvas id="salesBufferChart"></canvas>
+        </div>
+      </div>
     </div>
 
-    <!-- Recent Closings -->
-    <h4 class="mt-5 mb-3">📅 Last 5 Closings</h4>
-    <table class="table table-bordered bg-white shadow-sm">
+    <div class="col-lg-4">
+      <div class="card shadow-sm border-0 h-100 d-flex flex-column justify-content-center text-center">
+        <div class="card-body">
+          <h5 class="fw-bold mb-3">✨ Highlight of the Week</h5>
+          <div class="display-6 fw-bold text-success mb-2">${{ largest_sale_dollars }}</div>
+          {% if largest_sale_date %}
+          <p class="mb-2 text-muted">on {{ largest_sale_date.strftime('%a, %b %d') }}</p>
+          {% endif %}
+          <p class="mb-0 fs-5">7-day avg: <span class="fw-semibold text-primary">${{ avg_sales_dollars }}</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHART DATA -->
+  <script id="chart-data" type="application/json">
+    {{ {'labels': chart_labels, 'sales': chart_sales}|tojson|safe }}
+  </script>
+
+  <!-- 30-DAY SALES OVERVIEW -->
+  <div class="card shadow-sm border-0 mb-5">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="fw-semibold mb-0">📈 Sales Overview — Last 30 Days</h5>
+      </div>
+
+      {% if kpis %}
+      <div class="row text-center mb-6">
+        <div class="col-md-6">
+          <div class="display-6 fw-bold text-success mb-1">${{ '%.2f' % kpis.total_sales }}</div>
+          <small class="text-muted">Total Sales</small>
+        </div>
+        <div class="col-md-6">
+          <div class="display-6 fw-bold text-dark mb-1">${{ '%.2f' % kpis.avg_sales }}</div>
+          <small class="text-muted">Average / Day</small>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-muted text-center mb-0">No recent sales data available.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <script>window.salesData = {{ data_points | tojson | safe }};</script>
+
+  <!-- TODAY'S ALLOCATION
+  {% if last_data %}
+  <div class="mb-5">
+    <h5 class="text-muted mb-3">
+      📌 Last Recorded Closing — <span class="fw-semibold">{{ last_closing.date.strftime('%B %d, %Y') }}</span>
+      <span class="badge bg-light text-dark ms-2">Sales: ${{ "%.2f"|format(last_closing.sales_cents / 100) }}</span>
+    </h5>
+    <div class="row g-3">
+      <div class="col-md-3"><div class="alert alert-primary shadow-sm fs-5 text-center mb-0">💸 Fixed<br><strong>${{ "%.2f"|format(last_data.fixed) }}</strong></div></div>
+      <div class="col-md-3"><div class="alert alert-warning shadow-sm fs-5 text-center mb-0">🛠️ Ops<br><strong>${{ "%.2f"|format(last_data.ops) }}</strong></div></div>
+      <div class="col-md-3"><div class="alert alert-info shadow-sm fs-5 text-center mb-0">📦 Inventory<br><strong>${{ "%.2f"|format(last_data.inventory) }}</strong></div></div>
+      <div class="col-md-3"><div class="alert alert-success shadow-sm fs-5 text-center mb-0">🧠 Buffer<br><strong>${{ "%.2f"|format(last_data.buffer) }}</strong></div></div>
+    </div>
+  </div>
+  {% endif %}
+   -->
+
+  <!-- ENVELOPE BALANCES -->
+  <h4 class="fw-semibold mb-3">💰 Envelope Balances</h4>
+  <div class="row g-3 mb-5">
+    {% for e in envelopes %}
+    <div class="col-md-3 col-sm-6">
+      <div class="card text-center shadow-sm border-0 bg-light h-100">
+        <div class="card-body">
+          <h6 class="text-uppercase fw-semibold text-muted mb-2">{{ e.name }}</h6>
+          <div class="display-6 fw-bold text-success">${{ "%.2f"|format(e.balance_cents / 100) }}</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- LAST 5 CLOSINGS -->
+  <div class="card shadow-sm border-0 mb-5">
+    <div class="card-header bg-transparent border-0 pb-0">
+      <h5 class="fw-semibold mb-0">📅 Recent Closings</h5>
+    </div>
+    <div class="card-body table-responsive">
+      <table class="table align-middle">
         <thead class="table-light">
-            <tr>
-                <th>Date</th>
-                <th>Sales</th>
-                <th>Fixed</th>
-                <th>Ops</th>
-                <th>Inventory</th>
-                <th>Buffer</th>
-            </tr>
+          <tr>
+            <th>Date</th><th>Sales</th><th>Fixed Expenses</th><th>Operationss</th><th>Inventory</th><th>Buffer</th>
+          </tr>
         </thead>
         <tbody>
-            {% for c in closings[:5] %}
-            <tr>
-                <td>{{ c.date }}</td>
-                <td>${{ "%.2f"|format(c.sales_cents / 100) }}</td>
-                <td>${{ "%.2f"|format(c.fixed_allocation_cents / 100) }}</td>
-                <td>${{ "%.2f"|format(c.ops_allocation_cents / 100) }}</td>
-                <td>${{ "%.2f"|format(c.inventory_allocation_cents / 100) }}</td>
-                <td>${{ "%.2f"|format(c.buffer_allocation_cents / 100) }}</td>
-            </tr>
-            {% endfor %}
+          {% for c in closings[:5] %}
+          <tr>
+            <td class="fw-semibold">{{ c.date }}</td>
+            <td>${{ "%.2f"|format(c.sales_cents / 100) }}</td>
+            <td>${{ "%.2f"|format(c.fixed_allocation_cents / 100) }}</td>
+            <td>${{ "%.2f"|format(c.ops_allocation_cents / 100) }}</td>
+            <td>${{ "%.2f"|format(c.inventory_allocation_cents / 100) }}</td>
+            <td>${{ "%.2f"|format(c.buffer_allocation_cents / 100) }}</td>
+          </tr>
+          {% endfor %}
         </tbody>
-    </table>
+      </table>
+    </div>
+  </div>
 
-    <!-- Fixed Bills Summary -->
-    <h4 class="mt-5 mb-3">📑 Fixed Bills</h4>
-    <table class="table table-bordered bg-white shadow-sm">
+  <!-- FIXED BILLS SUMMARY -->
+  <div class="card shadow-sm border-0 mb-5">
+    <div class="card-header bg-transparent border-0 pb-0">
+      <h5 class="fw-semibold mb-0">📑 Fixed Bills Summary</h5>
+    </div>
+    <div class="card-body table-responsive">
+      <table class="table align-middle">
         <thead class="table-light">
-            <tr>
-                <th>Name</th>
-                <th>Monthly Amount</th>
-                <th>Status</th>
-            </tr>
+          <tr><th>Name</th><th>Monthly Amount</th><th>Status</th></tr>
         </thead>
         <tbody>
-            {% for bill in bills %}
-            <tr>
-                <td>{{ bill.name }}</td>
-                <td>${{ "%.2f"|format(bill.monthly_amount_cents / 100) }}</td>
-                <td>
-                    {% if bill.is_active %}
-                    <span class="badge bg-success">Active</span>
-                    {% else %}
-                    <span class="badge bg-secondary">Inactive</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="3" class="text-center text-muted">No fixed bills yet</td>
-            </tr>
-            {% endfor %}
+          {% for bill in bills %}
+          <tr>
+            <td class="fw-semibold">{{ bill.name }}</td>
+            <td>${{ "%.2f"|format(bill.monthly_amount_cents / 100) }}</td>
+            <td>
+              {% if bill.is_active %}
+              <span class="badge bg-success">Active</span>
+              {% else %}
+              <span class="badge bg-secondary">Inactive</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="text-center text-muted">No fixed bills yet</td></tr>
+          {% endfor %}
         </tbody>
-    </table>
-
+      </table>
+    </div>
+  </div>
 
 </div>
 {% endblock %}

@@ -3,7 +3,7 @@ from calendar import monthrange
 from datetime import date
 from dataclasses import dataclass
 from typing import Dict, Tuple, Optional
-from models import db, Envelope, EnvelopeTransaction, FixedBill, AppSetting
+from models import db, Envelope, EnvelopeTransaction, FixedBill, AppSetting, DailyClosing
 
 
 # ───────────────────────────────
@@ -35,7 +35,7 @@ def ensure_default_envelopes():
     """Create default envelopes if missing."""
     defaults = [
         ("INVENTORY", "Inventory"),
-        ("FIXED", "Fixed Reserve"),
+        ("FIXED", "Fixed Expenses"),
         ("OPS", "Operations"),
         ("BUFFER", "Buffer"),
     ]
@@ -169,3 +169,41 @@ def compute_allocation(sales_cents: int, on_date: date) -> Tuple[Allocation, Dic
 def days_in_month(year: int, month: int) -> int:
     """Returns number of days in a given month."""
     return monthrange(year, month)[1]
+
+
+
+def get_sales_overview_data():
+    """Compute last 30-day sales KPIs and chart points for dashboard/report reuse."""
+    from datetime import date, timedelta
+    end_date = date.today()
+    start_date = end_date - timedelta(days=30)
+
+    closings = db.session.execute(
+        db.select(DailyClosing).where(DailyClosing.date >= start_date)
+    ).scalars().all()
+
+    if not closings:
+        return {}, []
+
+    total_sales = sum(c.sales_cents for c in closings)
+    avg_sales = total_sales / len(closings)
+    best_day = max(closings, key=lambda c: c.sales_cents)
+    worst_day = min(closings, key=lambda c: c.sales_cents)
+
+    kpis = {
+        "total_sales": total_sales / 100,
+        "avg_sales": avg_sales / 100,
+        "best_day": (best_day.date.strftime("%b %d"), best_day.sales_cents / 100),
+        "worst_day": (worst_day.date.strftime("%b %d"), worst_day.sales_cents / 100),
+    }
+
+    data_points = [{
+        "date": c.date.strftime("%b %d"),
+        "sales": c.sales_cents / 100,
+        "fixed": c.fixed_allocation_cents / 100,
+        "ops": c.ops_allocation_cents / 100,
+        "inventory": c.inventory_allocation_cents / 100,
+        "buffer": c.buffer_allocation_cents / 100,
+    } for c in closings]
+
+    return kpis, data_points
