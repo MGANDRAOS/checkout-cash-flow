@@ -29,7 +29,7 @@
     <div class="col-lg-8">
       <div class="card shadow-sm border-0 h-100">
         <div class="card-header bg-transparent border-0 pb-0">
-          <h5 class="fw-semibold mb-0">📊 7-Day Sales vs Buffer</h5>
+          <h5 class="fw-semibold mb-0">📊 7-Day Sales</h5>
         </div>
         <div class="card-body pt-2" style="height: 300px;">
           <canvas id="salesBufferChart"></canvas>
@@ -123,13 +123,13 @@
       <table class="table align-middle">
         <thead class="table-light">
           <tr>
-            <th>Date</th><th>Sales</th><th>Fixed Expenses</th><th>Operationss</th><th>Inventory</th><th>Buffer</th>
+            <th>Date</th><th>Sales</th><th>Fixed Expenses</th><th>Operations</th><th>Inventory</th><th>Buffer</th>
           </tr>
         </thead>
         <tbody>
           {% for c in closings[:5] %}
           <tr>
-            <td class="fw-semibold">{{ c.date }}</td>
+            <td class="fw-semibold">{{ c.date.strftime("%a, %d-%m-%Y") }}</td>
             <td>${{ "%.2f"|format(c.sales_cents / 100) }}</td>
             <td>${{ "%.2f"|format(c.fixed_allocation_cents / 100) }}</td>
             <td>${{ "%.2f"|format(c.ops_allocation_cents / 100) }}</td>

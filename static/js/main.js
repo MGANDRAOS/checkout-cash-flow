@@ -14,6 +14,8 @@ const Utils = (() => {
         }
     };
     return { log, parseJSON };
+
+
 })();
 
 // ----------------------------- Chart Module ---------------------------------
@@ -195,6 +197,7 @@ const FixedCoverageReport = (() => {
 })();
 
 // ----------------------------- Fixed Widget Module --------------------------
+
 const FixedWidget = (() => {
     function init(kpis, points) {
         if (!kpis) return;
@@ -234,6 +237,45 @@ const FixedWidget = (() => {
     return { init };
 })();
 
+// ----------------------------- Pairing --------------------------
+
+function renderAffinity(rows) {
+
+    const body = document.getElementById("affinityBody");
+    if (!body) return;
+
+    if (!rows.length) {
+        body.innerHTML = "<tr><td colspan='5' class='text-muted'>Not enough data to compute pairs.</td></tr>";
+        return;
+    }
+
+    // Build rows (keep it snappy)
+    const html = rows.map(r => {
+        const cov = (r.coverage_pct || 0) * 100;
+        const lift = r.lift == null ? "—" : r.lift.toFixed(2);
+        return `
+      <tr>
+        <td>${escapeHtml(r.a || "")}</td>
+        <td>${escapeHtml(r.b || "")}</td>
+        <td class="text-end">${(r.co_count || 0).toLocaleString()}</td>
+        <td class="text-end">${cov.toFixed(1)}%</td>
+        <td class="text-end">${lift}</td>
+      </tr>`;
+    }).join("");
+    body.innerHTML = html;
+}
+
+// tiny HTML escape to be safe
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, m =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+function enableTooltips() {
+    const nodes = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    nodes.forEach(el => { try { new bootstrap.Tooltip(el); } catch (_) { } });
+}
+
 // ----------------------------- App Bootstrap -------------------------------
 document.addEventListener("DOMContentLoaded", function () {
     Utils.log("App initialized");
@@ -245,11 +287,6 @@ document.addEventListener("DOMContentLoaded", function () {
     if (window.fixedKpis) FixedWidget.init(window.fixedKpis, window.fixedPoints);
 
     IntelligencePOS.init();
-
-
-
-
-
 
     const salesInput = document.getElementById("sales");
     if (salesInput && salesInput.form) {

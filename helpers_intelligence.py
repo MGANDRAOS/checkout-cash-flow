@@ -110,6 +110,7 @@ def get_kpis() -> Dict:
             "unique_items": unique_items
         }
 
+
 def get_receipts_by_day(days:int=7) -> List[Dict]:
     """
     Last N business days (grouped by business date using 07:00 boundary).
@@ -142,6 +143,7 @@ def get_receipts_by_day(days:int=7) -> List[Dict]:
         rows = cur.fetchall()
         return [{"date": r.date, "receipts": int(r.receipts or 0), "amount": float(r.amount or 0.0)} for r in rows]
 
+
 def get_hourly_last_business_day() -> List[Dict]:
     """
     Receipts count by *clock hour* within the last business window
@@ -164,6 +166,7 @@ def get_hourly_last_business_day() -> List[Dict]:
             ORDER BY [hour];
         """, (start, end))
         return [{"hour": int(r.hour), "receipts": int(r.receipts or 0)} for r in cur.fetchall()]
+
 
 def get_top_items(limit:int=10, days:int=1) -> List[Dict]:
     """
@@ -218,9 +221,629 @@ def get_top_items(limit:int=10, days:int=1) -> List[Dict]:
             for r in cur.fetchall()
         ]
 
-def get_payment_split() -> List[Dict]:
+
+def get_subgroup_contribution(days: int = 7, limit: int = 12):
     """
-    Placeholder — you didn't provide a payments table.
-    Return empty list so the UI stays honest.
+    Top subgroups over the last <days> business days (default 7).
+    Resolves subgroup via SUBGROUPS:
+      1) if ITEMS.ITM_SUBGROUP is numeric -> join by SubGrp_ID
+      2) else join by SubGrp_Name (trimmed)
+      3) else fallback to raw ITEMS.ITM_SUBGROUP text
+      4) else 'Unknown'
+    SQL-2008 safe (no TRY_CONVERT).
     """
-    return []
+    days = max(1, min(int(days), 60))
+    limit = max(1, min(int(limit), 50))
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute("""
+            SET NOCOUNT ON;
+
+            -- Label business days with a -7h shift (07:00 start → next-day 05:00 end)
+            WITH R AS (
+              SELECT r.RCPT_ID,
+                     CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
+              FROM dbo.HISTORIC_RECEIPT r
+            ),
+            LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
+            CUT AS (  -- RCPT_IDs inside the last <days> business dates
+              SELECT RCPT_ID
+              FROM R CROSS JOIN LAST
+              WHERE R.BizDate BETWEEN DATEADD(DAY, -?+1, LAST.MaxBiz) AND LAST.MaxBiz
+            )
+
+            SELECT TOP (?)
+              COALESCE(
+                  s_id.SubGrp_Name,
+                  s_name.SubGrp_Name,
+                  NULLIF(x.SubGrpText, N''),
+                  N'Unknown'
+              ) AS subgroup,
+              SUM(CAST(c.ITM_QUANTITY AS float))                            AS qty,
+              SUM(CAST(c.ITM_QUANTITY AS float) * CAST(c.ITM_PRICE AS float)) AS amount
+            FROM dbo.HISTORIC_RECEIPT_CONTENTS AS c
+            JOIN CUT ON CUT.RCPT_ID = c.RCPT_ID
+            LEFT JOIN dbo.ITEMS AS i ON i.ITM_CODE = c.ITM_CODE
+
+            -- Derive numeric ID (only digits) and a trimmed text
+            CROSS APPLY (
+              SELECT
+                CASE
+                  WHEN i.ITM_SUBGROUP IS NULL THEN NULL
+                  WHEN LTRIM(RTRIM(i.ITM_SUBGROUP)) = N'' THEN NULL
+                  -- numeric-only test: NOT LIKE any non-digit char
+                  WHEN i.ITM_SUBGROUP NOT LIKE N'%[^0-9]%' THEN CONVERT(int, i.ITM_SUBGROUP)
+                  ELSE NULL
+                END AS SubGrpID,
+                LTRIM(RTRIM(i.ITM_SUBGROUP)) AS SubGrpText
+            ) AS x
+
+            -- Prefer lookup by ID, else by name
+            LEFT JOIN dbo.SUBGROUPS AS s_id
+              ON s_id.SubGrp_ID = x.SubGrpID
+            LEFT JOIN dbo.SUBGROUPS AS s_name
+              ON LTRIM(RTRIM(s_name.SubGrp_Name)) = x.SubGrpText
+
+            GROUP BY COALESCE(
+                      s_id.SubGrp_Name,
+                      s_name.SubGrp_Name,
+                      NULLIF(x.SubGrpText, N''),
+                      N'Unknown'
+                     )
+            ORDER BY amount DESC, subgroup ASC;
+        """, (days, limit))
+
+        rows = cur.fetchall()
+        return [
+            {"subgroup": r.subgroup, "qty": float(r.qty or 0.0), "amount": float(r.amount or 0.0)}
+            for r in rows
+        ]
+
+
+def get_top_items_in_subgroup(subgroup_name: str, days: int = 7, limit: int = 10):
+    """
+    Top items (qty + amount) for a given subgroup label over the last <days> business days.
+    subgroup_name is matched to SUBGROUPS.SubGrp_Name (case/whitespace-insensitive),
+    but also works when ITEMS.ITM_SUBGROUP stores the name directly or a numeric ID.
+
+    Returns: [{item, qty, amount}] ordered by qty desc.
+    """
+    if not subgroup_name or not str(subgroup_name).strip():
+        return []
+
+    days = max(1, min(int(days), 30))
+    limit = max(1, min(int(limit), 50))
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute("""
+            SET NOCOUNT ON;
+
+            -- Label business days with a -7h shift (07:00 start)
+            WITH R AS (
+              SELECT r.RCPT_ID,
+                     CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
+              FROM dbo.HISTORIC_RECEIPT r
+            ),
+            LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
+            CUT AS (  -- RCPT_IDs inside the last <days> business dates
+              SELECT RCPT_ID
+              FROM R CROSS JOIN LAST
+              WHERE R.BizDate BETWEEN DATEADD(DAY, -?+1, LAST.MaxBiz) AND LAST.MaxBiz
+            ),
+            -- Resolve each line's subgroup label using SUBGROUPS (ID or Name)
+            Labeled AS (
+              SELECT
+                -- subgroup label (resolved)
+                COALESCE(
+                  s_id.SubGrp_Name,
+                  s_nm.SubGrp_Name,
+                  NULLIF(x.SubGrpText, N''),
+                  N'Unknown'
+                ) AS subgroup_label,
+                -- item display label (title or code as text)
+                CAST(
+                  CASE
+                    WHEN i.ITM_TITLE IS NOT NULL AND LTRIM(RTRIM(i.ITM_TITLE)) <> N'' THEN i.ITM_TITLE
+                    ELSE CAST(c.ITM_CODE AS nvarchar(128))
+                  END AS nvarchar(128)
+                ) AS item_label,
+                CAST(c.ITM_QUANTITY AS float) AS qty,
+                CAST(c.ITM_PRICE    AS float) AS price
+              FROM dbo.HISTORIC_RECEIPT_CONTENTS AS c
+              JOIN CUT ON CUT.RCPT_ID = c.RCPT_ID
+              LEFT JOIN dbo.ITEMS AS i ON i.ITM_CODE = c.ITM_CODE
+
+              CROSS APPLY (
+                SELECT
+                  CASE
+                    WHEN i.ITM_SUBGROUP IS NULL THEN NULL
+                    WHEN LTRIM(RTRIM(i.ITM_SUBGROUP)) = N'' THEN NULL
+                    WHEN i.ITM_SUBGROUP NOT LIKE N'%[^0-9]%' THEN CONVERT(int, i.ITM_SUBGROUP)
+                    ELSE NULL
+                  END AS SubGrpID,
+                  LTRIM(RTRIM(i.ITM_SUBGROUP)) AS SubGrpText
+              ) AS x
+
+              LEFT JOIN dbo.SUBGROUPS AS s_id
+                ON s_id.SubGrp_ID = x.SubGrpID
+              LEFT JOIN dbo.SUBGROUPS AS s_nm
+                ON LTRIM(RTRIM(s_nm.SubGrp_Name)) = x.SubGrpText
+            )
+
+            SELECT TOP (?)
+              item_label AS item,
+              SUM(qty)   AS qty,
+              SUM(qty * price) AS amount
+            FROM Labeled
+            WHERE UPPER(LTRIM(RTRIM(subgroup_label))) = UPPER(LTRIM(RTRIM(?)))
+            GROUP BY item_label
+            ORDER BY qty DESC, item ASC;
+        """, (days, limit, subgroup_name))
+
+        rows = cur.fetchall()
+        return [
+            {"item": r.item, "qty": float(r.qty or 0.0), "amount": float(r.amount or 0.0)}
+            for r in rows
+        ]
+
+
+def get_items_per_receipt_histogram(days: int = 7):
+    """
+    Buckets number of items per receipt over the last <days> business days.
+    Bins: 1,2,3,4,5,6-10,11-15,16-20,20+
+    """
+    days = max(1, min(int(days), 60))
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute("""
+            SET NOCOUNT ON;
+
+            WITH R AS (
+              SELECT r.RCPT_ID, CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
+              FROM dbo.HISTORIC_RECEIPT r
+            ),
+            LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
+            CUT AS (
+              SELECT RCPT_ID
+              FROM R CROSS JOIN LAST
+              WHERE R.BizDate BETWEEN DATEADD(DAY, -?+1, LAST.MaxBiz) AND LAST.MaxBiz
+            ),
+            ItemsPerReceipt AS (
+              SELECT c.RCPT_ID, SUM(CAST(c.ITM_QUANTITY AS float)) AS itemcnt
+              FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+              JOIN CUT ON CUT.RCPT_ID = c.RCPT_ID
+              GROUP BY c.RCPT_ID
+            )
+            SELECT
+              CASE
+                WHEN itemcnt <= 1  THEN '1'
+                WHEN itemcnt =  2  THEN '2'
+                WHEN itemcnt =  3  THEN '3'
+                WHEN itemcnt =  4  THEN '4'
+                WHEN itemcnt =  5  THEN '5'
+                WHEN itemcnt BETWEEN 6  AND 10 THEN '6-10'
+                WHEN itemcnt BETWEEN 11 AND 15 THEN '11-15'
+                WHEN itemcnt BETWEEN 16 AND 20 THEN '16-20'
+                ELSE '20+'
+              END AS bin,
+              CASE
+                WHEN itemcnt <= 1  THEN 1
+                WHEN itemcnt =  2  THEN 2
+                WHEN itemcnt =  3  THEN 3
+                WHEN itemcnt =  4  THEN 4
+                WHEN itemcnt =  5  THEN 5
+                WHEN itemcnt BETWEEN 6  AND 10 THEN 6
+                WHEN itemcnt BETWEEN 11 AND 15 THEN 7
+                WHEN itemcnt BETWEEN 16 AND 20 THEN 8
+                ELSE 9
+              END AS seq,
+              COUNT(*) AS cnt
+            FROM ItemsPerReceipt
+            GROUP BY
+              CASE
+                WHEN itemcnt <= 1  THEN '1'
+                WHEN itemcnt =  2  THEN '2'
+                WHEN itemcnt =  3  THEN '3'
+                WHEN itemcnt =  4  THEN '4'
+                WHEN itemcnt =  5  THEN '5'
+                WHEN itemcnt BETWEEN 6  AND 10 THEN '6-10'
+                WHEN itemcnt BETWEEN 11 AND 15 THEN '11-15'
+                WHEN itemcnt BETWEEN 16 AND 20 THEN '16-20'
+                ELSE '20+'
+              END,
+              CASE
+                WHEN itemcnt <= 1  THEN 1
+                WHEN itemcnt =  2  THEN 2
+                WHEN itemcnt =  3  THEN 3
+                WHEN itemcnt =  4  THEN 4
+                WHEN itemcnt =  5  THEN 5
+                WHEN itemcnt BETWEEN 6  AND 10 THEN 6
+                WHEN itemcnt BETWEEN 11 AND 15 THEN 7
+                WHEN itemcnt BETWEEN 16 AND 20 THEN 8
+                ELSE 9
+              END
+            ORDER BY seq;
+        """, (days,))
+        rows = cur.fetchall()
+        return [{"bin": r.bin, "count": int(r.cnt or 0)} for r in rows]
+
+
+def get_receipt_amount_histogram(days: int = 7):
+    """
+    Buckets RCPT_AMOUNT over last <days> business days (LBP).
+    Bins: 0–100k, 100–250k, 250–500k, 500k–1M, 1–2M, 2–5M, 5–10M, 10M+
+    """
+    days = max(1, min(int(days), 60))
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute("""
+            SET NOCOUNT ON;
+
+            WITH R AS (
+              SELECT r.RCPT_ID, r.RCPT_AMOUNT, CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
+              FROM dbo.HISTORIC_RECEIPT r
+            ),
+            LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
+            CUT AS (
+              SELECT RCPT_ID, RCPT_AMOUNT
+              FROM R CROSS JOIN LAST
+              WHERE R.BizDate BETWEEN DATEADD(DAY, -?+1, LAST.MaxBiz) AND LAST.MaxBiz
+            )
+            SELECT
+              CASE
+                WHEN RCPT_AMOUNT <      100000 THEN '0–100k'
+                WHEN RCPT_AMOUNT <      250000 THEN '100–250k'
+                WHEN RCPT_AMOUNT <      500000 THEN '250–500k'
+                WHEN RCPT_AMOUNT <     1000000 THEN '500k–1M'
+                WHEN RCPT_AMOUNT <     2000000 THEN '1–2M'
+                WHEN RCPT_AMOUNT <     5000000 THEN '2–5M'
+                WHEN RCPT_AMOUNT <    10000000 THEN '5–10M'
+                ELSE '10M+'
+              END AS bin,
+              CASE
+                WHEN RCPT_AMOUNT <      100000 THEN 1
+                WHEN RCPT_AMOUNT <      250000 THEN 2
+                WHEN RCPT_AMOUNT <      500000 THEN 3
+                WHEN RCPT_AMOUNT <     1000000 THEN 4
+                WHEN RCPT_AMOUNT <     2000000 THEN 5
+                WHEN RCPT_AMOUNT <     5000000 THEN 6
+                WHEN RCPT_AMOUNT <    10000000 THEN 7
+                ELSE 8
+              END AS seq,
+              COUNT(*) AS cnt
+            FROM CUT
+            GROUP BY
+              CASE
+                WHEN RCPT_AMOUNT <      100000 THEN '0–100k'
+                WHEN RCPT_AMOUNT <      250000 THEN '100–250k'
+                WHEN RCPT_AMOUNT <      500000 THEN '250–500k'
+                WHEN RCPT_AMOUNT <     1000000 THEN '500k–1M'
+                WHEN RCPT_AMOUNT <     2000000 THEN '1–2M'
+                WHEN RCPT_AMOUNT <     5000000 THEN '2–5M'
+                WHEN RCPT_AMOUNT <    10000000 THEN '5–10M'
+                ELSE '10M+'
+              END,
+              CASE
+                WHEN RCPT_AMOUNT <      100000 THEN 1
+                WHEN RCPT_AMOUNT <      250000 THEN 2
+                WHEN RCPT_AMOUNT <      500000 THEN 3
+                WHEN RCPT_AMOUNT <     1000000 THEN 4
+                WHEN RCPT_AMOUNT <     2000000 THEN 5
+                WHEN RCPT_AMOUNT <     5000000 THEN 6
+                WHEN RCPT_AMOUNT <    10000000 THEN 7
+                ELSE 8
+              END
+            ORDER BY seq;
+        """, (days,))
+        rows = cur.fetchall()
+        return [{"bin": r.bin, "count": int(r.cnt or 0)} for r in rows]
+
+
+def get_subgroup_velocity(days: int = 14, top: int = 8):
+    """
+    Change in subgroup amount: last 7d vs prior 7d (business days).
+    Returns top |delta%| subgroups.
+    """
+    days = max(14, min(int(days), 60))
+    top  = max(1, min(int(top), 20))
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute("""
+            SET NOCOUNT ON;
+
+            -- Label business dates
+            WITH R AS (
+              SELECT r.RCPT_ID, CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
+              FROM dbo.HISTORIC_RECEIPT r
+            ),
+            LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
+            CUT AS (  -- last <days> business days
+              SELECT R.RCPT_ID, R.BizDate
+              FROM R CROSS JOIN LAST
+              WHERE R.BizDate BETWEEN DATEADD(DAY, -?+1, LAST.MaxBiz) AND LAST.MaxBiz
+            ),
+            -- Resolve subgroup label (ID or Name)
+            Labeled AS (
+              SELECT
+                COALESCE(s_id.SubGrp_Name, s_nm.SubGrp_Name, NULLIF(x.SubGrpText, N''), N'Unknown') AS subgroup_label,
+                CAST(c.ITM_QUANTITY AS float) AS qty,
+                CAST(c.ITM_PRICE    AS float) AS price,
+                CUT.BizDate
+              FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+              JOIN CUT ON CUT.RCPT_ID = c.RCPT_ID
+              LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+              CROSS APPLY (
+                SELECT
+                  CASE
+                    WHEN i.ITM_SUBGROUP IS NULL THEN NULL
+                    WHEN LTRIM(RTRIM(i.ITM_SUBGROUP)) = N'' THEN NULL
+                    WHEN i.ITM_SUBGROUP NOT LIKE N'%[^0-9]%' THEN CONVERT(int, i.ITM_SUBGROUP)
+                    ELSE NULL
+                  END AS SubGrpID,
+                  LTRIM(RTRIM(i.ITM_SUBGROUP)) AS SubGrpText
+              ) x
+              LEFT JOIN dbo.SUBGROUPS s_id ON s_id.SubGrp_ID = x.SubGrpID
+              LEFT JOIN dbo.SUBGROUPS s_nm ON LTRIM(RTRIM(s_nm.SubGrp_Name)) = x.SubGrpText
+            ),
+            Agg AS (
+              SELECT subgroup_label AS subgroup,
+                     SUM(qty*price) AS amount,
+                     BizDate
+              FROM Labeled
+              GROUP BY subgroup_label, BizDate
+            ),
+            MB AS ( SELECT MAX(BizDate) AS MaxBiz FROM Agg ),
+            WinFlag AS (
+              SELECT a.subgroup, a.amount, a.BizDate,
+                     CASE WHEN a.BizDate >  DATEADD(DAY, -7, MB.MaxBiz) THEN 1 ELSE 0 END AS is_last7
+              FROM Agg a CROSS JOIN MB
+              WHERE a.BizDate > DATEADD(DAY, -14, MB.MaxBiz)
+            ),
+            WIN AS (
+              SELECT subgroup,
+                     SUM(CASE WHEN is_last7 = 1 THEN amount ELSE 0 END) AS last7,
+                     SUM(CASE WHEN is_last7 = 0 THEN amount ELSE 0 END) AS prev7
+              FROM WinFlag
+              GROUP BY subgroup
+            )
+            SELECT TOP (?)
+              s.subgroup,
+              s.last7,
+              s.prev7,
+              s.delta_pct
+            FROM (
+              SELECT
+                subgroup,
+                last7,
+                prev7,
+                CASE WHEN prev7 > 0 THEN (last7/prev7) - 1 ELSE NULL END AS delta_pct
+              FROM WIN
+            ) AS s
+            ORDER BY
+              CASE WHEN s.delta_pct IS NULL THEN 0 ELSE ABS(s.delta_pct) END DESC,
+              s.subgroup ASC;
+        """, (days, top))
+        rows = cur.fetchall()
+        return [
+            {
+                "subgroup": r.subgroup,
+                "last7": float(r.last7 or 0.0),
+                "prev7": float(r.prev7 or 0.0),
+                "delta_pct": None if r.delta_pct is None else float(r.delta_pct)
+            }
+            for r in rows
+        ]
+
+
+def get_affinity_pairs(days: int = 30, top: int = 15):
+    """
+    Top co-occurring item pairs over the last <days> business days (default 30).
+    - De-duplicates per receipt (an item counted once per receipt).
+    - Returns [{a, b, co_count, coverage_pct, lift}]
+      where:
+        coverage_pct = co_count / total_receipts
+        lift = (co_count * total_receipts) / (count(a) * count(b))
+    """
+    days = max(1, min(int(days), 60))
+    top  = max(1, min(int(top), 50))
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute("""
+            SET NOCOUNT ON;
+
+            -- Label business days (start 07:00)
+            WITH R AS (
+              SELECT r.RCPT_ID, CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
+              FROM dbo.HISTORIC_RECEIPT r
+            ),
+            LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
+            CUT AS (  -- target window receipts
+              SELECT R.RCPT_ID
+              FROM R CROSS JOIN LAST
+              WHERE R.BizDate BETWEEN DATEADD(DAY, -?+1, LAST.MaxBiz) AND LAST.MaxBiz
+            ),
+            -- Build a stable item label (title if present, else code as text)
+            LinesRaw AS (
+              SELECT c.RCPT_ID,
+                     CAST(
+                       CASE
+                         WHEN i.ITM_TITLE IS NOT NULL AND LTRIM(RTRIM(i.ITM_TITLE)) <> N'' THEN i.ITM_TITLE
+                         ELSE CAST(c.ITM_CODE AS nvarchar(128))
+                       END AS nvarchar(128)
+                     ) AS item_label
+              FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+              JOIN CUT ON CUT.RCPT_ID = c.RCPT_ID
+              LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+            ),
+            -- De-duplicate per receipt/item (so a pair is counted once per receipt)
+            Lines AS (
+              SELECT DISTINCT RCPT_ID, item_label
+              FROM LinesRaw
+            ),
+            ItemCnt AS (
+              SELECT item_label, COUNT(DISTINCT RCPT_ID) AS rcpt_count
+              FROM Lines
+              GROUP BY item_label
+            ),
+            Total AS (
+              SELECT COUNT(DISTINCT RCPT_ID) AS total_rcpts FROM Lines
+            ),
+            Pairs AS (
+              SELECT
+                a.item_label AS a_label,
+                b.item_label AS b_label,
+                COUNT(*)     AS co_count
+              FROM Lines a
+              JOIN Lines b
+                ON a.RCPT_ID = b.RCPT_ID
+               AND a.item_label < b.item_label       -- lexicographic to avoid dup/self-pairs
+              GROUP BY a.item_label, b.item_label
+            )
+            SELECT TOP (?)
+              p.a_label AS a,
+              p.b_label AS b,
+              p.co_count,
+              CAST(p.co_count * 1.0 / NULLIF(t.total_rcpts,0) AS float)                       AS coverage_pct,
+              CAST(p.co_count * 1.0 * t.total_rcpts / NULLIF(ia.rcpt_count * ib.rcpt_count,0) AS float) AS lift
+            FROM Pairs p
+            CROSS JOIN Total t
+            JOIN ItemCnt ia ON ia.item_label = p.a_label
+            JOIN ItemCnt ib ON ib.item_label = p.b_label
+            WHERE p.co_count >= 2         -- tiny noise filter
+            ORDER BY p.co_count DESC, a, b;
+        """, (days, top))
+
+        rows = cur.fetchall()
+        return [
+            {
+                "a": r.a, "b": r.b,
+                "co_count": int(r.co_count or 0),
+                "coverage_pct": float(r.coverage_pct or 0.0),
+                "lift": None if r.lift is None else float(r.lift)
+            }
+            for r in rows
+        ]
+
+
+def get_hourly_profile(days: int = 30):
+    """
+    Average receipts per business hour over the last <days> business days.
+    Always returns 24 rows (biz_hour 0..23 where 0==07:00 local).
+    avg_receipts is normalized by the number of business days in the window
+    (so hours with no sales on a given day still count as zero in the average).
+    """
+    days = max(1, min(int(days), 90))
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute("""
+            SET NOCOUNT ON;
+
+            -- Label business day/hour (shift -7h -> biz_hour 0..23, where 0 == 07:00)
+            WITH R AS (
+              SELECT
+                CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate,
+                DATEPART(HOUR, DATEADD(HOUR,-7, r.RCPT_DATE)) AS BizHour
+              FROM dbo.HISTORIC_RECEIPT r
+            ),
+            LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
+            CUT AS (  -- receipts in the last <days> business dates
+              SELECT BizDate, BizHour
+              FROM R CROSS JOIN LAST
+              WHERE R.BizDate BETWEEN DATEADD(DAY, -?+1, LAST.MaxBiz) AND LAST.MaxBiz
+            ),
+            -- count receipts per (day,hour)
+            Hourly AS (
+              SELECT BizDate, BizHour, COUNT(*) AS rcpts
+              FROM CUT
+              GROUP BY BizDate, BizHour
+            ),
+            -- aggregate totals per hour across the whole window
+            Agg AS (
+              SELECT BizHour, SUM(rcpts) AS total_rcpts
+              FROM Hourly
+              GROUP BY BizHour
+            ),
+            -- how many business days in the window (denominator for averages)
+            Days AS (
+              SELECT COUNT(DISTINCT BizDate) AS days_total FROM CUT
+            ),
+            -- generate 24 hours (0..23) so we can LEFT JOIN and fill missing hours with zero
+            H AS (
+              SELECT 0 AS h UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
+              UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11
+              UNION ALL SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15 UNION ALL SELECT 16 UNION ALL SELECT 17
+              UNION ALL SELECT 18 UNION ALL SELECT 19 UNION ALL SELECT 20 UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23
+            )
+            SELECT
+              H.h                           AS BizHour,
+              CAST(COALESCE(A.total_rcpts,0) AS float) / NULLIF(D.days_total,0) AS avg_rcpts,
+              COALESCE(A.total_rcpts,0)      AS total_rcpts,
+              D.days_total                   AS days_total
+            FROM H
+            CROSS JOIN Days D
+            LEFT JOIN Agg A ON A.BizHour = H.h
+            ORDER BY H.h;
+        """, (days,))
+        rows = cur.fetchall()
+        out = []
+        for r in rows:
+            biz_hour = int(r.BizHour)
+            clock_hour = (biz_hour + 7) % 24  # map back to local clock hour
+            out.append({
+                "biz_hour": biz_hour,
+                "clock_hour": clock_hour,
+                "avg_receipts": float(r.avg_rcpts or 0.0),
+                "total_receipts": int(r.total_rcpts or 0),
+                "days_present": int(r.days_total or 0),  # here days_present == total business days
+            })
+        return out
+
+
+def get_dow_profile(days: int = 56):
+    """
+    Average receipts per business day-of-week over the last <days> business days.
+    Uses Monday=0 .. Sunday=6 via a fixed Monday anchor (2000-01-03).
+    Returns: [{dow_index:int, dow_label:str, avg_receipts:float}]
+    """
+    days = max(7, min(int(days), 140))
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute("""
+            SET NOCOUNT ON;
+            WITH R AS (
+              SELECT CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
+              FROM dbo.HISTORIC_RECEIPT r
+            ),
+            LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
+            CUT AS (
+              SELECT BizDate
+              FROM R CROSS JOIN LAST
+              WHERE R.BizDate BETWEEN DATEADD(DAY, -?+1, LAST.MaxBiz) AND LAST.MaxBiz
+            ),
+            Daily AS (
+              SELECT CUT.BizDate, COUNT(*) AS rcpts
+              FROM CUT
+              JOIN R ON R.BizDate = CUT.BizDate
+              GROUP BY CUT.BizDate
+            ),
+            DOW AS (
+              SELECT
+                -- Monday anchor 2000-01-03 is a Monday
+                ((DATEDIFF(DAY, '20000103', BizDate) % 7) + 7) % 7 AS dow_idx,
+                rcpts
+              FROM Daily
+            )
+            SELECT dow_idx, AVG(CAST(rcpts AS float)) AS avg_rcpts
+            FROM DOW
+            GROUP BY dow_idx
+            ORDER BY dow_idx;
+        """, (days,))
+        idx_to_name = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+        rows = cur.fetchall()
+        return [
+            {"dow_index": int(r.dow_idx), "dow_label": idx_to_name[int(r.dow_idx) % 7], "avg_receipts": float(r.avg_rcpts or 0.0)}
+            for r in rows
+        ]

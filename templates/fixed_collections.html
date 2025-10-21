@@ -45,10 +45,6 @@
         </div>
     </div>
 
-    <!-- Daily Fixed Goal Info -->
-    <div class="alert alert-info shadow-sm mb-4">
-        Daily Fixed Goal: <strong>${{ "%.2f"|format(daily_goal / 100) }}</strong>
-    </div>
 
     <!-- Collection Table -->
     <div class="card shadow-sm">
@@ -69,7 +65,7 @@
                         {% for c in closings %}
                         {% set collected = collections | selectattr("collected_on", "equalto", c.date) | list %}
                         <tr>
-                            <td>{{ c.date.strftime("%Y-%m-%d") }}</td>
+                            <td>{{ c.date.strftime("%a, %d-%m-%Y") }}</td>
                             <td>${{ "%.2f"|format(c.fixed_allocation_cents / 100) }}</td>
                             <td>
                                 {% if collected %}

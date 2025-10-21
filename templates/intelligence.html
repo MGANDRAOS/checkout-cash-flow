@@ -2,21 +2,20 @@
 {% block content %}
 <div id="intelligence-root" class="container-fluid mt-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold">Analytics — Intelligence</h2>
-    <span class="text-muted small">Last sync: Oct 20, 2025 — 02:00 AM</span>
+    <h2 class="fw-bold">Analytics</h2>
   </div>
 
   <!-- Top Tabs -->
   <ul class="nav nav-tabs nav-fill mb-4" id="analyticsTabs" role="tablist" style="font-size:1.1rem;">
     <li class="nav-item" role="presentation">
-      <button class="nav-link active py-3" id="intelligence-tab" data-bs-toggle="tab"
-              data-bs-target="#tab-intelligence" type="button" role="tab">
+      <button class="nav-link active py-3" id="intelligence-tab" data-bs-toggle="tab" data-bs-target="#tab-intelligence"
+        type="button" role="tab">
         Intelligence
       </button>
     </li>
     <li class="nav-item" role="presentation">
-      <button class="nav-link py-3" id="realtime-tab" data-bs-toggle="tab"
-              data-bs-target="#tab-realtime" type="button" role="tab">
+      <button class="nav-link py-3" id="realtime-tab" data-bs-toggle="tab" data-bs-target="#tab-realtime" type="button"
+        role="tab">
         Realtime
       </button>
     </li>
@@ -63,49 +62,177 @@
         </div>
         <div class="col-md-4">
           <div class="card p-3 shadow-sm">
-            <h6 class="mb-2 text-secondary">Payment Method Split (last sync)</h6>
-            <div class="chart-wrap"><canvas id="chartPaymentSplit"></canvas></div>
+            <h6 class="mb-2 text-secondary">Top Subgroups Share (last 7 days)</h6>
+            <div class="chart-wrap"><canvas id="chartSubgroupShare"></canvas></div>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-4">
+          <div class="col-md-12">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Subgroup Contribution (last 7 days)</h6>
+              <div class="chart-wrap"><canvas id="chartSubgroup"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-4">
+          <div class="col-md-12">
+            <div class="card p-3 shadow-sm">
+              <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-2 text-secondary">
+                  Top Items in Subgroup: <span id="selSubgroupName">—</span> (last 7 days)
+                </h6>
+                <button id="clearSubgroup" type="button" class="btn btn-sm btn-outline-secondary">Clear</button>
+              </div>
+              <div class="chart-wrap"><canvas id="chartSubgroupItems"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div class="row g-3 mt-4">
+          <div class="col-md-6">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Top 10 Items (by quantity)</h6>
+              <div class="chart-wrap"><canvas id="chartTopItems"></canvas></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Receipts by Hour (last business day)</h6>
+              <div class="chart-wrap"><canvas id="chartHourlyReceipts"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Distributions -->
+        <div class="row g-3 mt-4">
+          <div class="col-md-6">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Items per Receipt (last 7 days)</h6>
+              <div class="chart-wrap"><canvas id="chartItemsPerReceipt"></canvas></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Receipt Amounts (LBP, last 7 days)</h6>
+              <div class="chart-wrap"><canvas id="chartReceiptAmounts"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Momentum -->
+        <div class="row g-3 mt-4">
+          <div class="col-md-12">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Subgroup Velocity (last 7d vs prior 7d)</h6>
+              <div class="chart-wrap"><canvas id="chartSubgroupVelocity"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="row g-3 mt-4">
+          <div class="col-md-12">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Frequently Bought Together (last 30 days)</h6>
+              <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width:45%;">Item A</th>
+                      <th style="width:45%;">Item B</th>
+
+                      <th class="text-end" style="width:5%;" data-bs-toggle="tooltip" data-bs-placement="top"
+                        title="How many receipts contained BOTH items at least once (de-duplicated per receipt).">
+                        Co-occurrence
+                      </th>
+
+                      <th class="text-end" style="width:5%;" data-bs-toggle="tooltip" data-bs-placement="top"
+                        title="Share of all receipts in the last 30 business days that contained this pair.">
+                        Coverage
+                      </th>
+
+                      <th class="text-end" style="width:5%;" data-bs-toggle="tooltip" data-bs-placement="top"
+                        title="Association strength vs chance. lift = (co_count × total_receipts) ÷ (count(A) × count(B)). Values &gt; 1 indicate a positive association.">
+                        Lift
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody id="affinityBody">
+                    <tr>
+                      <td colspan="5" class="text-muted">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Timings -->
+        <div class="row g-3 mt-4">
+          <div class="col-md-8">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Average Hourly Receipts (last 30 business days)</h6>
+              <div class="chart-wrap"><canvas id="chartHourlyProfile"></canvas></div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Day-of-Week Receipts (avg per day)</h6>
+              <div class="chart-wrap"><canvas id="chartDowProfile"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-4">
+          <div class="col-md-12">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Peak vs Quiet Hours (derived from 30-day hourly profile)</h6>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Rank</th>
+                      <th>Hour</th>
+                      <th class="text-end">Avg Receipts</th>
+                    </tr>
+                  </thead>
+                  <tbody id="peakHoursBody">
+                    <tr>
+                      <td colspan="3" class="text-muted">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="row g-3 mt-4">
-        <div class="col-md-6">
-          <div class="card p-3 shadow-sm">
-            <h6 class="mb-2 text-secondary">Top 10 Items (by quantity)</h6>
-            <div class="chart-wrap"><canvas id="chartTopItems"></canvas></div>
-          </div>
+
+
+      <!-- ================= Realtime (placeholder) ================= -->
+      <div class="tab-pane fade" id="tab-realtime" role="tabpanel" aria-labelledby="realtime-tab">
+        <div class="alert alert-info">
+          Realtime feed will activate once POS replication is live. UI is ready.
         </div>
-        <div class="col-md-6">
-          <div class="card p-3 shadow-sm">
-            <h6 class="mb-2 text-secondary">Receipts by Hour (last business day)</h6>
-            <div class="chart-wrap"><canvas id="chartHourlyReceipts"></canvas></div>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <div class="card text-center p-3 shadow-sm">
+              <div class="text-secondary small">Live Receipts (Today)</div>
+              <div class="display-6 text-primary">—</div>
+            </div>
+          </div>
+          <div class="col-md-9">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Receipts by Hour (Live)</h6>
+              <div class="chart-wrap"><canvas id="rtReceiptsByHour"></canvas></div>
+            </div>
           </div>
         </div>
       </div>
+
     </div>
-
-    <!-- ================= Realtime (placeholder) ================= -->
-    <div class="tab-pane fade" id="tab-realtime" role="tabpanel" aria-labelledby="realtime-tab">
-      <div class="alert alert-info">
-        Realtime feed will activate once POS replication is live. UI is ready.
-      </div>
-      <div class="row g-3">
-        <div class="col-md-3">
-          <div class="card text-center p-3 shadow-sm">
-            <div class="text-secondary small">Live Receipts (Today)</div>
-            <div class="display-6 text-primary">—</div>
-          </div>
-        </div>
-        <div class="col-md-9">
-          <div class="card p-3 shadow-sm">
-            <h6 class="mb-2 text-secondary">Receipts by Hour (Live)</h6>
-            <div class="chart-wrap"><canvas id="rtReceiptsByHour"></canvas></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
   </div>
-</div>
-{% endblock %}
+  {% endblock %}
