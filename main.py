@@ -18,6 +18,8 @@ from helpers import (
     get_sales_overview_data,
     days_in_month
 )
+from routes.intelligence import intelligence_bp
+
 
 # ───────────────────────────────
 # Load environment variables
@@ -522,9 +524,6 @@ def closings():
     return render_template("closings.html", closings=all_closings, today=date.today())
 
 
-
-
-
 @app.route("/envelopes")
 def envelope_view():
     from main import Envelope
@@ -704,8 +703,11 @@ def fixed_coverage_report():
 # ───────────────────────────────
 # App entry
 # ───────────────────────────────
+app.register_blueprint(intelligence_bp)
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
         ensure_default_envelopes()
     app.run(debug=os.getenv("FLASK_ENV") == "development")
+    

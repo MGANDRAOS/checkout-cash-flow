@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="intelligence-root" class="container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold">Analytics — Intelligence</h2>
+    <span class="text-muted small">Last sync: Oct 20, 2025 — 02:00 AM</span>
+  </div>
+
+  <!-- Top Tabs -->
+  <ul class="nav nav-tabs nav-fill mb-4" id="analyticsTabs" role="tablist" style="font-size:1.1rem;">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active py-3" id="intelligence-tab" data-bs-toggle="tab"
+              data-bs-target="#tab-intelligence" type="button" role="tab">
+        Intelligence
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link py-3" id="realtime-tab" data-bs-toggle="tab"
+              data-bs-target="#tab-realtime" type="button" role="tab">
+        Realtime
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="analyticsTabsContent">
+    <!-- ================= Intelligence (receipt-first) ================= -->
+    <div class="tab-pane fade show active" id="tab-intelligence" role="tabpanel" aria-labelledby="intelligence-tab">
+      <!-- KPI Row -->
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="card text-center shadow-sm p-3">
+            <div class="text-secondary small">Total Receipts (last sync)</div>
+            <div id="kpiTotalReceipts" class="display-6 fw-bold text-primary">—</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card text-center shadow-sm p-3">
+            <div class="text-secondary small">Avg Receipt Value</div>
+            <div id="kpiAvgReceipt" class="display-6 fw-bold text-success">—</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card text-center shadow-sm p-3">
+            <div class="text-secondary small">Items per Receipt</div>
+            <div id="kpiItemsPerReceipt" class="display-6 fw-bold text-info">—</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card text-center shadow-sm p-3">
+            <div class="text-secondary small">Unique Items Sold</div>
+            <div id="kpiUniqueItems" class="display-6 fw-bold text-warning">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="row g-3 mt-4">
+        <div class="col-md-8">
+          <div class="card p-3 shadow-sm">
+            <h6 class="mb-2 text-secondary">Receipts per Day (last 7 days)</h6>
+            <div class="chart-wrap"><canvas id="chartReceiptsByDay"></canvas></div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card p-3 shadow-sm">
+            <h6 class="mb-2 text-secondary">Payment Method Split (last sync)</h6>
+            <div class="chart-wrap"><canvas id="chartPaymentSplit"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mt-4">
+        <div class="col-md-6">
+          <div class="card p-3 shadow-sm">
+            <h6 class="mb-2 text-secondary">Top 10 Items (by quantity)</h6>
+            <div class="chart-wrap"><canvas id="chartTopItems"></canvas></div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card p-3 shadow-sm">
+            <h6 class="mb-2 text-secondary">Receipts by Hour (last business day)</h6>
+            <div class="chart-wrap"><canvas id="chartHourlyReceipts"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= Realtime (placeholder) ================= -->
+    <div class="tab-pane fade" id="tab-realtime" role="tabpanel" aria-labelledby="realtime-tab">
+      <div class="alert alert-info">
+        Realtime feed will activate once POS replication is live. UI is ready.
+      </div>
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="card text-center p-3 shadow-sm">
+            <div class="text-secondary small">Live Receipts (Today)</div>
+            <div class="display-6 text-primary">—</div>
+          </div>
+        </div>
+        <div class="col-md-9">
+          <div class="card p-3 shadow-sm">
+            <h6 class="mb-2 text-secondary">Receipts by Hour (Live)</h6>
+            <div class="chart-wrap"><canvas id="rtReceiptsByHour"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

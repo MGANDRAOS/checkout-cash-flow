@@ -196,42 +196,42 @@ const FixedCoverageReport = (() => {
 
 // ----------------------------- Fixed Widget Module --------------------------
 const FixedWidget = (() => {
-  function init(kpis, points) {
-    if (!kpis) return;
+    function init(kpis, points) {
+        if (!kpis) return;
 
-    const donut = document.getElementById("fixedDonutSmall");
-    if (donut)
-      new Chart(donut, {
-        type: "doughnut",
-        data: {
-          labels: ["Funded", "Remaining"],
-          datasets: [{
-            data: [kpis.funded_pct, 100 - kpis.funded_pct],
-            backgroundColor: ["#198754", "#e9ecef"]
-          }]
-        },
-        options: { cutout: "70%", plugins: { legend: { display: false } } }
-      });
+        const donut = document.getElementById("fixedDonutSmall");
+        if (donut)
+            new Chart(donut, {
+                type: "doughnut",
+                data: {
+                    labels: ["Funded", "Remaining"],
+                    datasets: [{
+                        data: [kpis.funded_pct, 100 - kpis.funded_pct],
+                        backgroundColor: ["#198754", "#e9ecef"]
+                    }]
+                },
+                options: { cutout: "70%", plugins: { legend: { display: false } } }
+            });
 
-    const trend = document.getElementById("fixedTrendSmall");
-    if (trend && points?.length)
-      new Chart(trend, {
-        type: "line",
-        data: {
-          labels: points.map(p => p.date),
-          datasets: [{
-            label: "Cumulative Fixed ($)",
-            data: points.map(p => p.balance),
-            borderColor: "#0d6efd",
-            borderWidth: 2,
-            fill: false,
-            tension: 0.3
-          }]
-        },
-        options: { plugins: { legend: { display: false } }, responsive: true }
-      });
-  }
-  return { init };
+        const trend = document.getElementById("fixedTrendSmall");
+        if (trend && points?.length)
+            new Chart(trend, {
+                type: "line",
+                data: {
+                    labels: points.map(p => p.date),
+                    datasets: [{
+                        label: "Cumulative Fixed ($)",
+                        data: points.map(p => p.balance),
+                        borderColor: "#0d6efd",
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.3
+                    }]
+                },
+                options: { plugins: { legend: { display: false } }, responsive: true }
+            });
+    }
+    return { init };
 })();
 
 // ----------------------------- App Bootstrap -------------------------------
@@ -243,6 +243,9 @@ document.addEventListener("DOMContentLoaded", function () {
     DeleteClosingModal.init();
     FixedCoverageReport.init(window.fixedKpis, window.fixedPoints)
     if (window.fixedKpis) FixedWidget.init(window.fixedKpis, window.fixedPoints);
+
+    IntelligencePOS.init();
+
 
 
 

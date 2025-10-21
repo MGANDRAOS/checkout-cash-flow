@@ -307,3 +307,10 @@ h2.h4 {
 .display-6 {
     font-size: 2.25rem;
 }
+
+/* Fixed-height chart containers to prevent resize loops */
+.chart-wrap {
+    position: relative;
+    height: 280px;
+    /* adjust to taste: 220–340px works well in your UI */
+}
