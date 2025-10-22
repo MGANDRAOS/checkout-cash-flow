@@ -314,3 +314,40 @@ h2.h4 {
     height: 280px;
     /* adjust to taste: 220–340px works well in your UI */
 }
+
+
+/* AG Grid Customizations */
+
+/* Items grid polish */
+.ag-theme-quartz {
+    /* compact, readable */
+    --ag-font-size: 12px;
+    --ag-grid-size: 6px;
+    /* cell padding */
+    --ag-row-height: 34px;
+    --ag-header-height: 36px;
+
+    /* gentle borders & zebra */
+    --ag-border-color: #e5e7eb;
+    /* slate-200 */
+    --ag-odd-row-background-color: #fcfcfd;
+    --ag-row-hover-color: #f0f7ff;
+
+    /* headers */
+    --ag-header-background-color: #f8f9fa;
+    /* Bootstrap light */
+    --ag-header-foreground-color: #334155;
+    /* slate-700 */
+    --ag-header-column-resize-handle-color: #94a3b8;
+    --ag-header-column-separator-display: block;
+}
+
+.ag-theme-quartz .ag-header-cell-label {
+    font-weight: 600;
+}
+
+/* Action buttons tighter */
+.ag-theme-quartz .btn.btn-sm {
+    padding: 2px 6px;
+    line-height: 1.1;
+}

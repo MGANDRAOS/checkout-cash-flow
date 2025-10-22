@@ -5,45 +5,47 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5 class="mb-0">Items</h5>
         <div class="d-flex gap-2">
-            <input id="itemsSearch" type="search" class="form-control form-control-sm"
+            <input id="itemsQ" type="search" class="form-control form-control-sm"
                 placeholder="Search title, code, subgroup">
             <select id="itemsPageSize" class="form-select form-select-sm" style="width:auto;">
                 <option value="25" selected>25</option>
                 <option value="50">50</option>
                 <option value="100">100</option>
+                <option value="200">200</option>
             </select>
-        </div>
-    </div>
+            <select id="itemsSubgroup" class="form-select form-select-sm" style="width:auto;">
+                <option value="">All subgroups</option>
+            </select>
 
-    <div class="card p-0 shadow-sm">
-        <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th style="width:10%;">Code</th>
-                        <th style="width:30%;">Title</th>
-                        <th style="width:15%;">Type</th>
-                        <th style="width:15%;">Subgroup</th>
-                        <th style="width:15%;">Last purchased</th> <!-- NEW -->
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody id="itemsBody">
-                    <tr>
-                        <td colspan="5" class="text-muted">Loading…</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="d-flex justify-content-between align-items-center p-2 border-top">
-            <div class="small text-muted" id="itemsSummary">—</div>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Paging">
-                <button id="itemsPrev" type="button" class="btn btn-outline-secondary">Prev</button>
-                <button id="itemsNext" type="button" class="btn btn-outline-secondary">Next</button>
+            <div class="btn-group btn-group-sm">
+                <button id="itemsExport" class="btn btn-outline-secondary">Export CSV</button>
+                <button id="itemsCols" class="btn btn-outline-secondary" data-bs-toggle="dropdown"
+                    aria-expanded="false">
+                    Columns ▾ 
+                </button>
+                <ul id="itemsColsMenu" class="dropdown-menu dropdown-menu-end p-2" style="min-width: 240px;"></ul>
             </div>
         </div>
     </div>
 
+    <!-- ONE grid element only: theme + height belong here -->
+    <div id="itemsGrid" class="ag-theme-quartz" style="height: calc(100vh - 270px); width: 100%;"></div>
+
+
+</div>
+
+<!-- Row details modal -->
+<div class="modal fade" id="itemModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">Item details</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <dl class="row mb-0" id="itemDetails"></dl>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
