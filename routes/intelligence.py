@@ -12,7 +12,8 @@ from helpers_intelligence import (
     get_subgroup_velocity,
     get_affinity_pairs,
     get_hourly_profile,      
-    get_dow_profile      
+    get_dow_profile,
+    get_top_windows
 )
 
 intelligence_bp = Blueprint("intelligence", __name__)
@@ -82,3 +83,7 @@ def api_hourly_profile():
 @intelligence_bp.route("/api/intelligence/dow-profile")
 def api_dow_profile():
     return jsonify(get_dow_profile(days=56))
+
+@intelligence_bp.route("/api/intelligence/top-windows")
+def api_top_windows():
+    return jsonify(get_top_windows(window_hours=3, days=30, top=5, quiet=3))

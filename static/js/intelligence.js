@@ -269,6 +269,7 @@ const IntelligencePOS = (() => {
     });
   }
 
+
   function renderItemsPerReceipt(rows) {
     const el = document.getElementById("chartItemsPerReceipt"); if (!el) return;
     if (charts.ipr) { charts.ipr.destroy(); charts.ipr = null; }
@@ -286,6 +287,7 @@ const IntelligencePOS = (() => {
     });
   }
 
+
   function renderReceiptAmounts(rows) {
     const el = document.getElementById("chartReceiptAmounts"); if (!el) return;
     if (charts.ramt) { charts.ramt.destroy(); charts.ramt = null; }
@@ -302,6 +304,7 @@ const IntelligencePOS = (() => {
       }
     });
   }
+
 
   function renderSubgroupVelocity(rows) {
     const el = document.getElementById("chartSubgroupVelocity"); if (!el) return;
@@ -345,17 +348,19 @@ const IntelligencePOS = (() => {
     });
   }
 
+
   function renderHourlyProfile(rows) {
     const el = document.getElementById("chartHourlyProfile"); if (!el) return;
     if (charts.hourlyProfile) { charts.hourlyProfile.destroy(); charts.hourlyProfile = null; }
 
-    const labels = (rows || []).map(r => fmtHour(getClockHour(r)));
-    const data = (rows || []).map(r => getAvgReceipts(r));
+    // Fallback to 24 hours if response is empty/short
+    const hours = Array.from({ length: 24 }, (_, i) => i);
+    const payload = (rows && rows.length === 24)
+      ? rows
+      : hours.map(h => ({ clock_hour: (h + 7) % 24, avg_receipts: 0 }));
 
-    if (!labels.length) {
-      el.parentElement.innerHTML = "<div class='text-muted small'>No hourly data.</div>";
-      return;
-    }
+    const labels = payload.map(r => String(getClockHour(r)).padStart(2, "0") + ":00");
+    const data = payload.map(r => getAvgReceipts(r));
 
     charts.hourlyProfile = new Chart(el, {
       type: "line",
@@ -395,7 +400,7 @@ const IntelligencePOS = (() => {
   function renderPeakHours(rows) {
     const body = document.getElementById("peakHoursBody"); if (!body) return;
 
-    const arr = (rows || [])
+    const arr = (Array.isArray(rows) ? rows : [])
       .map(r => ({ hour: getClockHour(r), avg: getAvgReceipts(r) }))
       .filter(x => x.hour != null);
 
@@ -404,9 +409,21 @@ const IntelligencePOS = (() => {
       return;
     }
 
+    // Peak = top 5 across all hours (unchanged)
     const byAvgDesc = arr.slice().sort((a, b) => b.avg - a.avg);
     const top5 = byAvgDesc.slice(0, 5);
-    const bottom3 = byAvgDesc.slice(-3).reverse();
+
+    // Quiet = bottom 3 but only during normal operation hours: 08:00..23:59 and 00:00..03:59
+    const isOpHour = (h) => (h >= 8 || h <= 3);         // 8→23 and 0→3
+    const opHours = arr.filter(x => isOpHour(x.hour));
+
+    if (!opHours.length) {
+      body.innerHTML = "<tr><td colspan='3' class='text-muted'>No operational-hour data (08:00–03:00).</td></tr>";
+      return;
+    }
+
+    const byAvgAscOp = opHours.slice().sort((a, b) => a.avg - b.avg);
+    const quiet3 = byAvgAscOp.slice(0, 3);
 
     const renderRow = (rankLabel, h) =>
       `<tr><td>${rankLabel}</td><td>${fmtHour(h.hour)}</td><td class="text-end">${h.avg.toFixed(2)}</td></tr>`;
@@ -414,10 +431,38 @@ const IntelligencePOS = (() => {
     let html = "";
     top5.forEach((h, i) => { html += renderRow(`#${i + 1}`, h); });
     html += `<tr><td colspan="3" class="table-light"></td></tr>`;
-    bottom3.forEach((h, i) => { html += renderRow(`Quiet #${i + 1}`, h); });
+    quiet3.forEach((h, i) => { html += renderRow(`Quiet #${i + 1}`, h); });
 
     body.innerHTML = html;
   }
+
+
+  function renderTopWindows(payload) {
+    const topBody = document.getElementById("topWindowsBody");
+    const quietBody = document.getElementById("quietWindowsBody");
+    if (!topBody || !quietBody) return;
+
+    const fmtHour = (h) => String(h).padStart(2, "0") + ":00";
+    const fmtLBP = (n) => (n == null ? "—" : `${Math.round(Number(n)).toLocaleString()} LBP`);
+
+    const renderRows = (rows) => {
+      if (!rows || !rows.length) {
+        return "<tr><td colspan='3' class='text-muted'>No data.</td></tr>";
+      }
+      return rows.map(r => `
+      <tr>
+        <td>${fmtHour(r.start_clock)}–${fmtHour(r.end_clock)}</td>
+        <td class="text-end">${(r.avg_receipts || 0).toFixed(2)}</td>
+        <td class="text-end">${fmtLBP(r.avg_amount || 0)}</td>
+      </tr>
+    `).join("");
+    };
+
+    topBody.innerHTML = renderRows(payload.top);
+    quietBody.innerHTML = renderRows(payload.quiet);
+  }
+
+
 
 
 
@@ -441,8 +486,9 @@ const IntelligencePOS = (() => {
         amtData,
         velData,
         affinityData,
-        hourlyProfileData,   // NEW
-        dowProfileData       // NEW
+        hourlyProfileData,
+        dowProfileData,
+        topWindowsData
       ] = await Promise.all([
         fetchJSON("/api/intelligence/kpis"),
         fetchJSON("/api/intelligence/receipts-by-day"),
@@ -453,8 +499,9 @@ const IntelligencePOS = (() => {
         fetchJSON("/api/intelligence/receipt-amounts"),
         fetchJSON("/api/intelligence/subgroup-velocity"),
         fetchJSON("/api/intelligence/affinity"),
+        fetchJSON("/api/intelligence/hourly-profile"),
         fetchJSON("/api/intelligence/dow-profile"),
-        fetchJSON("/api/intelligence/hourly-profile")
+        fetchJSON("/api/intelligence/top-windows"),
       ]);
 
       enableTooltips();
@@ -471,6 +518,7 @@ const IntelligencePOS = (() => {
       renderHourlyProfile(hourlyProfileData || []);
       renderDowProfile(dowProfileData || []);
       renderPeakHours(hourlyProfileData || []);
+      renderTopWindows(topWindowsData || []);
 
 
     } catch (err) {

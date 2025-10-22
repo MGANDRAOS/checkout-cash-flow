@@ -139,20 +139,20 @@
                 <table class="table table-sm table-hover align-middle mb-0">
                   <thead class="table-light">
                     <tr>
-                      <th style="width:45%;">Item A</th>
-                      <th style="width:45%;">Item B</th>
+                      <th style="width:35%;">Item A</th>
+                      <th style="width:35%;">Item B</th>
 
-                      <th class="text-end" style="width:5%;" data-bs-toggle="tooltip" data-bs-placement="top"
+                      <th class="text-end" style="width:10%;" data-bs-toggle="tooltip" data-bs-placement="top"
                         title="How many receipts contained BOTH items at least once (de-duplicated per receipt).">
                         Co-occurrence
                       </th>
 
-                      <th class="text-end" style="width:5%;" data-bs-toggle="tooltip" data-bs-placement="top"
+                      <th class="text-end" style="width:10%;" data-bs-toggle="tooltip" data-bs-placement="top"
                         title="Share of all receipts in the last 30 business days that contained this pair.">
                         Coverage
                       </th>
 
-                      <th class="text-end" style="width:5%;" data-bs-toggle="tooltip" data-bs-placement="top"
+                      <th class="text-end" style="width:10%;" data-bs-toggle="tooltip" data-bs-placement="top"
                         title="Association strength vs chance. lift = (co_count × total_receipts) ÷ (count(A) × count(B)). Values &gt; 1 indicate a positive association.">
                         Lift
                       </th>
@@ -208,6 +208,55 @@
             </div>
           </div>
         </div>
+
+        <div class="row g-3 mt-4">
+          <div class="col-md-12">
+            <div class="card p-3 shadow-sm">
+              <h6 class="mb-2 text-secondary">Best 3-Hour Windows (operational hours, last 30 business days)</h6>
+              <div class="row">
+                <div class="col-md-6">
+                  <h6 class="small text-success">Top</h6>
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                      <thead class="table-light">
+                        <tr>
+                          <th style="width:40%;">Window</th>
+                          <th class="text-end" style="width:30%;">Avg Receipts</th>
+                          <th class="text-end" style="width:30%;">Avg LBP</th>
+                        </tr>
+                      </thead>
+                      <tbody id="topWindowsBody">
+                        <tr>
+                          <td colspan="3" class="text-muted">Loading…</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="small text-muted">Quiet</h6>
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                      <thead class="table-light">
+                        <tr>
+                          <th style="width:40%;">Window</th>
+                          <th class="text-end" style="width:30%;">Avg Receipts</th>
+                          <th class="text-end" style="width:30%;">Avg LBP</th>
+                        </tr>
+                      </thead>
+                      <tbody id="quietWindowsBody">
+                        <tr>
+                          <td colspan="3" class="text-muted">Loading…</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
 

@@ -13,16 +13,8 @@ def _conn_str() -> str:
     server   = os.getenv("MSSQL_SERVER", "localhost,1433")
     database = os.getenv("MSSQL_DATABASE", "SBCDB")
 
-    uid = os.getenv("MSSQL_UID")
-    pwd = os.getenv("MSSQL_PWD")
 
-    if uid and pwd:
-        return f"Driver={{{driver}}};Server={server};Database={database};UID={uid};PWD={pwd};"
-    # Trusted connection by default (local dev)
-    trusted = os.getenv("MSSQL_TRUSTED", "yes").lower() in ("1", "true", "yes")
-    if trusted:
-        return f"Driver={{{driver}}};Server={server};Database={database};Trusted_Connection=yes;"
-    raise RuntimeError("No MSSQL credentials provided (set MSSQL_UID/MSSQL_PWD or MSSQL_TRUSTED=yes).")
+    return f"Driver={{{driver}}};Server={server};Database={database};Trusted_Connection=yes;"
 
 def _connect():
     return pyodbc.connect(_conn_str())
@@ -727,13 +719,12 @@ def get_affinity_pairs(days: int = 30, top: int = 15):
             for r in rows
         ]
 
-
 def get_hourly_profile(days: int = 30):
     """
-    Average receipts per business hour over the last <days> business days.
-    Always returns 24 rows (biz_hour 0..23 where 0==07:00 local).
-    avg_receipts is normalized by the number of business days in the window
-    (so hours with no sales on a given day still count as zero in the average).
+    Average receipts per business hour over the last <days> DISTINCT business days with receipts.
+    Always returns 24 rows (biz_hour 0..23 where 0 == 07:00 local).
+    - BizDate = CAST(DATEADD(HOUR,-7, RCPT_DATE) AS date)
+    - BizHour = DATEPART(HOUR, DATEADD(HOUR,-7, RCPT_DATE))
     """
     days = max(1, min(int(days), 90))
     with _connect() as cn:
@@ -741,65 +732,67 @@ def get_hourly_profile(days: int = 30):
         cur.execute("""
             SET NOCOUNT ON;
 
-            -- Label business day/hour (shift -7h -> biz_hour 0..23, where 0 == 07:00)
+            -- Shift to business calendar
             WITH R AS (
               SELECT
-                CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate,
+                CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date)   AS BizDate,
                 DATEPART(HOUR, DATEADD(HOUR,-7, r.RCPT_DATE)) AS BizHour
               FROM dbo.HISTORIC_RECEIPT r
             ),
-            LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
-            CUT AS (  -- receipts in the last <days> business dates
-              SELECT BizDate, BizHour
-              FROM R CROSS JOIN LAST
-              WHERE R.BizDate BETWEEN DATEADD(DAY, -?+1, LAST.MaxBiz) AND LAST.MaxBiz
+
+            -- Take the last N DISTINCT business days that actually have receipts
+            DistinctDays AS (
+              SELECT DISTINCT BizDate FROM R
             ),
-            -- count receipts per (day,hour)
-            Hourly AS (
-              SELECT BizDate, BizHour, COUNT(*) AS rcpts
-              FROM CUT
-              GROUP BY BizDate, BizHour
+            Ranked AS (
+              SELECT BizDate, ROW_NUMBER() OVER (ORDER BY BizDate DESC) AS rn
+              FROM DistinctDays
             ),
-            -- aggregate totals per hour across the whole window
-            Agg AS (
-              SELECT BizHour, SUM(rcpts) AS total_rcpts
-              FROM Hourly
-              GROUP BY BizHour
+            LastN AS (
+              SELECT BizDate FROM Ranked WHERE rn <= ?
             ),
-            -- how many business days in the window (denominator for averages)
-            Days AS (
-              SELECT COUNT(DISTINCT BizDate) AS days_total FROM CUT
-            ),
-            -- generate 24 hours (0..23) so we can LEFT JOIN and fill missing hours with zero
+
+            -- 24 business hours (0..23), 0 == 07:00 local
             H AS (
               SELECT 0 AS h UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
               UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11
               UNION ALL SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15 UNION ALL SELECT 16 UNION ALL SELECT 17
               UNION ALL SELECT 18 UNION ALL SELECT 19 UNION ALL SELECT 20 UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23
-            )
+            ),
+
+            -- Count receipts per hour across those days
+            Hourly AS (
+              SELECT R.BizHour, COUNT(*) AS rcpts
+              FROM R
+              JOIN LastN L ON L.BizDate = R.BizDate
+              GROUP BY R.BizHour
+            ),
+            DayCount AS ( SELECT COUNT(*) AS days_total FROM LastN )
+
             SELECT
-              H.h                           AS BizHour,
-              CAST(COALESCE(A.total_rcpts,0) AS float) / NULLIF(D.days_total,0) AS avg_rcpts,
-              COALESCE(A.total_rcpts,0)      AS total_rcpts,
-              D.days_total                   AS days_total
+              H.h AS BizHour,
+              CAST(COALESCE(Hourly.rcpts,0) AS float) / NULLIF(DC.days_total,0) AS avg_rcpts,
+              COALESCE(Hourly.rcpts,0) AS total_rcpts,
+              DC.days_total AS days_total
             FROM H
-            CROSS JOIN Days D
-            LEFT JOIN Agg A ON A.BizHour = H.h
+            CROSS JOIN DayCount DC
+            LEFT JOIN Hourly ON Hourly.BizHour = H.h
             ORDER BY H.h;
         """, (days,))
         rows = cur.fetchall()
         out = []
         for r in rows:
             biz_hour = int(r.BizHour)
-            clock_hour = (biz_hour + 7) % 24  # map back to local clock hour
+            clock_hour = (biz_hour + 7) % 24  # map back to local clock hour 07..06
             out.append({
                 "biz_hour": biz_hour,
                 "clock_hour": clock_hour,
                 "avg_receipts": float(r.avg_rcpts or 0.0),
                 "total_receipts": int(r.total_rcpts or 0),
-                "days_present": int(r.days_total or 0),  # here days_present == total business days
+                "days_present": int(r.days_total or 0),
             })
         return out
+
 
 
 def get_dow_profile(days: int = 56):
@@ -847,3 +840,186 @@ def get_dow_profile(days: int = 56):
             {"dow_index": int(r.dow_idx), "dow_label": idx_to_name[int(r.dow_idx) % 7], "avg_receipts": float(r.avg_rcpts or 0.0)}
             for r in rows
         ]
+
+
+
+def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: int = 3):
+    """
+    Top and quiet rolling <window_hours>-hour windows within operational hours (08:00..23:59 and 00:00..03:59),
+    averaged over the last <days> DISTINCT business days with receipts.
+    Business time uses the -7h shift (0 == 07:00 local).
+    Returns: {"top":[{start_clock,end_clock,avg_receipts,avg_amount}], "quiet":[...]}
+    """
+    window_hours = max(1, min(int(window_hours), 8))
+    days = max(1, min(int(days), 90))
+    top = max(1, min(int(top), 10))
+    quiet = max(1, min(int(quiet), 10))
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute("""
+            SET NOCOUNT ON;
+
+            -- Business calendar from receipts (shift -7h)
+            WITH R AS (
+              SELECT
+                CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date)   AS BizDate,
+                DATEPART(HOUR, DATEADD(HOUR,-7, r.RCPT_DATE)) AS BizHour
+              FROM dbo.HISTORIC_RECEIPT r
+            ),
+            DistinctDays AS ( SELECT DISTINCT BizDate FROM R ),
+            Ranked AS (
+              SELECT BizDate, ROW_NUMBER() OVER (ORDER BY BizDate DESC) AS rn
+              FROM DistinctDays
+            ),
+            LastN AS ( SELECT BizDate FROM Ranked WHERE rn <= ? ),
+
+            -- 24 business hours (0..23), where 0 == 07:00 local
+            H AS (
+              SELECT 0 AS h UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL
+              SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL
+              SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL
+              SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15 UNION ALL
+              SELECT 16 UNION ALL SELECT 17 UNION ALL SELECT 18 UNION ALL SELECT 19 UNION ALL
+              SELECT 20 UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23
+            ),
+
+            -- Allowed operational hours in *clock* time: 08..23 and 00..03
+            -- Convert to *business* hours: biz_hour = (clock_hour - 7 + 24) % 24
+            AH AS (
+              SELECT ((8  -7 + 24) % 24) AS h UNION ALL  -- 01
+              SELECT ((9  -7 + 24) % 24) UNION ALL       -- 02
+              SELECT ((10 -7 + 24) % 24) UNION ALL       -- 03
+              SELECT ((11 -7 + 24) % 24) UNION ALL       -- 04
+              SELECT ((12 -7 + 24) % 24) UNION ALL       -- 05
+              SELECT ((13 -7 + 24) % 24) UNION ALL       -- 06
+              SELECT ((14 -7 + 24) % 24) UNION ALL       -- 07
+              SELECT ((15 -7 + 24) % 24) UNION ALL       -- 08
+              SELECT ((16 -7 + 24) % 24) UNION ALL       -- 09
+              SELECT ((17 -7 + 24) % 24) UNION ALL       -- 10
+              SELECT ((18 -7 + 24) % 24) UNION ALL       -- 11
+              SELECT ((19 -7 + 24) % 24) UNION ALL       -- 12
+              SELECT ((20 -7 + 24) % 24) UNION ALL       -- 13
+              SELECT ((21 -7 + 24) % 24) UNION ALL       -- 14
+              SELECT ((22 -7 + 24) % 24) UNION ALL       -- 15
+              SELECT ((23 -7 + 24) % 24) UNION ALL       -- 16
+              SELECT ((0  -7 + 24) % 24) UNION ALL       -- 17 (00:00)
+              SELECT ((1  -7 + 24) % 24) UNION ALL       -- 18
+              SELECT ((2  -7 + 24) % 24) UNION ALL       -- 19
+              SELECT ((3  -7 + 24) % 24)                  -- 20 (03:00)
+            ),
+
+            -- Counts per business hour across those days
+            HourlyCnt AS (
+              SELECT R.BizHour, COUNT(*) AS rcpts
+              FROM R
+              JOIN LastN L ON L.BizDate = R.BizDate
+              GROUP BY R.BizHour
+            ),
+            DayCount AS ( SELECT COUNT(*) AS days_total FROM LastN ),
+            AvgCnt AS (
+              SELECT H.h AS BizHour,
+                     CAST(COALESCE(HourlyCnt.rcpts,0) AS float) / NULLIF(DC.days_total,0) AS avg_rcpts
+              FROM H
+              CROSS JOIN DayCount DC
+              LEFT JOIN HourlyCnt ON HourlyCnt.BizHour = H.h
+            ),
+
+            -- Amounts by business hour (sum of contents per receipt hour)
+            C AS (
+              SELECT
+                CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date)   AS BizDate,
+                DATEPART(HOUR, DATEADD(HOUR,-7, r.RCPT_DATE)) AS BizHour,
+                SUM(CAST(c.ITM_QUANTITY AS float) * CAST(c.ITM_PRICE AS float)) AS amt
+              FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+              JOIN dbo.HISTORIC_RECEIPT r ON r.RCPT_ID = c.RCPT_ID
+              GROUP BY CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date),
+                       DATEPART(HOUR, DATEADD(HOUR,-7, r.RCPT_DATE))
+            ),
+            HourlyAmt AS (
+              SELECT C.BizHour, SUM(C.amt) AS amount
+              FROM C
+              JOIN LastN L ON L.BizDate = C.BizDate
+              GROUP BY C.BizHour
+            ),
+            AvgAmt AS (
+              SELECT H.h AS BizHour,
+                     CAST(COALESCE(HourlyAmt.amount,0) AS float) / NULLIF(DC.days_total,0) AS avg_amt
+              FROM H
+              CROSS JOIN DayCount DC
+              LEFT JOIN HourlyAmt ON HourlyAmt.BizHour = H.h
+            ),
+
+            -- K = offsets 0..window_hours-1 (from a 0..23 generator)
+            N0 AS (
+              SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL
+              SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL
+              SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL
+              SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15 UNION ALL
+              SELECT 16 UNION ALL SELECT 17 UNION ALL SELECT 18 UNION ALL SELECT 19 UNION ALL
+              SELECT 20 UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23
+            ),
+            K AS ( SELECT n FROM N0 WHERE n < ? ),
+
+            -- Candidate start hours = all allowed start points
+            Starts AS ( SELECT h AS s FROM AH ),
+
+            -- Build windows: for each start s, take hours (s+n) % 24, require all in AH
+            WinHours AS (
+              SELECT s.s AS s, k.n AS n, ((s.s + k.n) % 24) AS h
+              FROM Starts s
+              JOIN K k ON 1=1
+              JOIN AH ah ON ah.h = ((s.s + k.n) % 24)  -- ensures window stays inside operational hours
+            ),
+            WinAgg AS (
+              SELECT s,
+                     SUM(AC.avg_rcpts) AS win_avg_rcpts,
+                     SUM(AA.avg_amt)   AS win_avg_amt,
+                     COUNT(*)          AS hcount
+              FROM WinHours wh
+              JOIN AvgCnt AC ON AC.BizHour = wh.h
+              JOIN AvgAmt AA ON AA.BizHour = wh.h
+              GROUP BY s
+              HAVING COUNT(*) = (SELECT COUNT(*) FROM K) -- keep only full windows
+            ),
+
+            TopWins AS (
+              SELECT TOP (?)
+                s AS start_bh,
+                win_avg_rcpts,
+                win_avg_amt
+              FROM WinAgg
+              ORDER BY win_avg_rcpts DESC, s ASC
+            ),
+            QuietWins AS (
+              SELECT TOP (?)
+                s AS start_bh,
+                win_avg_rcpts,
+                win_avg_amt
+              FROM WinAgg
+              ORDER BY win_avg_rcpts ASC, s ASC
+            )
+
+            SELECT 'top'   AS kind, start_bh, win_avg_rcpts, win_avg_amt FROM TopWins
+            UNION ALL
+            SELECT 'quiet' AS kind, start_bh, win_avg_rcpts, win_avg_amt FROM QuietWins
+            ORDER BY kind, start_bh;
+        """, (days, window_hours, top, quiet))
+
+        rows = cur.fetchall()
+        top_rows, quiet_rows = [], []
+        for r in rows:
+            start_bh = int(r.start_bh)                 # business hour
+            start_clock = (start_bh + 7) % 24          # local hour label
+            end_clock = (start_clock + window_hours - 1) % 24
+            rec = {
+                "start_clock": start_clock,
+                "end_clock": end_clock,
+                "avg_receipts": float(r.win_avg_rcpts or 0.0),
+                "avg_amount": float(r.win_avg_amt or 0.0),
+            }
+            if r.kind == 'top':
+                top_rows.append(rec)
+            else:
+                quiet_rows.append(rec)
+        return {"top": top_rows, "quiet": quiet_rows}

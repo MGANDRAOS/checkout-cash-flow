@@ -283,9 +283,9 @@ document.addEventListener("DOMContentLoaded", function () {
     DailyCloseForm.init();
     EditClosingModal.init();
     DeleteClosingModal.init();
+    ItemsPage.init();
     FixedCoverageReport.init(window.fixedKpis, window.fixedPoints)
     if (window.fixedKpis) FixedWidget.init(window.fixedKpis, window.fixedPoints);
-
     IntelligencePOS.init();
 
     const salesInput = document.getElementById("sales");
