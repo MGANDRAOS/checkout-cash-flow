@@ -16,12 +16,20 @@
             <select id="itemsSubgroup" class="form-select form-select-sm" style="width:auto;">
                 <option value="">All subgroups</option>
             </select>
+            <select id="itemsInactive" class="form-select form-select-sm" style="width:auto;">
+                <option value="">All items</option>
+                <option value="30">Inactive ≥ 30d</option>
+                <option value="60">Inactive ≥ 60d</option>
+                <option value="90">Inactive ≥ 90d</option>
+                <option value="180">Inactive ≥ 180d</option>
+                <option value="never">Never sold only</option>
+            </select>
 
             <div class="btn-group btn-group-sm">
                 <button id="itemsExport" class="btn btn-outline-secondary">Export CSV</button>
                 <button id="itemsCols" class="btn btn-outline-secondary" data-bs-toggle="dropdown"
                     aria-expanded="false">
-                    Columns ▾ 
+                    Columns ▾
                 </button>
                 <ul id="itemsColsMenu" class="dropdown-menu dropdown-menu-end p-2" style="min-width: 240px;"></ul>
             </div>
@@ -34,18 +42,18 @@
 
 </div>
 
-<!-- Row details modal -->
-<div class="modal fade" id="itemModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h6 class="modal-title">Item details</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <dl class="row mb-0" id="itemDetails"></dl>
-            </div>
-        </div>
+
+<!-- Row details modal (confirm IDs: itemModal + itemDetails) -->
+<!-- Item details drawer (replaces the old modal) -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="itemDrawer" data-bs-scroll="true"
+    style="--drawer-w: min(1110px, 92vw); width: var(--drawer-w);">
+    <div class="offcanvas-header">
+        <h6 class="offcanvas-title mb-0" id="itemDrawerTitle">Item details</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body" id="itemDrawerBody">
+        <div class="text-center text-muted small py-4">Select an item…</div>
     </div>
 </div>
+
 {% endblock %}

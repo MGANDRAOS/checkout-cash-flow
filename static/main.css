@@ -351,3 +351,59 @@ h2.h4 {
     padding: 2px 6px;
     line-height: 1.1;
 }
+
+
+/* Drawer polish (values via CSS vars so nothing is hardcoded) */
+:root {
+    --ccg-accent: #0d6efd;
+    /* Bootstrap primary by default */
+    --ccg-muted: #6c757d;
+    --ccg-card-bg: #ffffff;
+    --ccg-card-br: #e9ecef;
+}
+
+#itemDrawer .kpi-card {
+    background: var(--ccg-card-bg);
+    border: 1px solid var(--ccg-card-br);
+    border-radius: .5rem;
+    padding: .5rem .75rem;
+}
+
+#itemDrawer .kpi-label {
+    color: var(--ccg-muted);
+    font-size: .8rem;
+}
+
+#itemDrawer .kpi-value {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+#itemDrawer .pill {
+    display: inline-block;
+    padding: .125rem .5rem;
+    border: 1px solid var(--ccg-card-br);
+    border-radius: 999px;
+    font-size: .75rem;
+    color: #212529;
+    background: #f8f9fa;
+}
+
+#itemDrawer .sparkline {
+    width: 100%;
+    height: 72px;
+    /* controlled here, not in JS */
+    display: block;
+}
+
+#itemDrawer .sparkline path {
+    stroke: var(--ccg-accent);
+    fill: rgba(13, 110, 253, .08);
+    stroke-width: 2;
+}
+
+#itemDrawer .section-title {
+    font-size: .85rem;
+    color: var(--ccg-muted);
+    margin-bottom: .25rem;
+}

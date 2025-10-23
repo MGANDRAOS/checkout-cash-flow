@@ -9,8 +9,9 @@ const ItemsGrid = (() => {
         columnApi: null,
         sort: "",
         subgroup: "",
-        subgroupId: null
-
+        subgroupId: null,
+        inactiveDays: null,
+        neverSold: false
     };
 
 
@@ -19,19 +20,39 @@ const ItemsGrid = (() => {
     const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
     const fmtDate = s => s ? new Date(s).toLocaleString() : "—";
 
+    const fmtLBP = (n) => {
+        if (n == null) return "—";
+        try { return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n) + " LBP"; }
+        catch { return String(n) + " LBP"; }
+    };
+
     async function j(url) {
         const r = await fetch(url, { headers: { "Accept": "application/json" } });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
     }
 
-    function apiUrl({ page, pageSize, q = "", sort = "", subgroup = "", subgroupId = null }) {
+    function apiUrl(params = {}) {
+        const {
+            page,
+            pageSize,
+            q = "",
+            sort = "",
+            subgroup = "",
+            subgroupId = null,
+            inactiveDays: _inactiveDays = null,  // local alias prevents ReferenceError
+            neverSold: _neverSold = false        // local alias prevents ReferenceError
+        } = params;
+
         const s = sort ? `&sort=${encodeURIComponent(sort)}` : "";
         const g = subgroup ? `&subgroup=${encodeURIComponent(subgroup)}` : "";
         const gid = (subgroupId !== null && subgroupId !== "" && !Number.isNaN(Number(subgroupId)))
-            ? `&subgroup_id=${encodeURIComponent(subgroupId)}`
-            : "";
-        return `/api/items?page=${page}&page_size=${pageSize}&q=${encodeURIComponent(q)}${s}${g}${gid}`;
+            ? `&subgroup_id=${encodeURIComponent(subgroupId)}` : "";
+        const inact = (_inactiveDays !== null && _inactiveDays !== "" && !Number.isNaN(Number(_inactiveDays)))
+            ? `&inactive_days=${encodeURIComponent(_inactiveDays)}` : "";
+        const ns = (_neverSold ? `&never_sold=1` : "");
+
+        return `/api/items?page=${page}&page_size=${pageSize}&q=${encodeURIComponent(q)}${s}${g}${gid}${inact}${ns}`;
     }
 
 
@@ -68,16 +89,14 @@ const ItemsGrid = (() => {
                         q: state.q,
                         sort: state.sort,
                         subgroup: state.subgroup,
-                        subgroupId: state.subgroupId
+                        subgroupId: state.subgroupId,
+                        inactiveDays: state.inactiveDays,
+                        neverSold: state.neverSold
                     }));
                     state.total = data.total || 0;
                     state.page = data.page || page;
 
-                    const start = (state.page - 1) * state.pageSize + 1;
-                    const end = Math.min(state.total, state.page * state.pageSize);
-                    document.querySelector("#itemsSummary").textContent = state.total ? `${start}–${end} of ${state.total}` : "No results";
-                    document.querySelector("#itemsPrev").disabled = state.page <= 1;
-                    document.querySelector("#itemsNext").disabled = end >= state.total;
+
 
                     params.successCallback(data.items || [], state.total);
                 } catch (err) {
@@ -133,18 +152,172 @@ const ItemsGrid = (() => {
         return el;
     }
 
-    function openDetails(row) {
-        const dl = qs("#itemDetails");
-        if (!dl) return;
-        dl.innerHTML = `
-      <dt class="col-sm-3">Code</dt><dd class="col-sm-9">${esc(row.code)}</dd>
-      <dt class="col-sm-3">Title</dt><dd class="col-sm-9">${esc(row.title)}</dd>
-      <dt class="col-sm-3">Subgroup</dt><dd class="col-sm-9">${esc(row.subgroup)}</dd>
-      <dt class="col-sm-3">Last purchased</dt><dd class="col-sm-9">${fmtDate(row.last_purchased)}</dd>
+    async function openDetails(row) {
+        const code = row?.code;
+        if (!code) return;
+
+        const drawerEl = document.getElementById("itemDrawer");
+        const bodyEl = document.getElementById("itemDrawerBody");
+        const titleEl = document.getElementById("itemDrawerTitle");
+        if (!drawerEl || !bodyEl || !titleEl) return;
+
+        // Loading state
+        titleEl.textContent = "Item details";
+        bodyEl.innerHTML = `<div class="text-center text-muted small py-4">Fetching 30-day profile…</div>`;
+        const drawer = new bootstrap.Offcanvas(drawerEl);
+        drawer.show();
+
+        try {
+            const resp = await fetch(`/api/items/${encodeURIComponent(code)}/details?days=30`, {
+                headers: { "Accept": "application/json" }
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+
+            const it = data.item || {};
+            const s = data.summary || {};
+            const series = Array.isArray(data.series) ? data.series : [];
+            const recent = Array.isArray(data.recent) ? data.recent : [];
+
+            // Build sparkline points from qty (you can switch to amount by changing map)
+            const points = series.map(d => [d.date, Number(d.qty || 0)]);
+            const spark = renderSparkline(points);
+
+            // Title & header chips
+            titleEl.textContent = it.title || "(no title)";
+
+            bodyEl.innerHTML = `
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <div class="small">
+          <div class="text-muted">Code</div>
+          <div class="text-monospace">${esc(it.code || "")}</div>
+        </div>
+        <div class="text-end">
+          <span class="pill">${esc(it.subgroup || "Unknown")}</span>
+          <div class="small text-muted mt-1">Last purchased: ${fmtDate(it.last_purchased)}</div>
+        </div>
+      </div>
+
+      <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3">
+          <div class="kpi-card">
+            <div class="kpi-label">Receipts (30d)</div>
+            <div class="kpi-value">${s.receipts ?? 0}</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="kpi-card">
+            <div class="kpi-label">Units (30d)</div>
+            <div class="kpi-value">${s.units ?? 0}</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="kpi-card">
+            <div class="kpi-label">Gross (30d)</div>
+            <div class="kpi-value">${fmtLBP(s.amount)}</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="kpi-card">
+            <div class="kpi-label">Unit price min/avg/max</div>
+            <div class="kpi-value">
+              ${(s.price_min != null ? fmtLBP(s.price_min) : "—")} /
+              ${(s.price_avg != null ? fmtLBP(s.price_avg) : "—")} /
+              ${(s.price_max != null ? fmtLBP(s.price_max) : "—")}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="section-title">Trend (qty per business day, 30d)</div>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Metric">
+            <button type="button" class="btn btn-outline-secondary active" id="sparkQtyBtn">Qty</button>
+            <button type="button" class="btn btn-outline-secondary" id="sparkAmtBtn">Amount</button>
+          </div>
+        </div>
+        <div id="itemSparkline">${spark}</div>
+      </div>
+
+      <div>
+        <div class="section-title">Recent receipts</div>
+        ${recent.length === 0
+                    ? `<div class="small text-muted">No receipts.</div>`
+                    : `<div class="table-responsive">
+                 <table class="table table-sm table-striped align-middle mb-0">
+                   <thead class="table-light">
+                     <tr>
+                       <th style="width: 20%;">Receipt</th>
+                       <th style="width: 35%;">Date/Time</th>
+                       <th style="width: 15%;">Qty</th>
+                       <th style="width: 15%;">Unit price</th>
+                       <th style="width: 15%;">Total</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     ${recent.map(r => `
+                       <tr>
+                         <td class="text-monospace">${esc(r.rcpt_id)}</td>
+                         <td>${fmtDate(r.rcpt_date)}</td>
+                         <td>${esc(r.qty)}</td>
+                         <td>${r.unit_price != null ? fmtLBP(r.unit_price) : "—"}</td>
+                         <td>${fmtLBP(r.line_total)}</td>
+                       </tr>`).join("")}
+                   </tbody>
+                 </table>
+               </div>`
+                }
+      </div>
     `;
-        const modal = new bootstrap.Modal(document.getElementById("itemModal"));
-        modal.show();
+
+            // Wire metric toggle without hardcoding series choices
+            const elSpark = document.getElementById("itemSparkline");
+            const qtyBtn = document.getElementById("sparkQtyBtn");
+            const amtBtn = document.getElementById("sparkAmtBtn");
+
+            const render = (metric) => {
+                const pts = series.map(d => [d.date, Number(metric === "amount" ? (d.amount || 0) : (d.qty || 0))]);
+                elSpark.innerHTML = renderSparkline(pts);
+                qtyBtn?.classList.toggle("active", metric === "qty");
+                amtBtn?.classList.toggle("active", metric === "amount");
+            };
+            qtyBtn?.addEventListener("click", () => render("qty"));
+            amtBtn?.addEventListener("click", () => render("amount"));
+            // initial render already done as qty
+        } catch (err) {
+            console.error("[ItemsGrid] details load failed:", err);
+            bodyEl.innerHTML = `<div class="text-danger small">Failed to load item details.</div>`;
+        }
     }
+
+    function renderSparkline(points, opts = {}) {
+        const height = opts.height ?? 72;       // controlled by CSS but we compute viewBox
+        const width = opts.width ?? 300;
+
+        // Map series to [0..1] then scale
+        const vals = (points || []).map(p => Number(p[1]) || 0);
+        if (!vals.length || vals.every(v => v === 0)) {
+            return `<svg class="sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+              <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
+                    fill="currentColor" font-size="10">No recent trend</text>
+            </svg>`;
+        }
+        const min = Math.min(...vals), max = Math.max(...vals);
+        const pad = 4; // visual padding in viewBox coords
+        const h = height - pad * 2, w = width - pad * 2;
+        const n = vals.length;
+        const xs = vals.map((_, i) => (n === 1 ? w / 2 : (i / (n - 1)) * w) + pad);
+        const ys = vals.map(v => (max === min ? h / 2 : (1 - (v - min) / (max - min)) * h) + pad);
+
+        const line = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${ys[i].toFixed(2)}`).join(' ');
+        const area = `${line} L ${xs[xs.length - 1].toFixed(2)},${height - pad} L ${xs[0].toFixed(2)},${height - pad} Z`;
+
+        return `<svg class="sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+            <path d="${area}"></path>
+          </svg>`;
+    }
+
 
     // --- Column definitions
     function colDefs() {
@@ -258,8 +431,18 @@ const ItemsGrid = (() => {
                 state.api.setGridOption('datasource', makeDataSource());
             }
         });
-    }
 
+        const inact = document.getElementById("itemsInactive");
+        if (inact) {
+            inact.addEventListener("change", () => {
+                const v = inact.value;
+                state.neverSold = (v === "never");
+                state.inactiveDays = (!state.neverSold && v) ? parseInt(v, 10) : null;
+                state.page = 1;
+                state.api.setGridOption('datasource', makeDataSource());
+            })
+        }
+    }
 
     // --- Init
     async function init() {
@@ -285,7 +468,7 @@ const ItemsGrid = (() => {
                 state.columnApi = params.columnApi;
                 buildColumnsMenu();
             },
-              onSortChanged: () => {
+            onSortChanged: () => {
                 state.page = 1;
                 state.api.setGridOption('datasource', makeDataSource());
             }
