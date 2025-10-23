@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-3">
+
+  <!-- Header Row -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h5 class="mb-0 fw-semibold">
+      <i class="bi bi-cash-stack me-2"></i>POS Sales Dashboard
+    </h5>
+    <div class="d-flex gap-2">
+      <input id="salesDate" type="date" class="form-control form-control-sm" value="{{ today }}">
+      <button id="salesRefresh" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-repeat"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- KPIs Row -->
+  <div class="row g-3 mb-4" id="salesKPI">
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card text-center shadow-sm">
+        <div class="card-body py-3">
+          <div class="text-muted small">Total Sales</div>
+          <div class="fw-bold fs-6" id="kpiTotalSales">–</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card text-center shadow-sm">
+        <div class="card-body py-3">
+          <div class="text-muted small">Receipts</div>
+          <div class="fw-bold fs-6" id="kpiReceipts">–</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card text-center shadow-sm">
+        <div class="card-body py-3">
+          <div class="text-muted small">Avg Ticket</div>
+          <div class="fw-bold fs-6" id="kpiAvgTicket">–</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card text-center shadow-sm">
+        <div class="card-body py-3">
+          <div class="text-muted small">Vs Yesterday</div>
+          <div class="fw-bold fs-6" id="kpiGrowthYesterday">–</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card text-center shadow-sm">
+        <div class="card-body py-3">
+          <div class="text-muted small">Vs 4-Week Avg</div>
+          <div class="fw-bold fs-6" id="kpiGrowth4W">–</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card text-center shadow-sm">
+        <div class="card-body py-3">
+          <div class="text-muted small">Peak Hour</div>
+          <div class="fw-bold fs-6" id="kpiPeakHour">–</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sales Trends Chart -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="fw-semibold"><i class="bi bi-graph-up me-1"></i>Hourly Sales Trend</span>
+      <span class="small text-muted">Today vs same weekday past 4 weeks</span>
+    </div>
+    <div class="card-body">
+      <canvas id="chartHourlySales" height="100"></canvas>
+    </div>
+  </div>
+
+  <!-- Category Breakdown -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header fw-semibold">
+      <i class="bi bi-diagram-3 me-1"></i>Sales by Category / Subgroup
+    </div>
+    <div class="card-body">
+      <canvas id="chartCategorySales" height="120"></canvas>
+    </div>
+  </div>
+
+  <!-- Top and Slow Movers -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header fw-semibold">
+          <i class="bi bi-trophy me-1"></i>Top 20 Products
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table id="tblTopProducts"  class="table table-sm mb-0 align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Item</th>
+                  <th class="text-end">Qty</th>
+                  <th class="text-end">Sales (LBP)</th>
+                </tr>
+              </thead>
+              <tbody id="tblTopProducts">
+                <tr><td colspan="3" class="text-center text-muted small py-3">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header fw-semibold">
+          <i class="bi bi-hourglass-split me-1"></i>Slow / Zero Movers (7 days)
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table id="tblSlowProducts" class="table table-sm mb-0 align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Item</th>
+                  <th>Subgroup</th>
+                  <th>Last Sold</th>
+                </tr>
+              </thead>
+              <tbody id="tblSlowProducts">
+                <tr><td colspan="3" class="text-center text-muted small py-3">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Receipts Table -->
+  <div class="card shadow-sm">
+    <div class="card-header fw-semibold">
+      <i class="bi bi-receipt-cutoff me-1"></i>Receipts (Detailed)
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table id="tblReceipts" class="table table-sm mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Receipt ID</th>
+              <th>Time</th>
+              <th class="text-end">Items</th>
+              <th class="text-end">Total (LBP)</th>
+            </tr>
+          </thead>
+          <tbody id="tblReceipts">
+            <tr><td colspan="4" class="text-center text-muted small py-3">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- JS for dynamic charts and data -->
+<script src="{{ url_for('static', filename='js/sales.js') }}"></script>
+
+{% endblock %}

@@ -1,8 +1,6 @@
 # helpers_items.py
 from helpers_intelligence import _connect
 
-from helpers_intelligence import _connect
-
 def list_items(page=1, page_size=25, q="", sort="", subgroup_id=None, subgroup="", inactive_days=None, never_sold=0):
     page = max(1, int(page))
     page_size = min(200, max(5, int(page_size)))
@@ -22,17 +20,18 @@ def list_items(page=1, page_size=25, q="", sort="", subgroup_id=None, subgroup="
 
     with _connect() as cn:
         cur = cn.cursor()
-        cur.execute("""
+        cur.execute(
+        """
             SET NOCOUNT ON;
 
             DECLARE @q     nvarchar(200) = ?;
             DECLARE @pat   nvarchar(210) = CASE WHEN @q = N'' THEN NULL ELSE N'%' + @q + N'%' END;
             DECLARE @sort  nvarchar(40)  = ?;
             DECLARE @dir   nvarchar(4)   = ?;
-            DECLARE @sg    nvarchar(200) = ?;     -- text fallback (unused here, kept for compat)
-            DECLARE @sgid  int           = ?;     -- numeric subgroup id
-            DECLARE @inact int           = ?;     -- inactive_days (NULL = no filter)
-            DECLARE @never bit           = ?;     -- 1 = only never sold
+            DECLARE @sg    nvarchar(200) = ?;
+            DECLARE @sgid  int           = ?;
+            DECLARE @inact int           = ?;
+            DECLARE @never bit           = ?;
 
             /* Base items */
             WITH I AS (
@@ -40,13 +39,11 @@ def list_items(page=1, page_size=25, q="", sort="", subgroup_id=None, subgroup="
                 i.ITM_CODE, i.ITM_TITLE, i.ITM_DESCRIPTION, i.ITM_TYPE,
                 LTRIM(RTRIM(i.ITM_SUBGROUP)) AS SubGrpRaw,
                 CASE
-                  WHEN i.ITM_SUBGROUP IS NOT NULL AND i.ITM_SUBGROUP NOT LIKE N'%[^0-9]%'
-                    THEN CONVERT(int, i.ITM_SUBGROUP)
+                  WHEN i.ITM_SUBGROUP IS NOT NULL AND i.ITM_SUBGROUP NOT LIKE N'%[^0-9]%' THEN CONVERT(int, i.ITM_SUBGROUP)
                   ELSE NULL
                 END AS SubGrpID
               FROM dbo.ITEMS i
             ),
-            /* Resolve subgroup by ID first, else by name */
             J AS (
               SELECT
                 I.ITM_CODE, I.ITM_TITLE, I.ITM_DESCRIPTION, I.ITM_TYPE, I.SubGrpRaw,
@@ -57,29 +54,33 @@ def list_items(page=1, page_size=25, q="", sort="", subgroup_id=None, subgroup="
               LEFT JOIN dbo.SUBGROUPS s_id ON s_id.SubGrp_ID = I.SubGrpID
               LEFT JOIN dbo.SUBGROUPS s_nm ON LTRIM(RTRIM(s_nm.SubGrp_Name)) = I.SubGrpRaw
             ),
-            /* Last purchase per item */
             LP AS (
               SELECT c.ITM_CODE, MAX(r.RCPT_DATE) AS LastPurchased
               FROM dbo.HISTORIC_RECEIPT_CONTENTS c
               JOIN dbo.HISTORIC_RECEIPT r ON r.RCPT_ID = c.RCPT_ID
               GROUP BY c.ITM_CODE
             ),
-            /* Apply filters */
+            /* Bring in a price from ITEM_BARCODE (lowest barcode per item) */
+            PB AS (
+              SELECT b.ITM_CODE, MIN(b.ITM_BARCODE) AS PrimaryBarcode,
+                    MAX(b.ITM_PRICE) AS Price
+              FROM dbo.ITEM_BARCODE b
+              GROUP BY b.ITM_CODE
+            ),
             F AS (
               SELECT
                 J.ITM_CODE, J.ITM_TITLE, J.ITM_DESCRIPTION, J.ITM_TYPE,
-                J.ResolvedSubGrpID, J.ResolvedSubgroup, LP.LastPurchased
+                J.ResolvedSubGrpID, J.ResolvedSubgroup, LP.LastPurchased,
+                PB.Price
               FROM J
               LEFT JOIN LP ON LP.ITM_CODE = J.ITM_CODE
+              LEFT JOIN PB ON PB.ITM_CODE = J.ITM_CODE
               WHERE
-                -- search
                 (@pat IS NULL
-                   OR (J.ITM_TITLE IS NOT NULL AND J.ITM_TITLE LIKE @pat)
-                   OR (CAST(J.ITM_CODE AS nvarchar(128)) LIKE @pat)
-                   OR (J.ResolvedSubgroup LIKE @pat))
-                -- subgroup by ID
+                  OR (J.ITM_TITLE IS NOT NULL AND J.ITM_TITLE LIKE @pat)
+                  OR (CAST(J.ITM_CODE AS nvarchar(128)) LIKE @pat)
+                  OR (J.ResolvedSubgroup LIKE @pat))
                 AND (@sgid IS NULL OR J.ResolvedSubGrpID = @sgid)
-                -- inactivity filter:
                 AND (
                   CASE
                     WHEN @never = 1 THEN CASE WHEN LP.LastPurchased IS NULL THEN 1 ELSE 0 END
@@ -92,33 +93,25 @@ def list_items(page=1, page_size=25, q="", sort="", subgroup_id=None, subgroup="
               SELECT
                 F.ITM_CODE, F.ITM_TITLE, F.ITM_DESCRIPTION, F.ITM_TYPE,
                 F.ResolvedSubgroup AS Subgroup, F.LastPurchased,
-                ROW_NUMBER() OVER (
-                  ORDER BY
-                    CASE WHEN @sort='last_purchased' AND @dir='asc'  THEN CASE WHEN F.LastPurchased IS NULL THEN 1 ELSE 0 END END ASC,
-                    CASE WHEN @sort='last_purchased' AND @dir='asc'  THEN F.LastPurchased END ASC,
-                    CASE WHEN @sort='last_purchased' AND @dir='desc' THEN F.LastPurchased END DESC,
-                    CASE WHEN @sort='code'    AND @dir='asc'  THEN F.ITM_CODE END ASC,
-                    CASE WHEN @sort='code'    AND @dir='desc' THEN F.ITM_CODE END DESC,
-                    CASE WHEN @sort='title'   AND @dir='asc'  THEN F.ITM_TITLE END ASC,
-                    CASE WHEN @sort='title'   AND @dir='desc' THEN F.ITM_TITLE END DESC,
-                    CASE WHEN @sort='type'    AND @dir='asc'  THEN F.ITM_TYPE END ASC,
-                    CASE WHEN @sort='type'    AND @dir='desc' THEN F.ITM_TYPE END DESC,
-                    CASE WHEN @sort='subgroup' AND @dir='asc' THEN F.ResolvedSubgroup END ASC,
-                    CASE WHEN @sort='subgroup' AND @dir='desc' THEN F.ResolvedSubgroup END DESC,
-                    -- default
-                    CASE WHEN @sort='' THEN CASE WHEN F.LastPurchased IS NULL THEN 1 ELSE 0 END END ASC,
-                    CASE WHEN @sort='' THEN F.LastPurchased END DESC,
-                    F.ITM_TITLE ASC,
-                    F.ITM_CODE  ASC
+                F.Price,
+                ROW_NUMBER() OVER (ORDER BY
+                  CASE WHEN @sort='last_purchased' AND @dir='asc'  THEN F.LastPurchased END ASC,
+                  CASE WHEN @sort='last_purchased' AND @dir='desc' THEN F.LastPurchased END DESC,
+                  CASE WHEN @sort='code' AND @dir='asc'  THEN F.ITM_CODE END ASC,
+                  CASE WHEN @sort='code' AND @dir='desc' THEN F.ITM_CODE END DESC,
+                  CASE WHEN @sort='title' AND @dir='asc' THEN F.ITM_TITLE END ASC,
+                  CASE WHEN @sort='title' AND @dir='desc' THEN F.ITM_TITLE END DESC,
+                  F.ITM_TITLE ASC
                 ) AS rn,
                 COUNT(1) OVER() AS total_count
               FROM F
             )
-            SELECT ITM_CODE, ITM_TITLE, ITM_DESCRIPTION, ITM_TYPE, Subgroup, LastPurchased, rn, total_count
+            SELECT ITM_CODE, ITM_TITLE, Subgroup, LastPurchased, Price, rn, total_count
             FROM B
             WHERE rn BETWEEN ? AND ?
             ORDER BY rn;
-        """, (q, sort_field, sort_dir, subgroup, subgroup_id, inactive_days, int(never_sold or 0), start_rn, end_rn))
+        """, 
+        (q, sort_field, sort_dir, subgroup, subgroup_id, inactive_days, int(never_sold or 0), start_rn, end_rn))
 
         rows = cur.fetchall()
         items, total = [], 0
@@ -126,19 +119,19 @@ def list_items(page=1, page_size=25, q="", sort="", subgroup_id=None, subgroup="
             total = int(r.total_count or 0)
             lp = None
             if getattr(r, 'LastPurchased', None) is not None:
-                try: lp = r.LastPurchased.strftime('%Y-%m-%d %H:%M')
-                except Exception: lp = str(r.LastPurchased)
+                try:
+                    lp = r.LastPurchased.strftime('%Y-%m-%d %H:%M')
+                except Exception:
+                    lp = str(r.LastPurchased)
             items.append({
                 "code": r.ITM_CODE,
                 "title": r.ITM_TITLE or "",
-                "type": r.ITM_TYPE or "",
                 "subgroup": r.Subgroup or "Unknown",
-                "description": r.ITM_DESCRIPTION or "",
+                "price": float(getattr(r, "Price", 0) or 0.0),
                 "last_purchased": lp
             })
         return {"items": items, "total": total, "page": page, "page_size": page_size}
-      
-      
+              
       
 def list_subgroups():
     with _connect() as cn:
@@ -351,3 +344,62 @@ def get_item_details(code: str, days: int = 30, biz_start_hour: int = 7, biz_end
         "series": series,
         "recent": recent
     }
+
+ 
+def update_item_fields(code: str, title: str = None, subgroup: str = None, price: float = None):
+    """
+    Update title (dbo.ITEMS.ITM_TITLE),
+           subgroup (dbo.ITEMS.ITM_SUBGROUP),
+           and price (dbo.ITEM_BARCODE.ITM_PRICE)
+    Handles mixed-type subgroup (int or nvarchar).
+    """
+    if not code:
+        return False, "Missing item code"
+
+    if title is None and subgroup is None and price is None:
+        return False, "No fields to update"
+
+    try:
+        with _connect() as cn:
+            cur = cn.cursor()
+
+            # --- update dbo.ITEMS ---
+            if title is not None or subgroup is not None:
+                sets, params = [], []
+                if title is not None:
+                    sets.append("ITM_TITLE = ?")
+                    params.append(title.strip())
+
+                if subgroup is not None:
+                    subgroup_value = subgroup.strip()
+                    # Try to convert to int if it's numeric
+                    if subgroup_value.isdigit():
+                        sets.append("ITM_SUBGROUP = CAST(? AS int)")
+                        params.append(subgroup_value)
+                    else:
+                        sets.append("ITM_SUBGROUP = ?")
+                        params.append(int(subgroup))  # store as integer ID
+
+
+                sql = f"UPDATE dbo.ITEMS SET {', '.join(sets)} WHERE ITM_CODE = ?"
+                params.append(code)
+                cur.execute(sql, tuple(params))
+
+            # --- update dbo.ITEM_BARCODE price ---
+            if price is not None:
+                cur.execute("""
+                    UPDATE dbo.ITEM_BARCODE
+                    SET ITM_PRICE = ?
+                    WHERE ITM_CODE = ?
+                """, (float(price), code))
+
+            cn.commit()
+        return True, None
+
+    except Exception as e:
+        try:
+            cn.rollback()
+        except Exception:
+            pass
+        return False, str(e)
+

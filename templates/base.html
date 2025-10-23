@@ -22,6 +22,10 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@34.3.0/styles/ag-grid.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@34.3.0/styles/ag-theme-quartz.css">
 
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
+
+
 </head>
 
 <body>
@@ -38,42 +42,73 @@
 
     <!-- Sidebar Offcanvas -->
     <div class="offcanvas offcanvas-start text-bg-dark" tabindex="-1" id="sidebar" aria-labelledby="sidebarLabel">
-        <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="sidebarLabel">Navigation</h5>
+        <div class="offcanvas-header border-bottom border-secondary">
+            <h5 class="offcanvas-title fw-semibold" id="sidebarLabel">Navigation</h5>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
                 aria-label="Close"></button>
         </div>
-        <div class="offcanvas-body d-flex flex-column">
+
+        <div class="offcanvas-body d-flex flex-column px-0">
+
+            <!-- Accounting Section -->
+            <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">Accounting</div>
+
             <a href="/" class="sidebar-link {% if request.path == '/' %}bg-primary text-white{% endif %}">
                 <i class="bi bi-house-door"></i> Dashboard
             </a>
+
             <a href="/closings"
                 class="sidebar-link {% if request.path.startswith('/closings') %}bg-primary text-white{% endif %}">
                 <i class="bi bi-calendar-check"></i> Daily Closings
             </a>
+
             <a href="/fixed-collections"
                 class="sidebar-link {% if request.path.startswith('/fixed-collections') %}bg-primary text-white{% endif %}">
                 <i class="bi bi-wallet2"></i> Collections
             </a>
+
             <a href="/bills"
                 class="sidebar-link {% if request.path.startswith('/bills') %}bg-primary text-white{% endif %}">
                 <i class="bi bi-file-earmark-text"></i> Fixed Expenses
             </a>
+
+            <hr class="border-secondary my-3">
+
+            <!-- POS Section -->
+            <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">POS</div>
+
             <a href="/intelligence"
                 class="sidebar-link {% if request.path.startswith('/intelligence') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-bar-chart"></i> Intelligence
+                <i class="bi bi-bar-chart"></i> Dashboard
             </a>
+
             <a href="{{ url_for('items.items_home') }}"
                 class="sidebar-link {% if request.path.startswith('/items') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-pos"></i> POS Items
+                <i class="bi bi-basket"></i> Items
             </a>
+
+            <a href="/sales"
+                class="sidebar-link {% if request.path.startswith('/pos/sales') %}bg-primary text-white{% endif %}">
+                <i class="bi bi-cash-stack"></i> Sales
+            </a>
+
+            <a href="/invoices"
+                class="sidebar-link {% if request.path.startswith('/pos/invoices') %}bg-primary text-white{% endif %}">
+                <i class="bi bi-receipt"></i> Invoices
+            </a>
+
+            <hr class="border-secondary my-3">
+
+            <!-- Settings -->
+            <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">System</div>
+
             <a href="/settings"
                 class="sidebar-link {% if request.path.startswith('/settings') %}bg-primary text-white{% endif %}">
                 <i class="bi bi-gear"></i> Settings
             </a>
-
         </div>
     </div>
+
 
     <main class="container px-4">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -92,17 +127,6 @@
         {% block content %}{% endblock %}
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- Items grid module -->
-    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.noStyle.js" defer></script>
-    <script src="{{ url_for('static', filename='js/items_grid.js') }}"></script>
-
-    <script src="{{ url_for('static', filename='js/intelligence.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <!-- <script src="{{ url_for('static', filename='js/items.js') }}"></script> -->
-
     <!-- Toast container -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
         <div id="toastSuccess" class="toast align-items-center text-bg-success border-0" role="alert"
@@ -116,6 +140,27 @@
             </div>
         </div>
     </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Items grid module -->
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.noStyle.js" defer></script>
+    <script src="{{ url_for('static', filename='js/items_grid.js') }}"></script>
+
+    <script src="{{ url_for('static', filename='js/intelligence.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+
+    <!-- DataTables + Bootstrap5 JS -->
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+
+
+
+
 </body>
 
 </html>

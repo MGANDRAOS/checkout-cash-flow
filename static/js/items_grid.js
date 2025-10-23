@@ -136,19 +136,21 @@ const ItemsGrid = (() => {
     }
 
 
-    // --- Actions cell renderer
     function actionsRenderer(params) {
         const row = params.data || {};
         const el = document.createElement("div");
         el.className = "d-flex align-items-center gap-1";
         el.innerHTML = `
-  <button class="btn btn-sm btn-outline-primary" title="View details">
-    <i class="bi bi-eye"></i>
-  </button>
-     `;
-        const [btnView] = el.querySelectorAll("button");
+    <button class="btn btn-sm btn-outline-primary" title="View details">
+      <i class="bi bi-eye"></i>
+    </button>
+    <button class="btn btn-sm btn-outline-success" title="Edit">
+      <i class="bi bi-pencil"></i>
+    </button>
+  `;
+        const [btnView, btnEdit] = el.querySelectorAll("button");
         btnView.addEventListener("click", () => openDetails(row));
-
+        btnEdit.addEventListener("click", () => openEditModal(row));
         return el;
     }
 
@@ -323,18 +325,14 @@ const ItemsGrid = (() => {
     function colDefs() {
         return [
             {
-                headerName: "Actions", field: "_actions", width: 90, pinned: "left",
+                headerName: "Actions", field: "_actions", width: 110, pinned: "left",
                 cellRenderer: actionsRenderer, sortable: false, filter: false, resizable: false
             },
-
             { headerName: "Code", field: "code", width: 120, cellClass: "text-monospace" },
-            { headerName: "Title", field: "title", flex: 1, maxWidth: 400 },
+            { headerName: "Title", field: "title", flex: 1, maxWidth: 420 },
             { headerName: "Subgroup", field: "subgroup", width: 200 },
-
-            {
-                headerName: "Last purchased", field: "last_purchased", width: 250,
-                valueFormatter: p => fmtDate(p.value)
-            },
+            { headerName: "Price", field: "price", width: 140, valueFormatter: p => fmtLBP(p.value) },
+            { headerName: "Last purchased", field: "last_purchased", width: 250, valueFormatter: p => fmtDate(p.value) },
         ];
     }
 
@@ -371,20 +369,6 @@ const ItemsGrid = (() => {
             s.setProperty("--ag-grid-size", "6px");
             s.setProperty("--ag-row-height", "34px");
         }
-    }
-
-    function wireDensity() {
-        const c = document.getElementById("densCompact");
-        const f = document.getElementById("densComfy");
-        if (!c || !f) return;
-        const activate = (compact) => {
-            c.classList.toggle("active", compact);
-            f.classList.toggle("active", !compact);
-            setDensity(compact ? "compact" : "comfy");
-        };
-        c.addEventListener("click", () => activate(true));
-        f.addEventListener("click", () => activate(false));
-        activate(true);
     }
 
     // --- Handlers for toolbar & pager
@@ -442,6 +426,74 @@ const ItemsGrid = (() => {
                 state.api.setGridOption('datasource', makeDataSource());
             })
         }
+    }
+
+    async function openEditModal(row) {
+        const modalEl = document.getElementById("editItemModal");
+        const codeEl = document.getElementById("editItemCode");
+        const codeViewEl = document.getElementById("editItemCodeView");
+        const titleEl = document.getElementById("editItemTitle");
+        const subgroupSel = document.getElementById("editItemSubgroup");
+        const priceEl = document.getElementById("editItemPrice");
+        const saveBtn = document.getElementById("editItemSaveBtn");
+        const errEl = document.getElementById("editItemError");
+
+        codeEl.value = row.code;
+        codeViewEl.textContent = row.code;
+        titleEl.value = row.title || "";
+        priceEl.value = row.price || "";
+        errEl.style.display = "none";
+
+        // load subgroups
+        try {
+            const res = await fetch("/api/items/subgroups");
+            const groups = await res.json();
+            subgroupSel.innerHTML = `<option value="">Select subgroup…</option>`;
+            groups.forEach(g => {
+                const opt = document.createElement("option");
+                opt.value = g.id;            // send subgroup ID, not name
+                opt.textContent = g.subgroup;
+                if (row.subgroup && row.subgroup === g.subgroup) opt.selected = true;
+                subgroupSel.appendChild(opt);
+            });
+        } catch {
+            subgroupSel.innerHTML = `<option value="">(Failed to load)</option>`;
+        }
+
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        const handler = async () => {
+            const payload = {
+                title: titleEl.value.trim() || null,
+                subgroup: subgroupSel.value || null,
+                price: priceEl.value ? Number(priceEl.value) : null,
+            };
+
+            try {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Saving…`;
+                const r = await fetch(`/api/items/${encodeURIComponent(row.code)}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const js = await r.json();
+                if (!r.ok || !js.success) throw new Error(js.error || "Failed");
+                modal.hide();
+                state.api.setGridOption('datasource', makeDataSource());
+            } catch (e) {
+                errEl.style.display = "block";
+                errEl.textContent = e.message;
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = `<i class="bi bi-check2-circle me-1"></i> Save`;
+            }
+        };
+
+        const clone = saveBtn.cloneNode(true);
+        saveBtn.parentNode.replaceChild(clone, saveBtn);
+        clone.addEventListener("click", handler);
     }
 
     // --- Init

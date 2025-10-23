@@ -719,6 +719,7 @@ def get_affinity_pairs(days: int = 30, top: int = 15):
             for r in rows
         ]
 
+
 def get_hourly_profile(days: int = 30):
     """
     Average receipts per business hour over the last <days> DISTINCT business days with receipts.
@@ -794,7 +795,6 @@ def get_hourly_profile(days: int = 30):
         return out
 
 
-
 def get_dow_profile(days: int = 56):
     """
     Average receipts per business day-of-week over the last <days> business days.
@@ -840,7 +840,6 @@ def get_dow_profile(days: int = 56):
             {"dow_index": int(r.dow_idx), "dow_label": idx_to_name[int(r.dow_idx) % 7], "avg_receipts": float(r.avg_rcpts or 0.0)}
             for r in rows
         ]
-
 
 
 def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: int = 3):

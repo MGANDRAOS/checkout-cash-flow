@@ -44,7 +44,6 @@
 
 
 <!-- Row details modal (confirm IDs: itemModal + itemDetails) -->
-<!-- Item details drawer (replaces the old modal) -->
 <div class="offcanvas offcanvas-end" tabindex="-1" id="itemDrawer" data-bs-scroll="true"
     style="--drawer-w: min(1110px, 92vw); width: var(--drawer-w);">
     <div class="offcanvas-header">
@@ -55,5 +54,53 @@
         <div class="text-center text-muted small py-4">Select an item…</div>
     </div>
 </div>
+
+<!-- Edit Item Modal -->
+<div class="modal fade" id="editItemModal" tabindex="-1" aria-labelledby="editItemLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title" id="editItemLabel">Edit Item</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <form id="editItemForm" class="vstack gap-3">
+                    <input type="hidden" id="editItemCode">
+
+                    <div>
+                        <label class="form-label small text-muted mb-1">Code</label>
+                        <div id="editItemCodeView" class="form-control-plaintext text-monospace small">—</div>
+                    </div>
+
+                    <div>
+                        <label for="editItemTitle" class="form-label">Title</label>
+                        <input id="editItemTitle" type="text" class="form-control" placeholder="Item title">
+                    </div>
+
+                    <div>
+                        <label for="editItemSubgroup" class="form-label">Subgroup</label>
+                        <select id="editItemSubgroup" class="form-select">
+                            <option value="">Select subgroup…</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="editItemPrice" class="form-label">Price (LBP)</label>
+                        <input id="editItemPrice" type="number" class="form-control" step="1" min="0">
+                    </div>
+                </form>
+                <div id="editItemError" class="text-danger small mt-2" style="display:none;"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button id="editItemSaveBtn" class="btn btn-primary">
+                    <i class="bi bi-check2-circle me-1"></i> Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 {% endblock %}

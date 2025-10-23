@@ -1,6 +1,6 @@
 # routes/items.py
 from flask import Blueprint, render_template, request, jsonify, current_app
-from helpers_items import list_items, list_subgroups, get_item_details  
+from helpers_items import list_items, list_subgroups, get_item_details, update_item_fields
 
 items_bp = Blueprint("items", __name__)
 
@@ -8,7 +8,7 @@ items_bp = Blueprint("items", __name__)
 def items_home():
     return render_template("items.html")
 
-# ...
+
 @items_bp.route("/api/items")
 def api_items():
     page = max(1, int(request.args.get("page", 1)))
@@ -40,7 +40,6 @@ def api_items():
     return jsonify(data)
 
 
-
 @items_bp.route("/api/items/subgroups")
 def api_items_subgroups():  # ⬅️ NEW
     return jsonify(list_subgroups())
@@ -69,3 +68,32 @@ def api_item_details(code):
         biz_end_hour=biz_end_hour
     )
     return jsonify(data)
+
+
+@items_bp.route("/api/items/<code>", methods=["PATCH"])
+def api_update_item(code):
+    """Update item title, subgroup, and price in local MSSQL."""
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"success": False, "error": "Invalid JSON"}), 400
+
+    title = data.get("title")
+    subgroup = data.get("subgroup")
+    price = data.get("price")
+
+    # --- validations ---
+    if title is not None and len(title.strip()) == 0:
+        return jsonify({"success": False, "error": "Title cannot be empty."}), 400
+    if price is not None:
+        try:
+            price = float(price)
+            if price < 0:
+                return jsonify({"success": False, "error": "Price cannot be negative."}), 400
+        except Exception:
+            return jsonify({"success": False, "error": "Invalid price value."}), 400
+
+    ok, err = update_item_fields(code, title, subgroup, price)
+    if not ok:
+        return jsonify({"success": False, "error": err}), 500
+    return jsonify({"success": True})
