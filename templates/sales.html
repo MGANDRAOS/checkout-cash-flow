@@ -9,7 +9,8 @@
       <i class="bi bi-cash-stack me-2"></i>POS Sales Dashboard
     </h5>
     <div class="d-flex gap-2">
-      <input id="salesDate" type="date" class="form-control form-control-sm" value="{{ today }}">
+      <input id="salesDate" type="date" class="form-control form-control-sm" value="{{ today }}"
+        title="Data for today is finalized tomorrow morning.">
       <button id="salesRefresh" class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-repeat"></i>
       </button>
@@ -23,6 +24,7 @@
         <div class="card-body py-3">
           <div class="text-muted small">Total Sales</div>
           <div class="fw-bold fs-6" id="kpiTotalSales">–</div>
+          <div class="fw-bold fs-6" id="kpiTotalSalesUSD">–</div>
         </div>
       </div>
     </div>
@@ -98,7 +100,7 @@
         </div>
         <div class="card-body p-0">
           <div class="table-responsive">
-            <table id="tblTopProducts"  class="table table-sm mb-0 align-middle">
+            <table id="tblTopProducts" class="table table-sm mb-0 align-middle">
               <thead class="table-light">
                 <tr>
                   <th>Item</th>
@@ -107,7 +109,9 @@
                 </tr>
               </thead>
               <tbody id="tblTopProducts">
-                <tr><td colspan="3" class="text-center text-muted small py-3">Loading…</td></tr>
+                <tr>
+                  <td colspan="3" class="text-center text-muted small py-3">Loading…</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -131,7 +135,9 @@
                 </tr>
               </thead>
               <tbody id="tblSlowProducts">
-                <tr><td colspan="3" class="text-center text-muted small py-3">Loading…</td></tr>
+                <tr>
+                  <td colspan="3" class="text-center text-muted small py-3">Loading…</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -157,7 +163,9 @@
             </tr>
           </thead>
           <tbody id="tblReceipts">
-            <tr><td colspan="4" class="text-center text-muted small py-3">Loading…</td></tr>
+            <tr>
+              <td colspan="4" class="text-center text-muted small py-3">Loading…</td>
+            </tr>
           </tbody>
         </table>
       </div>

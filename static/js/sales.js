@@ -8,6 +8,7 @@
     const btnRefresh = document.getElementById("salesRefresh");
 
     const kpiTotalSales = document.getElementById("kpiTotalSales");
+    const kpiTotalSalesUSD = document.getElementById("kpiTotalSalesUSD");
     const kpiReceipts = document.getElementById("kpiReceipts");
     const kpiAvgTicket = document.getElementById("kpiAvgTicket");
     const kpiGrowthYesterday = document.getElementById("kpiGrowthYesterday");
@@ -19,6 +20,29 @@
     // ------------------------------------------------------------
     // UTILITIES
     // ------------------------------------------------------------
+
+    // ------------------------------------------------------------
+    // DATE PICKER SETUP
+    // ------------------------------------------------------------
+    const today = new Date();
+
+    // compute yesterday in local time
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    // format helper
+    function fmtDate(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${dd}`;
+    }
+
+    // prefill with yesterday
+    dateInput.value = fmtDate(yesterday);
+
+    // disable today & future
+    dateInput.max = fmtDate(yesterday);
 
     const fmt = new Intl.NumberFormat("en-LB", { maximumFractionDigits: 0 });
     function fmtLBP(value) {
@@ -44,6 +68,7 @@
         try {
             const data = await fetchJSON(`/api/sales/summary?date=${date}`);
             kpiTotalSales.textContent = fmtLBP(data.total_sales);
+            kpiTotalSalesUSD.textContent = data.total_sales/89000 + " USD";
             kpiReceipts.textContent = data.receipts.toLocaleString();
             kpiAvgTicket.textContent = fmtLBP(data.avg_ticket);
             kpiGrowthYesterday.innerHTML = fmtPct(data.growth_vs_yesterday);

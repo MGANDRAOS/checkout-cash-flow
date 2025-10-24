@@ -232,6 +232,7 @@ def daily_close():
     )
     return redirect(url_for("closings"))
 
+
 @app.route("/bills", methods=["GET", "POST"])
 def bills():
     """Add or list monthly fixed bills with funding progress."""
@@ -328,6 +329,7 @@ def bills():
         points=points,
         kpis=kpis
     )
+
 
 @app.post("/fixed-bills")
 def fixed_bills():
@@ -455,7 +457,6 @@ def void_closing(closing_id):
         flash(f"Error while voiding closing: {e}", "danger")
 
     return redirect(url_for("closings"))
-
 
 
 @app.post("/edit-closing/<int:closing_id>")
@@ -610,6 +611,7 @@ def fixed_collections():
         currency=CURRENCY,
         today=today
     )
+
     
 @app.post("/mark-fixed-collected")
 def mark_fixed_collected():
