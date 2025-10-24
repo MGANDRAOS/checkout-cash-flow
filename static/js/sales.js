@@ -68,7 +68,7 @@
         try {
             const data = await fetchJSON(`/api/sales/summary?date=${date}`);
             kpiTotalSales.textContent = fmtLBP(data.total_sales);
-            kpiTotalSalesUSD.textContent = data.total_sales/89000 + " USD";
+            kpiTotalSalesUSD.textContent = (data.total_sales / 89000).toFixed(2) + " USD";
             kpiReceipts.textContent = data.receipts.toLocaleString();
             kpiAvgTicket.textContent = fmtLBP(data.avg_ticket);
             kpiGrowthYesterday.innerHTML = fmtPct(data.growth_vs_yesterday);
@@ -85,13 +85,26 @@
 
     async function loadHourlyChart(date) {
         try {
-            const today = await fetchJSON(`/api/sales/hourly?date=${date}`);
-            const prev4w = await fetchJSON(`/api/sales/hourly-4weeks?date=${date}`);
+            // ------------------------------------------------------------
+            // Fetch hourly sales + 4-week comparison + weather (5 weeks)
+            // ------------------------------------------------------------
+            const [today, prev4w, weather5w] = await Promise.all([
+                fetchJSON(`/api/sales/hourly?date=${date}`),
+                fetchJSON(`/api/sales/hourly-4weeks?date=${date}`),
+                fetchJSON(`/api/weather/hourly-5weeks?date=${date}`)
+            ]);
+
+            window.weather5w = weather5w; // keep globally accessible for tooltip
 
             const ctx = document.getElementById("chartHourlySales");
             if (chartHourly) chartHourly.destroy();
 
             const labels = today.map((p) => `${((p.hour + 8) % 24)}:00`);
+            const fmt = new Intl.NumberFormat("en-US");
+
+            // ------------------------------------------------------------
+            // Build datasets (today + 4 previous weeks)
+            // ------------------------------------------------------------
             const datasets = [
                 {
                     label: "Today",
@@ -101,6 +114,7 @@
                     fill: true,
                     tension: 0.3,
                     borderWidth: 2,
+                    date: date, // used for tooltip weather lookup
                 },
             ];
 
@@ -113,9 +127,13 @@
                     borderDash: [3, 3],
                     fill: false,
                     tension: 0.3,
+                    date: week.date, // used for tooltip weather lookup
                 });
             });
 
+            // ------------------------------------------------------------
+            // Create chart with enriched tooltip
+            // ------------------------------------------------------------
             chartHourly = new Chart(ctx, {
                 type: "line",
                 data: { labels, datasets },
@@ -124,25 +142,47 @@
                     plugins: {
                         legend: { display: true, position: "bottom" },
                         tooltip: {
+                            usePointStyle: true,
                             callbacks: {
-                                label: (ctx) =>
-                                    fmt.format(ctx.parsed.y) + " LBP (" + ctx.dataset.label + ")",
+                                label: function (ctx) {
+                                    const date = ctx.dataset.date;
+                                    const hour = ctx.dataIndex;
+                                    const salesVal = fmt.format(ctx.parsed.y);
+
+                                    // find matching weather info for this date/hour
+                                    const wSeries = window.weather5w?.series?.find((s) => s.date === date);
+                                    const w = wSeries?.hours?.find((h) => h.hour === ((hour + 8) % 24));
+                                    const weatherText = w
+                                        ? ` | ${Math.round(w.temp)}°C ${w.cond}`
+                                        : "";
+
+                                    return `${salesVal} LBP (${date})${weatherText}`;
+                                },
                             },
                         },
                     },
                     scales: {
                         y: {
-                            ticks: {
-                                callback: (val) => fmt.format(val),
-                            },
+                            ticks: { callback: (val) => fmt.format(val) },
+                            title: { display: true, text: "Sales (LBP)" },
+                        },
+                        x: {
+                            title: { display: true, text: "Hour" },
                         },
                     },
                 },
             });
+
+            // ------------------------------------------------------------
+            // Generate AI summary for today’s hourly data
+            // ------------------------------------------------------------
+            await generateAISummary("sales_hourly", today, "#summaryHourly");
+
         } catch (err) {
-            console.error(err);
+            console.error("loadHourlyChart error:", err);
         }
     }
+
 
     async function loadCategoryChart(date) {
         try {
@@ -176,6 +216,8 @@
                     },
                 },
             });
+            await generateAISummary('sales_category', data, '#summaryCategory');
+
         } catch (err) {
             console.error(err);
         }
@@ -257,7 +299,56 @@
                 render: DataTable.render.number(',', '.', 0),
             },
         ], `/api/sales/receipts?date=${date}`);
+
     }
+    // ------------------------------------------------------------
+    // AI Summaries
+    // ------------------------------------------------------------
+    async function generateAISummary(widget, data, selector) {
+        try {
+            const res = await fetch('/api/ai/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ widget, data })
+            });
+            const json = await res.json();
+            const el = document.querySelector(`${selector} .ai-text`);
+            if (el) {
+                el.classList.remove('show');
+                setTimeout(() => {
+                    el.textContent = json.summary || '(No summary)';
+                    el.classList.add('show');
+                }, 100);
+            }
+        } catch (err) {
+            console.error('AI summary error', err);
+        }
+    }
+
+    // ------------------------------------------------------------
+    // WEATHER BADGE
+    // ------------------------------------------------------------
+    async function loadWeather(date) {
+        try {
+            const res = await fetch(`/api/weather?date=${date}`);
+            const w = await res.json();
+            const badge = document.getElementById("weatherBadge");
+
+            if (w.error) {
+                badge.textContent = "Weather unavailable";
+                return;
+            }
+
+            badge.innerHTML = `
+      <img src="${w.icon}" width="22" height="22" alt="${w.condition}" class="me-1">
+      <span>${Math.round(w.temp)}°C ${w.condition}</span>
+    `;
+        } catch (err) {
+            console.error(err);
+            document.getElementById("weatherBadge").textContent = "Weather unavailable";
+        }
+    }
+
 
 
     // ------------------------------------------------------------
@@ -266,7 +357,8 @@
     async function loadAll() {
         const date = dateInput.value;
         loadKPIs(date);
-        loadHourlyChart(date);
+        loadWeather(date),
+            loadHourlyChart(date);
         loadCategoryChart(date);
         initTables(date);
 
@@ -276,7 +368,7 @@
     // EVENTS
     // ------------------------------------------------------------
     btnRefresh.addEventListener("click", loadAll);
-    dateInput.addEventListener("change", loadAll);
+    //dateInput.addEventListener("change", loadAll);
 
     // ------------------------------------------------------------
     // INIT

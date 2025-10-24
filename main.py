@@ -21,6 +21,9 @@ from helpers import (
 from routes.intelligence import intelligence_bp
 from routes.items import items_bp
 from routes.sales import sales_bp
+from routes.ai import ai_bp
+from routes.weather import weather_bp
+
 
 
 # ───────────────────────────────
@@ -710,6 +713,9 @@ def fixed_coverage_report():
 app.register_blueprint(intelligence_bp)
 app.register_blueprint(items_bp)
 app.register_blueprint(sales_bp)
+app.register_blueprint(ai_bp)
+app.register_blueprint(weather_bp)
+
 
 
 if __name__ == "__main__":

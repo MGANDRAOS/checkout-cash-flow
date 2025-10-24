@@ -422,11 +422,213 @@ h2.h4 {
 }
 
 .dataTables_wrapper .dataTables_filter input {
-  border-radius: 0.3rem;
-  padding: 0.25rem 0.5rem;
-  margin-left: 0.4rem;
+    border-radius: 0.3rem;
+    padding: 0.25rem 0.5rem;
+    margin-left: 0.4rem;
 }
 
-.table > :not(caption) > * > * {
-  vertical-align: middle;
+.table> :not(caption)>*>* {
+    vertical-align: middle;
+}
+
+
+/* ==========================================================
+   SALES DASHBOARD TABLE STYLING
+   ========================================================== */
+
+/* General typography and spacing */
+.table {
+    font-size: 0.88rem;
+    color: #212529;
+}
+
+.table> :not(caption)>*>* {
+    vertical-align: middle;
+    padding: 0.55rem 0.75rem;
+    border-color: #e5e7eb;
+}
+
+/* Zebra and hover refinement */
+.table-striped>tbody>tr:nth-of-type(odd)>* {
+    background-color: #f8f9fa;
+}
+
+.table-hover>tbody>tr:hover>* {
+    background-color: #eef3ff;
+}
+
+/* Card consistency */
+.card {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.65rem;
+}
+
+.card-header {
+    background-color: #fafafa;
+    font-size: 0.92rem;
+    letter-spacing: 0.02em;
+    padding: 0.6rem 1rem;
+    color: #0d6efd;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.card-body {
+    padding: 0.9rem 1rem;
+}
+
+/* DataTables layout tweaks */
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter {
+    margin-bottom: 0.5rem;
+}
+
+.dataTables_wrapper .dataTables_filter input {
+    border-radius: 0.4rem;
+    border: 1px solid #ced4da;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85rem;
+    margin-left: 0.3rem;
+}
+
+.dataTables_wrapper .dataTables_length select {
+    border-radius: 0.3rem;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.85rem;
+    margin: 0 0.3rem;
+}
+
+.dataTables_wrapper .dataTables_info {
+    padding-top: 0.4rem;
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.dataTables_wrapper .dataTables_paginate {
+    margin-top: 0.4rem;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+    padding: 0.25rem 0.55rem;
+    border-radius: 0.3rem;
+    font-size: 0.85rem;
+    margin: 0 2px;
+    border: 1px solid transparent;
+    color: #0d6efd !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    background-color: #0d6efd;
+    color: #fff !important;
+    border-color: #0d6efd;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+    background-color: #0d6efd;
+    color: #fff !important;
+}
+
+/* Dense mode for better data fit on small screens */
+@media (max-width: 768px) {
+    .table {
+        font-size: 0.8rem;
+    }
+
+    .card-header {
+        font-size: 0.85rem;
+    }
+}
+
+/* Subtle shadow and rounded search/filter containers */
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_length {
+    background-color: #fff;
+    border-radius: 0.5rem;
+    padding: 0.25rem 0.75rem;
+}
+
+/* Add a small accent bar on card header left edge */
+.card-header {
+    border-left: 3px solid #0d6efd;
+}
+
+/* KPI cards alignment refinement */
+#salesKPI .card {
+    border: none;
+    background-color: #f8f9fa;
+    transition: transform 0.1s ease-in;
+}
+
+#salesKPI .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+#salesKPI .card-body {
+    padding: 0.6rem;
+}
+
+#salesKPI .fw-bold {
+    font-size: 1rem;
+}
+
+#salesKPI .text-muted.small {
+    font-size: 0.75rem;
+}
+
+.ai-summary {
+    border-top: 1px dashed #dee2e6;
+    margin-top: 0.5rem;
+    padding-top: 0.35rem;
+    font-size: 0.82rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* ==========================================================
+   AI SUMMARY VISUAL STYLE
+   ========================================================== */
+.ai-summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.35rem;
+    border-top: 1px dashed #dee2e6;
+    margin-top: 0.5rem;
+    padding-top: 0.4rem;
+    font-size: 0.83rem;
+    color: #6c757d;
+    font-style: italic;
+    line-height: 1.3;
+}
+
+.ai-summary i {
+    font-size: 0.9rem;
+    color: #0d6efd;
+    margin-top: 0.15rem;
+}
+
+.ai-summary .ai-text::before {
+    content: "AI Insight: ";
+    font-style: normal;
+    font-weight: 500;
+    color: #0d6efd;
+}
+
+.ai-text {
+    opacity: 0;
+    transition: opacity 0.4s ease-in;
+}
+
+.ai-text.show {
+    opacity: 1;
+}
+
+#weatherBadge img {
+    border-radius: 50%;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.15);
+}
+
+#weatherBadge {
+    font-size: 0.85rem;
+    color: #6c757d;
+    min-width: 100px;
 }

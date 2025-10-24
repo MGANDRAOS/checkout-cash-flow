@@ -11,10 +11,12 @@
     <div class="d-flex gap-2">
       <input id="salesDate" type="date" class="form-control form-control-sm" value="{{ today }}"
         title="Data for today is finalized tomorrow morning.">
+      <div id="weatherBadge" class="small text-muted d-flex align-items-center gap-1"></div>
       <button id="salesRefresh" class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-repeat"></i>
       </button>
     </div>
+
   </div>
 
   <!-- KPIs Row -->
@@ -78,6 +80,12 @@
     </div>
     <div class="card-body">
       <canvas id="chartHourlySales" height="100"></canvas>
+
+      <div id="summaryHourly" class="ai-summary small text-muted mt-2 fst-italic">
+        <i class="bi bi-stars me-1 text-primary"></i>
+        <span class="ai-text">AI-generated summary will appear here.</span>
+      </div>
+
     </div>
   </div>
 
@@ -88,6 +96,12 @@
     </div>
     <div class="card-body">
       <canvas id="chartCategorySales" height="120"></canvas>
+
+      <div id="summaryCategory" class="ai-summary small text-muted mt-2 fst-italic">
+        <i class="bi bi-stars me-1 text-primary"></i>
+        <span class="ai-text">AI-generated summary will appear here.</span>
+      </div>
+
     </div>
   </div>
 
@@ -140,6 +154,11 @@
                 </tr>
               </tbody>
             </table>
+
+            <div id="summarySlow" class="ai-summary small text-muted mt-2 fst-italic">
+              <i class="bi bi-stars me-1 text-primary"></i>
+              <span class="ai-text">AI-generated summary will appear here.</span>
+            </div>
           </div>
         </div>
       </div>
@@ -168,6 +187,10 @@
             </tr>
           </tbody>
         </table>
+        <div id="summaryReceipts" class="ai-summary small text-muted mt-2 fst-italic">
+          <i class="bi bi-stars me-1 text-primary"></i>
+          <span class="ai-text">AI-generated summary will appear here.</span>
+        </div>
       </div>
     </div>
   </div>
