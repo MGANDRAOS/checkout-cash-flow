@@ -9,6 +9,8 @@ from helpers_sales import (
     get_top_products,
     get_slow_products,
     get_receipts,
+    get_sales_cumulative_by_hour,
+    get_sales_last14days
 )
 
 # Blueprint setup
@@ -60,6 +62,16 @@ def api_sales_hourly_4weeks():
     data = get_sales_by_hour_last4weeks(date)
     return jsonify(data)
 
+@sales_bp.route("/api/sales/hourly-cumulative")
+def api_sales_hourly_cumulative():
+    """
+    Returns cumulative hourly sales totals for the given date.
+    """
+    date = request.args.get("date", datetime.now().date().strftime("%Y-%m-%d"))
+    data = get_sales_cumulative_by_hour(date)
+    return jsonify(data)
+
+
 
 @sales_bp.route("/api/sales/category")
 def api_sales_category():
@@ -99,4 +111,13 @@ def api_sales_receipts():
     """
     date = request.args.get("date", datetime.now().date().strftime("%Y-%m-%d"))
     data = get_receipts(date)
+    return jsonify(data)
+
+
+@sales_bp.route("/api/sales/daily-14days")
+def api_sales_daily_14days():
+    """
+    Returns sales totals for the last 14 business days.
+    """
+    data = get_sales_last14days()
     return jsonify(data)

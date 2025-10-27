@@ -132,6 +132,7 @@ def list_items(page=1, page_size=25, q="", sort="", subgroup_id=None, subgroup="
             })
         return {"items": items, "total": total, "page": page, "page_size": page_size}
               
+
       
 def list_subgroups():
     with _connect() as cn:
@@ -154,6 +155,7 @@ def list_subgroups():
             ORDER BY items_count DESC, Subgroup;
         """)
         return [{"id": int(r.id), "subgroup": r.Subgroup, "count": int(r.items_count or 0)} for r in cur.fetchall()]
+
 
 
 def get_item_details(code: str, days: int = 30, biz_start_hour: int = 7, biz_end_hour: int = 5):
@@ -344,6 +346,7 @@ def get_item_details(code: str, days: int = 30, biz_start_hour: int = 7, biz_end
         "series": series,
         "recent": recent
     }
+
 
  
 def update_item_fields(code: str, title: str = None, subgroup: str = None, price: float = None):

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+<link href="https://cdn.jsdelivr.net/npm/simple-chat-ui@0.1.2-beta.2/index.css" rel="stylesheet">
 
 <div class="container-fluid py-3">
 
@@ -72,6 +73,21 @@
     </div>
   </div>
 
+  <!-- Last 14 Days Sales Trend -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="fw-semibold"><i class="bi bi-calendar3 me-1"></i>Last 14 Days Sales Trend</span>
+    </div>
+    <div class="card-body">
+      <canvas id="chartDaily14Days" height="100"></canvas>
+      <div id="summaryDaily14Days" class="ai-summary small text-muted mt-2 fst-italic">
+        <i class="bi bi-stars me-1 text-primary"></i>
+        <span class="ai-text">AI-generated summary will appear here.</span>
+      </div>
+    </div>
+  </div>
+
+
   <!-- Sales Trends Chart -->
   <div class="card mb-4 shadow-sm">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -88,6 +104,24 @@
 
     </div>
   </div>
+
+  <!-- Hourly Total Sales Trend -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">
+        <i class="bi bi-graph-up-arrow me-1"></i>Hourly Total Sales Trend
+      </span>
+      <span class="small text-muted">Cumulative sales across business hours</span>
+    </div>
+    <div class="card-body">
+      <canvas id="chartHourlyCumulative" height="100"></canvas>
+      <div id="summaryHourlyCumulative" class="ai-summary small text-muted mt-2 fst-italic">
+        <i class="bi bi-stars me-1 text-primary"></i>
+        <span class="ai-text">AI-generated summary will appear here.</span>
+      </div>
+    </div>
+  </div>
+
 
   <!-- Category Breakdown -->
   <div class="card mb-4 shadow-sm">
@@ -194,10 +228,32 @@
       </div>
     </div>
   </div>
-
 </div>
 
+
+{# === Analytics Assistant Widget (Floating Chat) === #}
+<!-- This entire block creates the floating chat button and hidden chat window -->
+<div id="analyticsWidget" class="analytics-widget collapsed shadow-lg">
+  <div class="chat-header d-flex justify-content-between align-items-center px-3 py-2 bg-dark text-white">
+    <span class="fw-semibold">Analytics Assistant</span>
+    <button class="btn btn-sm btn-outline-light" id="assistantClose">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
+
+  <!-- Chat container where chat-ui-lite will render -->
+  <div id="chat" class="chat-body"></div>
+</div>
+
+<!-- Toggle button (floating bubble) -->
+<button id="assistantToggle" class="assistant-toggle btn btn-primary rounded-circle shadow">
+  <i class="bi bi-chat-dots fs-4"></i>
+</button>
+{# === /Analytics Assistant Widget === #}
+
+
 <!-- JS for dynamic charts and data -->
+<script src="{{ url_for('static', filename='js/analyticsAssistant.js') }}"></script>
 <script src="{{ url_for('static', filename='js/sales.js') }}"></script>
 
 {% endblock %}

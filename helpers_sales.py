@@ -138,6 +138,60 @@ def get_sales_by_hour_last4weeks(date_str: str):
 
 
 # ----------------------------------------------------------
+# HOURLY CUMULATIVE SALES (TODAY + LAST 4 WEEKS)
+# ----------------------------------------------------------
+def get_sales_cumulative_by_hour(date_str: str):
+    """
+    Returns cumulative hourly sales for the selected date
+    and the same weekday over the past 4 weeks.
+    Each entry includes its date and a 24-hour series
+    of running totals using the +8 business-hour rotation rule.
+    Example output:
+      [
+        {"date": "2025-10-26", "series": [{"hour": 0, "sales_total": 1200}, ...]},
+        {"date": "2025-10-19", "series": [{"hour": 0, "sales_total": 800}, ...]},
+        ...
+      ]
+    """
+    from datetime import datetime, timedelta
+    date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    # include today + past 4 same weekdays
+    all_dates = [date - timedelta(weeks=i) for i in range(0, 5)]
+    out = []
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        for d in all_dates:
+            cur.execute(f"""
+                SELECT
+                  {BIZ_HOUR_SQL} AS biz_hour,
+                  SUM(r.RCPT_AMOUNT) AS total_sales
+                FROM dbo.HISTORIC_RECEIPT r
+                WHERE {BUSINESS_DATE_SQL} = ?
+                GROUP BY {BIZ_HOUR_SQL}
+                ORDER BY biz_hour
+            """, (d,))
+            rows = cur.fetchall()
+
+            # Fill 24 hours with zeros
+            hourly = [0.0] * 24
+            for r in rows:
+                hourly[int(r.biz_hour)] = float(r.total_sales or 0)
+
+            # Build cumulative curve
+            cumulative = []
+            running = 0.0
+            for h in range(24):
+                running += hourly[h]
+                cumulative.append({"hour": h, "sales_total": running})
+
+            out.append({"date": str(d), "series": cumulative})
+
+    return out
+
+
+
+# ----------------------------------------------------------
 # CATEGORY / SUBGROUP BREAKDOWN
 # ----------------------------------------------------------
 def get_sales_by_category(date_str: str):
@@ -268,4 +322,43 @@ def get_receipts(date_str: str):
             "items_count": int(r.items_count or 0),
             "total": float(r.total or 0)
         })
+    return out
+
+
+# ----------------------------------------------------------
+# DAILY SALES - LAST 14 BUSINESS DAYS (ENDING YESTERDAY)
+# ----------------------------------------------------------
+def get_sales_last14days():
+    """
+    Returns total sales per business day for the last 14 days,
+    ending yesterday, using BUSINESS_DATE_SQL to respect store hours.
+    Example output: [{'date': '2025-10-11', 'sales_total': 5120000}, ...]
+    """
+    from datetime import datetime, timedelta
+    end_date = datetime.now().date() - timedelta(days=1)
+    start_date = end_date - timedelta(days=24)
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(f"""
+            SELECT
+              {BUSINESS_DATE_SQL} AS business_date,
+              SUM(r.RCPT_AMOUNT) AS sales_total
+            FROM dbo.HISTORIC_RECEIPT r
+            WHERE {BUSINESS_DATE_SQL} BETWEEN ? AND ?
+            GROUP BY {BUSINESS_DATE_SQL}
+            ORDER BY business_date
+        """, (start_date, end_date))
+        rows = cur.fetchall()
+
+    # Convert results to list of dicts (fill missing days with 0)
+    sales_map = {str(r.business_date): float(r.sales_total or 0) for r in rows}
+    out = []
+    current = start_date
+    while current <= end_date:
+        out.append({
+            "date": str(current),
+            "sales_total": sales_map.get(str(current), 0.0)
+        })
+        current += timedelta(days=1)
     return out

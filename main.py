@@ -23,6 +23,7 @@ from routes.items import items_bp
 from routes.sales import sales_bp
 from routes.ai import ai_bp
 from routes.weather import weather_bp
+from routes.analytics_assistant import bp as analytics_assistant_bp
 
 
 
@@ -715,6 +716,7 @@ app.register_blueprint(items_bp)
 app.register_blueprint(sales_bp)
 app.register_blueprint(ai_bp)
 app.register_blueprint(weather_bp)
+app.register_blueprint(analytics_assistant_bp)
 
 
 

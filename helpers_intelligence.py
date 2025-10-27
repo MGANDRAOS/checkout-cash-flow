@@ -19,6 +19,31 @@ def _conn_str() -> str:
 def _connect():
     return pyodbc.connect(_conn_str())
 
+def execute_sql_readonly(sql_query: str):
+    """
+    Executes a safe read-only SQL query on the POS database.
+    Returns rows as list[dict].
+    """
+    query = sql_query.strip().lower()
+    if not query.startswith("select"):
+        raise ValueError("Only SELECT statements are allowed.")
+    if ";" in query[:-1]:
+        raise ValueError("Multiple statements detected; query rejected.")
+
+    try:
+        conn = _connect()
+        cursor = conn.cursor()
+        cursor.execute(sql_query)
+        columns = [col[0] for col in cursor.description]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+        return rows
+    except Exception as e:
+        print(f"[execute_sql_readonly] Error executing SQL: {e}")
+        raise
+
+
 # ---------- Time window helpers ----------
 def _last_business_window(cur) -> Optional[Tuple[datetime, datetime, datetime]]:
     """
@@ -1022,3 +1047,4 @@ def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: 
             else:
                 quiet_rows.append(rec)
         return {"top": top_rows, "quiet": quiet_rows}
+

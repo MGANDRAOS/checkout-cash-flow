@@ -223,6 +223,83 @@
         }
     }
 
+    // ----------------------------------------------------------
+    // HOURLY TOTAL SALES TREND (CUMULATIVE, TODAY + 4 WEEKS)
+    // ----------------------------------------------------------
+    async function loadHourlyCumulativeChart(date) {
+        try {
+            const data = await fetchJSON(`/api/sales/hourly-cumulative?date=${date}`);
+            const ctx = document.getElementById("chartHourlyCumulative");
+            if (!ctx) return;
+
+            // destroy old chart if exists
+            if (window.chartHourlyCumulative && typeof window.chartHourlyCumulative.destroy === "function") {
+                window.chartHourlyCumulative.destroy();
+            }
+
+            const fmt = new Intl.NumberFormat("en-US");
+
+            // build datasets for each date
+            const datasets = data.map((entry, idx) => {
+                const label =
+                    idx === 0 ? "This Week" : `Week -${idx}`;
+                const color = [
+                    "#20c997", // bright green for current
+                    "#6c757d",
+                    "#adb5bd",
+                    "#ced4da",
+                    "#dee2e6",
+                ][idx] || "#dee2e6";
+
+                return {
+                    label,
+                    data: entry.series.map(p => p.sales_total),
+                    borderColor: color,
+                    backgroundColor: "transparent",
+                    tension: 0.3,
+                    borderWidth: idx === 0 ? 2.5 : 1.5,
+                    fill: false,
+                };
+            });
+
+            // labels (0..23 shifted by +8h rule)
+            const labels = Array.from({ length: 24 }, (_, h) => `${((h + 8) % 24).toString().padStart(2, "0")}:00`);
+
+            // render chart
+            window.chartHourlyCumulative = new Chart(ctx, {
+                type: "line",
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    interaction: { mode: "index", intersect: false },
+                    plugins: {
+                        legend: { position: "top" },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `${fmt.format(ctx.parsed.y)} LBP`,
+                            },
+                        },
+                    },
+                    scales: {
+                        y: {
+                            title: { display: true, text: "Cumulative Sales (LBP)" },
+                            ticks: { callback: val => fmt.format(val) },
+                        },
+                        x: {
+                            title: { display: true, text: "Hour (rotated business time)" },
+                        },
+                    },
+                },
+            });
+
+            // optional AI summary
+            await generateAISummary("sales_hourly_cumulative", data, "#summaryHourlyCumulative");
+        } catch (err) {
+            console.error("loadHourlyCumulativeChart error:", err);
+        }
+    }
+
+
 
     // ------------------------------------------------------------
     // DATATABLE HELPERS
@@ -349,6 +426,65 @@
         }
     }
 
+    // ----------------------------------------------------------
+    // LAST 14 DAYS SALES TREND
+    // ----------------------------------------------------------
+    async function loadDaily14DaysChart() {
+        try {
+            const data = await fetchJSON("/api/sales/daily-14days");
+            const ctx = document.getElementById("chartDaily14Days");
+            if (!ctx) return;
+
+            if (window.chartDaily14Days && typeof window.chartDaily14Days.destroy === "function") {
+                window.chartDaily14Days.destroy();
+            }
+
+            const labels = data.map(d => d.date.slice(5)); // "MM-DD"
+            const totals = data.map(d => d.sales_total);
+            const fmt = new Intl.NumberFormat("en-US");
+
+            window.chartDaily14Days = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [{
+                        label: "Total Sales (LBP)",
+                        data: totals,
+                        borderColor: "#0d6efd",
+                        backgroundColor: "rgba(13,110,253,0.1)",
+                        fill: true,
+                        tension: 0.3,
+                        borderWidth: 2,
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => fmt.format(ctx.parsed.y) + " LBP",
+                            },
+                        },
+                    },
+                    scales: {
+                        y: {
+                            title: { display: true, text: "Sales (LBP)" },
+                            ticks: { callback: val => fmt.format(val) },
+                        },
+                        x: { title: { display: true, text: "Last 14 Business Days" } },
+                    },
+                },
+            });
+
+            // optional AI summary
+            await generateAISummary("sales_last14days", data, "#summaryDaily14Days");
+        } catch (err) {
+            console.error("loadDaily14DaysChart error:", err);
+        }
+    }
+
+
 
 
     // ------------------------------------------------------------
@@ -357,9 +493,11 @@
     async function loadAll() {
         const date = dateInput.value;
         loadKPIs(date);
-        loadWeather(date),
-            loadHourlyChart(date);
+        loadWeather(date);
+        loadHourlyChart(date);
+        loadHourlyCumulativeChart(date);
         loadCategoryChart(date);
+        loadDaily14DaysChart(date);
         initTables(date);
 
     }
