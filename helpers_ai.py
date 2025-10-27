@@ -8,6 +8,7 @@ import sqlalchemy
 from flask import current_app
 from helpers_intelligence import execute_sql_readonly
 import traceback
+import pandas as pd
 
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -23,56 +24,48 @@ CACHE_TTL_MINUTES = 30
 POS_SCHEMA_DESCRIPTION = """
 Database: SBCDB (POS)
 
-TABLE ITEMS
-- ITM_CODE (PK): unique item code.
-- ITM_TITLE: name of the item.
-- ITM_DESCRIPTION: textual description.
-- ITM_BRAND: brand name.
-- ITM_TYPE: product type.
-- ITM_SUBGROUP (INT): foreign key → SUBGROUPS.SubGrp_PARENTID (integer link to subgroup id).
-- ITM_SUPPLIER: supplier code.
+Database: SBCDB (Point of Sale System)
 
-TABLE ITEM_BARCODE
-- ITM_CODE (FK → ITEMS.ITM_CODE): item code.
-- ITM_PRICE: current or historical sale price of the item.
-- DATE_CREATED: date the price/barcode record was created.
-- DATE_MODIFIED: date the price/barcode record was last updated.
+TABLE: ITEMS
+- ITM_CODE (INT, PK): unique item identifier.
+- ITM_TITLE (NVARCHAR): item name as shown on receipt.
+- ITM_DESCRIPTION (NVARCHAR): optional description.
+- ITM_BRAND (SMALLINT): brand identifier or flag.
+- ITM_TYPE (SMALLINT): item type.
+- ITM_SUBGROUP (INT, FK → SUBGROUPS.SubGrp_ID): category ID.
+- ITM_SUPPLIER (INT): supplier code.
+(… other financial columns omitted for analytics.)
 
-TABLE SUBGROUPS
-- SubGrp_ID (INT PK, optional).
+TABLE: SUBGROUPS
+- SubGrp_ID (INT, PK): category identifier (e.g., 1 = Tobacco, 2 = Chips, 3 = Chocolate, etc.).
 - SubGrp_Name (NVARCHAR): category name.
-- SubGrp_PARENTID (INT): integer id linked from ITEMS.ITM_SUBGROUP.
+- SubGrp_PARENTID (INT): store branch ID (always 1 for your branch).
+(ignore this field for joins)
 
-TABLE HISTORIC_RECEIPT
-- RCPT_ID (PK): unique receipt ID.
-- RCPT_DATE: datetime of sale.
-- RCPT_AMOUNT: total amount of the receipt.
-- RCPT_NO: human-readable receipt number.
+TABLE: HISTORIC_RECEIPT
+- RCPT_ID (INT, PK): receipt header ID.
+- RCPT_DATE (SMALLDATETIME): sale timestamp in local time (UTC+2).
+- RCPT_AMOUNT (NUMERIC): total sale amount in LBP.
+- RCPT_NO (INT): visible receipt number.
 
-TABLE HISTORIC_RECEIPT_CONTENTS
-- RCPT_ID (FK → HISTORIC_RECEIPT.RCPT_ID): link to receipt header.
-- ITM_CODE (FK → ITEMS.ITM_CODE): sold item.
-- RCPT_LINE: line number within the receipt.
-- ITM_QUANTITY: quantity sold.
-- ITM_PRICE: sale price at the time of transaction.
+TABLE: HISTORIC_RECEIPT_CONTENTS
+- RCPT_ID (INT, FK → HISTORIC_RECEIPT.RCPT_ID)
+- ITM_CODE (INT, FK → ITEMS.ITM_CODE)
+- RCPT_LINE (SMALLINT): line number in receipt.
+- ITM_QUANTITY (NUMERIC)
+- ITM_PRICE (NUMERIC)
+(Use ITM_PRICE × ITM_QUANTITY for revenue per line.)
 
-Relationships:
-1. HISTORIC_RECEIPT ↔ HISTORIC_RECEIPT_CONTENTS via RCPT_ID
-2. HISTORIC_RECEIPT_CONTENTS ↔ ITEMS via ITM_CODE
-3. ITEMS ↔ ITEM_BARCODE via ITM_CODE
-4. ITEMS ↔ SUBGROUPS via ITM_SUBGROUP → SubGrp_PARENTID
+RELATIONSHIPS
+1. HISTORIC_RECEIPT ↔ HISTORIC_RECEIPT_CONTENTS via RCPT_ID  
+2. HISTORIC_RECEIPT_CONTENTS ↔ ITEMS via ITM_CODE  
+3. ITEMS ↔ SUBGROUPS via ITM_SUBGROUP → SubGrp_ID  
 
-Rules for the AI:
-- - When joining ITEMS and SUBGROUPS, always use:
-    LEFT JOIN SUBGROUPS AS sg ON sg.SubGrp_PARENTID = ITEMS.ITM_SUBGROUP
-  (both columns are INT). Do not compare to SubGrp_Name, which is NVARCHAR.
-  NEVER join on SubGrp_PARENTID, as it causes duplicate rows.
-- Only generate safe SELECT statements (no INSERT/UPDATE/DELETE).
-- Always include TOP 100 (for MSSQL) unless summarizing.
-- Prefer JOINs instead of subqueries for clarity.
-- Use date filters like WHERE RCPT_DATE >= DATEADD(day, -7, GETDATE()).
-- When aggregating sales, compute SUM(ITM_PRICE * ITM_QUANTITY).
-- Use descriptive table aliases (hr, hrc, i, sg) for readability.
+RULES FOR THE AI
+- When joining ITEMS and SUBGROUPS, always use:
+  ```sql
+  LEFT JOIN SUBGROUPS AS sg ON sg.SubGrp_ID = i.ITM_SUBGROUP
+- Never use SubGrp_PARENTID.
 """
 
 
@@ -195,58 +188,112 @@ def default_serializer(obj):
 
 
 
-def generate_narrative_from_sql(question: str, sql_query: str, rows: list) -> str:
+def generate_narrative_from_sql(question: str, sql_query: str, rows: list, previous_response_id: str = None):
     """
-    Converts SQL results into a narrative, storytelling summary using GPT-5-mini.
-    - question: the user’s natural language question
-    - sql_query: the executed SQL statement
-    - rows: list of dicts returned from execute_sql_readonly()
+    Converts SQL results into a management-style narrative using GPT-5-mini.
+    Adds precomputed sales stats and retail context for accurate storytelling.
+    Supports conversational chaining via previous_response_id.
     """
-    # Limit sample to avoid overloading the model
-    sample_rows = rows[:25]
 
-    # Serialize safely, converting datetime/decimal objects
-    rows_json = json.dumps(
-        sample_rows,
-        ensure_ascii=False,
-        indent=2,
-        default=default_serializer
-    )
-
-    # Prompt for GPT-5-mini
-    prompt = f"""
-    You are the Checkout Analytics Assistant, a friendly data storyteller.
-    You are given:
-    1. A natural-language business question.
-    2. The SQL query that was executed.
-    3. The raw data rows returned by the query.
-
-    Your task:
-    Write a clear, concise, storytelling-style summary (3–6 sentences)
-    that answers the question. Focus on trends, insights, and meaning.
-    Mention totals, averages, top performers, or notable changes if visible.
-    Speak like an experienced retail analyst — conversational but factual.
-
-    Question:
-    {question}
-
-    SQL Query:
-    {sql_query}
-
-    Data (sample up to 25 rows):
-    {rows_json}
-    """
+    if not rows:
+        return {"story": f"No data found for query: {question}", "response_id": None}
 
     try:
+        # --- Limit sample to avoid flooding the model ---
+        sample_rows = rows[:25]
+        df = pd.DataFrame(rows)
+        df.columns = [c.lower() for c in df.columns]
+
+        # Detect key columns (robust to naming variation)
+        # --- Safe numeric field detection ---
+        col_revenue = next((c for c in df.columns if "revenue" in c.lower()), None)
+        col_price   = next((c for c in df.columns if "price" in c.lower() and "revenue" not in c.lower()), None)
+        col_qty     = next((c for c in df.columns if "qty" in c.lower() or "quantity" in c.lower()), None)
+
+        col_title = next((c for c in df.columns if "title" in c), None)
+        col_cat = next((c for c in df.columns if "subgroup" in c or "category" in c), None)
+
+        # Normalize numeric columns
+        for col in [col_price, col_qty, col_revenue]:
+            if col and col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+        # Compute summary metrics
+        total_revenue = df[col_revenue].sum() if col_revenue else (df[col_price] * df[col_qty]).sum()
+        unique_products = df[col_title].nunique() if col_title else 0
+        total_items = len(df)
+
+        top_by_revenue = (
+            df.groupby(col_title)[col_revenue].sum().nlargest(3).to_dict()
+            if col_title and col_revenue else {}
+        )
+        top_by_units = (
+            df.groupby(col_title)[col_qty].sum().nlargest(3).to_dict()
+            if col_title and col_qty else {}
+        )
+        top_categories = (
+            df.groupby(col_cat)[col_revenue].sum().nlargest(3).to_dict()
+            if col_cat and col_revenue else {}
+        )
+
+        summary_data = {
+            "total_revenue_LBP": round(total_revenue, 2),
+            "total_revenue_USD": round(total_revenue / 89000, 2),
+            "total_items": total_items,
+            "unique_products": unique_products,
+            "top_by_revenue": top_by_revenue,
+            "top_by_units": top_by_units,
+            "top_categories": top_categories,
+        }
+
+        rows_json = json.dumps(sample_rows, ensure_ascii=False, indent=2, default=default_serializer)
+
+        # --- Build narrative prompt ---
+        prompt = f"""
+            You are an experienced retail analyst writing a daily sales summary
+            for a drive-thru mini-market in Lebanon (open 08:00–02:59).
+            Speak like a human analyst — concise, factual, and insightful.
+
+            Context:
+            - Tobacco, Alcohol, and Energy Drinks are high-margin fast movers.
+            - Water, Coffee, and Soft Drinks are daily staples.
+            - Biscuits, Chocolate, and Croissants are snacks.
+            - Food and Nuts categories are essentials.
+            - Exclude after-hours activity (03:00–07:59).
+            - Currency: LBP; show USD equivalent at 1 USD = 89,000 LBP.
+
+            Your task:
+            Write a short 3–5 sentence narrative summarizing yesterday’s activity.
+            Include total sales, number of unique products, and highlight top
+            performing items and categories. Mention what stood out, avoid generic filler.
+
+            Question:
+            {question}
+
+            SQL Query:
+            {sql_query}
+
+            Computed Summary:
+            {json.dumps(summary_data, ensure_ascii=False, indent=2)}
+
+            Sample Data (up to 25 rows):
+            {rows_json}
+            """
+
+        # --- Call GPT-5-mini with optional chaining ---
         response = client.responses.create(
             model="gpt-5-mini",
-            input=[{"role": "user", "content": prompt}],
+            input=[{"role": "system", "content": "", "role": "user", "content": prompt}],
+            previous_response_id=previous_response_id,
+            max_output_tokens=3000            
         )
+
         story = response.output_text.strip()
-        return story
-    
+        new_response_id = getattr(response, "id", None)
+
+        return {"story": story, "response_id": new_response_id}
+
     except Exception as e:
         print(f"[generate_narrative_from_sql] Error: {e}")
         traceback.print_exc()
-        return "⚠️ Error generating narrative."
-
+        return {"story": "⚠️ Error generating narrative.", "response_id": None}
