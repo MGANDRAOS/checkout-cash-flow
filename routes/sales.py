@@ -10,7 +10,8 @@ from helpers_sales import (
     get_slow_products,
     get_receipts,
     get_sales_cumulative_by_hour,
-    get_sales_last14days
+    get_sales_last14days,
+    get_items_sold
 )
 
 # Blueprint setup
@@ -82,6 +83,16 @@ def api_sales_category():
     data = get_sales_by_category(date)
     return jsonify(data)
 
+@sales_bp.route("/api/sales/items")
+def api_sales_items():
+    """
+    Returns the full list of all items sold for the selected date.
+    """
+    date = request.args.get("date", datetime.now().date().strftime("%Y-%m-%d"))
+    data = get_items_sold(date)
+    return jsonify(data)
+
+
 
 @sales_bp.route("/api/sales/top")
 def api_sales_top():
@@ -121,3 +132,5 @@ def api_sales_daily_14days():
     """
     data = get_sales_last14days()
     return jsonify(data)
+
+

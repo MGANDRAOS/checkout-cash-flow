@@ -300,6 +300,71 @@
     }
 
 
+    // ------------------------------------------------------------
+    // ITEMS SOLD TABLE (FULL DAILY LIST)
+    // ------------------------------------------------------------
+    let tableItems;
+
+    async function initItemsTable(date) {
+        // destroy previous if exists
+        if (tableItems) tableItems.destroy();
+
+        tableItems = new DataTable("#tblItemsSold", {
+            ajax: {
+                url: `/api/sales/items?date=${date}`,
+                dataSrc: "",
+            },
+            columns: [
+                { data: null, title: "#", render: (data, type, row, meta) => meta.row + 1 },
+                { data: "item_name", title: "Item" },
+                { data: "category", title: "Category" },
+                {
+                    data: "total_qty",
+                    title: "Units",
+                    className: "text-end",
+                    render: DataTable.render.number(",", ".", 2),
+                },
+                {
+                    data: "avg_price",
+                    title: "Avg. Price (LBP)",
+                    className: "text-end",
+                    render: DataTable.render.number(",", ".", 0),
+                },
+                {
+                    data: "total_revenue",
+                    title: "Revenue (LBP)",
+                    className: "text-end fw-bold",
+                    render: DataTable.render.number(",", ".", 0),
+                },
+                {
+                    data: "share",
+                    title: "Share %",
+                    className: "text-end text-muted",
+                    render: (data) => `${data.toFixed(1)}%`,
+                },
+            ],
+            responsive: true,
+            pageLength: 10,
+            lengthMenu: [10, 25, 50, 100],
+            order: [[5, "desc"]],
+            language: {
+                search: "",
+                searchPlaceholder: "Filter items...",
+                lengthMenu: "_MENU_ per page",
+                zeroRecords: "No items sold for this date",
+                info: "Showing _START_–_END_ of _TOTAL_ items",
+                infoEmpty: "No entries",
+                paginate: { previous: "‹", next: "›" },
+            },
+            dom:
+                "<'row mb-2'<'col-sm-6'l><'col-sm-6'f>>" +
+                "<'table-responsive'tr>" +
+                "<'row mt-2'<'col-sm-6'i><'col-sm-6'p>>",
+        });
+    }
+
+
+
 
     // ------------------------------------------------------------
     // DATATABLE HELPERS
@@ -498,6 +563,7 @@
         loadHourlyCumulativeChart(date);
         loadCategoryChart(date);
         loadDaily14DaysChart(date);
+        initItemsTable(date);
         initTables(date);
 
     }

@@ -362,3 +362,52 @@ def get_sales_last14days():
         })
         current += timedelta(days=1)
     return out
+
+
+# ----------------------------------------------------------
+# ALL ITEMS SOLD (FULL LIST FOR BUSINESS DAY)
+# ----------------------------------------------------------
+def get_items_sold(date_str: str):
+    """
+    Returns every item sold on the selected business day (08:00 → 02:59 next day),
+    aggregated by item name and category.
+    """
+    from datetime import datetime
+    date = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(f"""
+            SELECT
+              LTRIM(RTRIM(COALESCE(i.ITM_TITLE, '(Unknown)'))) AS item_name,
+              LTRIM(RTRIM(COALESCE(s.SubGrp_Name, 'Unknown'))) AS category,
+              SUM(c.ITM_QUANTITY) AS total_qty,
+              AVG(c.ITM_PRICE) AS avg_price,
+              SUM(c.ITM_QUANTITY * c.ITM_PRICE) AS total_revenue
+            FROM dbo.HISTORIC_RECEIPT r
+            JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
+            LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+            LEFT JOIN dbo.SUBGROUPS s
+              ON (TRY_CAST(i.ITM_SUBGROUP AS int) = s.SubGrp_ID
+                  OR LTRIM(RTRIM(i.ITM_SUBGROUP)) = LTRIM(RTRIM(s.SubGrp_Name)))
+            WHERE {BUSINESS_DATE_SQL} = ?
+            GROUP BY
+              LTRIM(RTRIM(COALESCE(i.ITM_TITLE, '(Unknown)'))),
+              LTRIM(RTRIM(COALESCE(s.SubGrp_Name, 'Unknown')))
+            ORDER BY total_revenue DESC
+        """, (date,))
+        rows = cur.fetchall()
+
+    total_revenue = sum(float(r.total_revenue or 0) for r in rows) or 1
+    results = []
+    for r in rows:
+        share = round((float(r.total_revenue or 0) / total_revenue) * 100, 1)
+        results.append({
+            "item_name": r.item_name,
+            "category": r.category,
+            "total_qty": float(r.total_qty or 0),
+            "avg_price": float(r.avg_price or 0),
+            "total_revenue": float(r.total_revenue or 0),
+            "share": share,
+        })
+    return results

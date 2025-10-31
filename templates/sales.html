@@ -139,6 +139,53 @@
     </div>
   </div>
 
+  <!-- ===================== ITEMS SOLD SECTION ===================== -->
+  <section id="items-sold" class="mt-5">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold">
+        Items Sold — <span id="items-date-label">{{ today }}</span>
+      </h5>
+      <div>
+        <button class="btn btn-sm btn-outline-secondary" id="exportCsvBtn">
+          <i class="bi bi-download"></i> Export CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- Table container -->
+    <div id="items-table-wrapper" class="table-responsive shadow-sm rounded">
+      <table id="tblItemsSold" class="table table-striped table-hover align-middle w-100"></table>
+      <thead class="table-dark">
+        <tr>
+          <th>#</th>
+          <th>Item</th>
+          <th>Category</th>
+          <th class="text-end">Units</th>
+          <th class="text-end">Avg. Price</th>
+          <th class="text-end">Revenue</th>
+          <th class="text-end">Share</th>
+        </tr>
+      </thead>
+      <tbody id="items-tbody">
+        <tr>
+          <td colspan="7" class="text-center py-4 text-muted">
+            
+          </td>
+        </tr>
+      </tbody>
+      <tfoot class="table-light fw-semibold">
+        <tr>
+          <td colspan="5">Total</td>
+          <td class="text-end" id="total-revenue">$0.00</td>
+          <td class="text-end">100%</td>
+        </tr>
+      </tfoot>
+      </table>
+    </div>
+  </section>
+  <!-- =================== END ITEMS SOLD SECTION =================== -->
+
+
   <!-- Top and Slow Movers -->
   <div class="row g-3 mb-4">
     <div class="col-lg-6">
