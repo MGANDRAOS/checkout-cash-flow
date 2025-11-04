@@ -176,7 +176,7 @@
             // ------------------------------------------------------------
             // Generate AI summary for today’s hourly data
             // ------------------------------------------------------------
-            await generateAISummary("sales_hourly", today, "#summaryHourly");
+            //await generateAISummary("sales_hourly", today, "#summaryHourly");
 
         } catch (err) {
             console.error("loadHourlyChart error:", err);
@@ -216,7 +216,7 @@
                     },
                 },
             });
-            await generateAISummary('sales_category', data, '#summaryCategory');
+            //await generateAISummary('sales_category', data, '#summaryCategory');
 
         } catch (err) {
             console.error(err);
@@ -293,7 +293,7 @@
             });
 
             // optional AI summary
-            await generateAISummary("sales_hourly_cumulative", data, "#summaryHourlyCumulative");
+            //await generateAISummary("sales_hourly_cumulative", data, "#summaryHourlyCumulative");
         } catch (err) {
             console.error("loadHourlyCumulativeChart error:", err);
         }
@@ -543,7 +543,7 @@
             });
 
             // optional AI summary
-            await generateAISummary("sales_last14days", data, "#summaryDaily14Days");
+            //await generateAISummary("sales_last14days", data, "#summaryDaily14Days");
         } catch (err) {
             console.error("loadDaily14DaysChart error:", err);
         }
