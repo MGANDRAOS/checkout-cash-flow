@@ -10,11 +10,21 @@ from typing import Dict, List, Tuple, Optional
 # ---------- Connection ----------
 def _conn_str() -> str:
     driver   = os.getenv("MSSQL_DRIVER", "ODBC Driver 17 for SQL Server")
-    server   = os.getenv("MSSQL_SERVER", "localhost,1433")
+    server   = os.getenv("MSSQL_SERVER", "mssql-204014-0.cloudclusters.net,10075")
     database = os.getenv("MSSQL_DATABASE", "SBCDB")
+    username = os.getenv("MSSQL_USERNAME", "mgandraos")
+    password = os.getenv("MSSQL_PASSWORD", "P@ssw0rd2025")
 
 
-    return f"Driver={{{driver}}};Server={server};Database={database};Trusted_Connection=yes;"
+    return (
+          f"Driver={{{driver}}};"
+          f"Server={server};"
+          f"Database={database};"
+          f"Uid={username};"
+          f"Pwd={password};"
+          f"Encrypt=yes;"
+          f"TrustServerCertificate=yes;"
+    )  
 
 def _connect():
     return pyodbc.connect(_conn_str())
