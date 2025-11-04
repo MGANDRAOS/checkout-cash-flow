@@ -718,3 +718,11 @@ h2.h4 {
 }
 
 /* === /Analytics Assistant Floating Widget === */
+
+
+.tab-pane {
+  display: none !important;
+}
+.tab-pane.active.show {
+  display: block !important;
+}

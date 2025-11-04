@@ -311,7 +311,7 @@
 
         tableItems = new DataTable("#tblItemsSold", {
             ajax: {
-                url: `/api/sales/items?date=${date}`,
+                url: `/api/live/sales/items?date=${date}`,
                 dataSrc: "",
             },
             columns: [

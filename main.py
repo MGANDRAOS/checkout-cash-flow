@@ -26,7 +26,6 @@ from routes.weather import weather_bp
 from routes.analytics_assistant import bp as analytics_assistant_bp
 
 
-
 # ───────────────────────────────
 # Load environment variables
 # ───────────────────────────────
@@ -719,10 +718,8 @@ app.register_blueprint(weather_bp)
 app.register_blueprint(analytics_assistant_bp)
 
 
-
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
         ensure_default_envelopes()
     app.run(debug=os.getenv("FLASK_ENV") == "development")
-    

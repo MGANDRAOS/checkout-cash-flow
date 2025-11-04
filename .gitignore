@@ -2,3 +2,4 @@ checkout-app.zip
 *.pyc
 weather_cache.db
 .env
+*.pyc
