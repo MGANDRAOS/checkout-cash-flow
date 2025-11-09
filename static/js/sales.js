@@ -242,7 +242,7 @@
             // build datasets for each date
             const datasets = data.map((entry, idx) => {
                 const label =
-                    idx === 0 ? "This Week" : `Week -${idx}`;
+                    idx === 0 ? "Today" : `Week -${idx}`;
                 const color = [
                     "#20c997", // bright green for current
                     "#6c757d",
@@ -286,7 +286,7 @@
                             ticks: { callback: val => fmt.format(val) },
                         },
                         x: {
-                            title: { display: true, text: "Hour (rotated business time)" },
+                            title: { display: true, text: "Hour" },
                         },
                     },
                 },
@@ -311,7 +311,7 @@
 
         tableItems = new DataTable("#tblItemsSold", {
             ajax: {
-                url: `/api/live/sales/items?date=${date}`,
+                url: `/api/sales/items?date=${date}`,
                 dataSrc: "",
             },
             columns: [
