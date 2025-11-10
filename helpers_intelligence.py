@@ -8,33 +8,33 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 
 # ---------- Connection ----------
-# def _conn_str() -> str:
-#     driver   = os.getenv("MSSQL_DRIVER", "ODBC Driver 17 for SQL Server")
-#     server   = os.getenv("MSSQL_SERVER", "155.117.44.130,1433")
-#     database = os.getenv("MSSQL_DATABASE", "SBCDB")
-#     username = os.getenv("MSSQL_USERNAME", "mgandraos")
-#     password = os.getenv("MSSQL_PASSWORD", "Andr@o$00")
+def _conn_str() -> str:
+     driver   = os.getenv("MSSQL_DRIVER", "ODBC Driver 17 for SQL Server")
+     server   = os.getenv("MSSQL_SERVER", "155.117.44.163,65431\\SQLEXPRESS")
+     database = os.getenv("MSSQL_DATABASE", "SBCDB")
+     username = os.getenv("MSSQL_USERNAME", "mgandraos")
+     password = os.getenv("MSSQL_PASSWORD", "Andr@o$00")
 
 
-#     return (
-#           f"Driver={{{driver}}};"
-#           f"Server={server};"
-#           f"Database={database};"
-#           f"Uid={username};"
-#           f"Pwd={password};"
-#           f"Encrypt=yes;"
-#           f"TrustServerCertificate=yes;"
-#     )  
+     return (
+           f"Driver={{{driver}}};"
+           f"Server={server};"
+           f"Database={database};"
+           f"Uid={username};"
+           f"Pwd={password};"
+           f"Encrypt=yes;"
+           f"TrustServerCertificate=yes;"
+     )  
     
     
     # ---------- Connection ----------
-def _conn_str() -> str:
-    driver   = os.getenv("MSSQL_DRIVER", "ODBC Driver 17 for SQL Server")
-    server   = os.getenv("MSSQL_SERVER", "localhost,1433")
-    database = os.getenv("MSSQL_DATABASE", "SBCDB")
+#def _conn_str() -> str:
+ #   driver   = os.getenv("MSSQL_DRIVER", "ODBC Driver 17 for SQL Server")
+  #  server   = os.getenv("MSSQL_SERVER", "localhost,1433")
+   # database = os.getenv("MSSQL_DATABASE", "SBCDB")
 
 
-    return f"Driver={{{driver}}};Server={server};Database={database};Trusted_Connection=yes;"
+ #   return f"Driver={{{driver}}};Server={server};Database={database};Trusted_Connection=yes;"
 
 def _connect():
     return pyodbc.connect(_conn_str())

@@ -309,7 +309,6 @@ def get_receipts(date_str: str):
             ORDER BY r.RCPT_DATE DESC
         """, (date,))
         rows = cur.fetchall()
-
     out = []
     for r in rows:
         try:

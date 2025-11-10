@@ -24,6 +24,8 @@ from routes.sales import sales_bp
 from routes.ai import ai_bp
 from routes.weather import weather_bp
 from routes.analytics_assistant import bp as analytics_assistant_bp
+from routes.realtime import realtime_bp
+
 
 
 # ───────────────────────────────
@@ -716,6 +718,8 @@ app.register_blueprint(sales_bp)
 app.register_blueprint(ai_bp)
 app.register_blueprint(weather_bp)
 app.register_blueprint(analytics_assistant_bp)
+app.register_blueprint(realtime_bp)
+
 
 
 if __name__ == "__main__":
