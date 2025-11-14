@@ -158,7 +158,7 @@ def list_subgroups():
 
 
 
-def get_item_details(code: str, days: int = 30, biz_start_hour: int = 7, biz_end_hour: int = 5):
+def get_item_details(code: str, days: int = 30, start_date: str = None, end_date: str = None, biz_start_hour: int = 7, biz_end_hour: int = 5):
     """
     Return a compact profile for one item:
       - item header (title, subgroup, last_purchased)
@@ -217,6 +217,20 @@ def get_item_details(code: str, days: int = 30, biz_start_hour: int = 7, biz_end
             "type": (row.ITM_TYPE if row else None) or "",
             "subgroup": (row.ResolvedSubgroup if row else None) or "Unknown"
         }
+        
+        # Determine window condition: explicit range overrides rolling window
+        date_filter = ""
+        params_window = [code]
+
+        if start_date and end_date:
+            # Explicit fixed date range (inclusive)
+            date_filter = "r.RCPT_DATE BETWEEN ? AND ?"
+            params_window.extend([start_date, end_date])
+        else:
+            # Rolling N-day window from now (business-hour shifted)
+            date_filter = "DATEADD(HOUR, -@bizStart, r.RCPT_DATE) >= @windowStart"
+            params_window.extend([int(days), int(biz_start_hour)])
+
 
         # 1) Summary over last N business days (time-shifted window)
         cur.execute("""
@@ -247,7 +261,7 @@ def get_item_details(code: str, days: int = 30, biz_start_hour: int = 7, biz_end
               FROM dbo.HISTORIC_RECEIPT_CONTENTS c
               JOIN dbo.HISTORIC_RECEIPT r ON r.RCPT_ID = c.RCPT_ID
               WHERE c.ITM_CODE = @code
-                AND DATEADD(HOUR, -@bizStart, r.RCPT_DATE) >= @windowStart
+                AND """ + date_filter + """
             )
             SELECT
               (SELECT LastPurchased FROM LP)              AS LastPurchased,
@@ -258,7 +272,7 @@ def get_item_details(code: str, days: int = 30, biz_start_hour: int = 7, biz_end
               AVG(CASE WHEN W.ITM_QUANTITY > 0 AND W.ITM_PRICE > 0 THEN CAST(W.ITM_PRICE AS float) END)     AS PriceAvg,
               MAX(CASE WHEN W.ITM_QUANTITY > 0 AND W.ITM_PRICE > 0 THEN W.ITM_PRICE END)                    AS PriceMax
             FROM W;
-        """, (code, int(days), int(biz_start_hour)))
+        """, tuple(params_window))
         s = cur.fetchone()
         def _fmt_dt(dt):
             try:
@@ -295,10 +309,11 @@ def get_item_details(code: str, days: int = 30, biz_start_hour: int = 7, biz_end
             FROM dbo.HISTORIC_RECEIPT_CONTENTS c
             JOIN dbo.HISTORIC_RECEIPT r ON r.RCPT_ID = c.RCPT_ID
             WHERE c.ITM_CODE = @code
-              AND DATEADD(HOUR, -@bizStart, r.RCPT_DATE) >= @windowStart
+            AND """ + date_filter + """
             GROUP BY CAST(DATEADD(HOUR, -@bizStart, r.RCPT_DATE) AS date)
             ORDER BY BizDate ASC;
-        """, (code, int(days), int(biz_start_hour)))
+        """, tuple(params_window))
+        
         series = []
         for r in cur.fetchall():
             series.append({

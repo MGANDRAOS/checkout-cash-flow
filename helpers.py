@@ -32,20 +32,22 @@ def days_in_month(year: int, month: int) -> int:
 # Envelope management
 # ───────────────────────────────
 def ensure_default_envelopes():
-    """Create default envelopes if missing."""
-    defaults = [
-        ("INVENTORY", "Inventory"),
-        ("FIXED", "Fixed Expenses"),
-        ("OPS", "Operations"),
-        ("BUFFER", "Buffer"),
+    """
+    Ensure only the required envelopes exist for v2 logic.
+    We DO NOT delete old envelopes to preserve history; we just guarantee BILLS & SPEND exist.
+    """
+    required = [
+        ("BILLS", "Bills & Obligations"),
+        ("SPEND", "Spend & Restock"),
     ]
-    for code, name in defaults:
+    for code, name in required:
         exists = db.session.scalar(
             db.select(db.func.count()).select_from(Envelope).where(Envelope.code == code)
         )
         if exists == 0:
             db.session.add(Envelope(code=code, name=name, balance_cents=0))
     db.session.commit()
+
 
 
 def post_envelope_tx(code: str, amount: int, tx_type: str, desc: str, closing_id=None):
@@ -102,67 +104,91 @@ def current_month_target_cents(on_date: date) -> int:
     return int(total or 0)
 
 
+
 def compute_allocation(sales_cents: int, on_date: date) -> Tuple[Allocation, Dict[str, int]]:
-    """Split a sale amount into envelope allocations using current settings.
-    Fixed expenses are reserved first, using custom start dates if defined.
     """
-
-    # Get configured percentages from settings
-    inventory_rate = float(get_setting("inventory_pct", "0.5"))
-    ops_rate = float(get_setting("ops_pct", "0.03"))
-
-    # --- 1️⃣  Determine Fixed Bills Period ---
-    fixed_bills = db.session.execute(
-        db.select(FixedBill).where(FixedBill.is_active == True)
-    ).scalars().all()
-
-    if fixed_bills:
-        # Find earliest custom_start_date (or fallback to month start)
-        earliest_start = min(
-            b.custom_start_date or date(on_date.year, on_date.month, 1)
-            for b in fixed_bills
-        )
+    v2: Two-envelope allocation.
+    - Compute a dynamic BILLS% to guarantee monthly bills + savings target by month end.
+    - Map BILLS -> fixed_cents (reuse existing column), set others = 0 for compatibility.
+    """
+    # Toggle: dynamic vs fixed split (defaults dynamic)
+    auto_dynamic = get_setting("auto_dynamic_allocation", "true").lower() in ("1","true","yes")
+    if auto_dynamic:
+        bills_pct = dynamic_bills_pct(on_date)
     else:
-        earliest_start = date(on_date.year, on_date.month, 1)
+        # Fallback to fixed ratio if you decide to turn dynamic off in Settings
+        bills_pct = get_float_setting("bills_pct_fixed", 0.50)
 
-    # Total days in this active period (from start to end of month)
-    month_end = date(on_date.year, on_date.month, days_in_month(on_date.year, on_date.month))
-    days_in_period = (month_end - earliest_start).days + 1
-    days_in_period = max(days_in_period, 1)
+    bills_alloc = int(round(sales_cents * bills_pct))
 
-    # --- 2️⃣  Compute total fixed target for current month ---
-    month_target = sum(b.monthly_amount_cents for b in fixed_bills)
-    fixed_daily_goal = month_target // days_in_period
+    # Optional spend floor to avoid starving restock
+    spend_floor_cents = int(round(get_float_setting("spend_floor_cents", 0)))
+    spend_alloc = max(sales_cents - bills_alloc, spend_floor_cents)
+    if spend_alloc > sales_cents:  # guard if floor > sales
+        spend_alloc = sales_cents
+        bills_alloc = 0
 
-      # --- 3️⃣ Allocate ---
+    # Reuse existing structure: fixed = BILLS; others set to 0
+    alloc = Allocation(
+        fixed_cents=bills_alloc,
+        ops_cents=0,
+        inventory_cents=0,
+        buffer_cents=spend_alloc
+    )
 
-    # Reserve fixed first
-    fixed_alloc = min(fixed_daily_goal, sales_cents)
-    base = max(sales_cents - fixed_alloc, 0)
-
-    # Apply both inventory and ops percentages on the same post-fixed base
-    inv_alloc = int(round(base * inventory_rate))
-    ops_alloc = int(round(base * ops_rate))
-
-    # Whatever remains becomes buffer
-    buffer_alloc = max(base - inv_alloc - ops_alloc, 0)
-
-
-    # --- 4️⃣  Debug info for diagnostics ---
     debug = {
-        "month_target": month_target,
-        "days_in_period": days_in_period,
-        "fixed_daily_goal": fixed_daily_goal,
-        "inventory_rate": inventory_rate,
-        "ops_rate": ops_rate,
-        "period_start": earliest_start.isoformat(),
+        "mode": "dynamic" if auto_dynamic else "fixed",
+        "bills_pct": bills_pct,
+        "sales": sales_cents,
+        "bills_alloc": bills_alloc,
+        "spend_alloc": spend_alloc,
     }
-    
-    print("Settings → inventory_pct:", get_setting("inventory_pct", "0.5"))
-    print("Settings → ops_pct:", get_setting("ops_pct", "0.03"))
+    return alloc, debug
 
-    return Allocation(fixed_alloc, ops_alloc, inv_alloc, buffer_alloc), debug
 
+
+def dynamic_bills_pct(on_date: date) -> float:
+    """
+    Compute today's BILLS% based on:
+    - Remaining (sum(active fixed bills) + target_savings_monthly) - already allocated this month
+    - Days remaining this month
+    - Average daily sales (this month so far). Falls back to 0.5 if no data.
+    Clamped between bills_pct_min and bills_pct_max; also respects spend_floor_cents.
+    """
+    # Targets
+    active_bills_cents = db.session.scalar(
+        db.select(db.func.coalesce(db.func.sum(FixedBill.monthly_amount_cents), 0))
+        .where(FixedBill.is_active == True)
+    ) or 0
+    target_savings = int(round(get_float_setting("target_savings_monthly", 500.0) * 100))
+    month_target = active_bills_cents + target_savings
+
+    # Progress this month
+    month_start = on_date.replace(day=1)
+    allocated_fixed = db.session.scalar(
+        db.select(db.func.coalesce(db.func.sum(DailyClosing.fixed_allocation_cents), 0))
+        .where(DailyClosing.date >= month_start)
+    ) or 0
+    remaining = max(month_target - allocated_fixed, 0)
+
+    # Time left
+    total_days = days_in_month(on_date.year, on_date.month)
+    days_left = max(total_days - (on_date.day - 1), 1)
+
+    # Sales baseline (avg of this month's closings)
+    avg_sales_cents = db.session.scalar(
+        db.select(db.func.avg(DailyClosing.sales_cents))
+        .where(DailyClosing.date >= month_start)
+    ) or 0
+
+    # If no history this month, assume neutral 50%
+    raw_pct = (remaining / days_left) / avg_sales_cents if avg_sales_cents > 0 else 0.5
+
+    # Clamp & floors
+    pct_min = get_float_setting("bills_pct_min", 0.25)
+    pct_max = get_float_setting("bills_pct_max", 0.80)
+    pct = min(max(raw_pct, pct_min), pct_max)
+    return pct
 
 
 
@@ -207,3 +233,28 @@ def get_sales_overview_data():
     } for c in closings]
 
     return kpis, data_points
+
+
+
+def get_float_setting(key: str, default: float) -> float:
+    val = get_setting(key, None)
+    try:
+        return float(val) if val is not None else default
+    except Exception:
+        return default
+    
+    
+    
+def ensure_default_settings():
+    defaults = {
+        "auto_dynamic_allocation": "true",
+        "target_savings_monthly": "500",
+        "bills_pct_min": "0.25",
+        "bills_pct_max": "0.80",
+        "spend_floor_cents": "0",
+        # Optional fixed mode knob:
+        "bills_pct_fixed": "0.50",
+    }
+    for k, v in defaults.items():
+        if get_setting(k) is None:
+            set_setting(k, v)

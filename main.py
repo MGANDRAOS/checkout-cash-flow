@@ -3,9 +3,8 @@ from datetime import date, datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
-
 # Local imports
-from models import db, Envelope, DailyClosing, FixedBill, FixedCollection
+from models import db, Envelope, DailyClosing, FixedBill, FixedCollection, Expense
 from helpers import (
     dollars_to_cents,
     cents_to_dollars,
@@ -16,7 +15,8 @@ from helpers import (
     get_setting,
     set_setting,
     get_sales_overview_data,
-    days_in_month
+    days_in_month,
+    ensure_default_settings
 )
 from routes.intelligence import intelligence_bp
 from routes.items import items_bp
@@ -213,10 +213,12 @@ def daily_close():
     db.session.flush()
 
     # Post envelope transactions
-    post_envelope_tx("FIXED", alloc.fixed_cents, "allocation", f"Daily Close {close_date}", closing.id)
-    post_envelope_tx("OPS", alloc.ops_cents, "allocation", f"Daily Close {close_date}", closing.id)
-    post_envelope_tx("INVENTORY", alloc.inventory_cents, "allocation", f"Daily Close {close_date}", closing.id)
-    post_envelope_tx("BUFFER", alloc.buffer_cents, "allocation", f"Daily Close {close_date}", closing.id)
+    # === v2: Post to BILLS (fixed) and SPEND (buffer) only ===============
+    post_envelope_tx("BILLS", alloc.fixed_cents, "allocation", f"Daily Close {close_date}", closing.id)
+    post_envelope_tx("SPEND", alloc.buffer_cents, "allocation", f"Daily Close {close_date}", closing.id)
+    # Legacy: zero out other envelopes via neutral entries (optional — skip to reduce noise)
+    # =====================================================================
+
 
     db.session.commit()
     
@@ -571,6 +573,116 @@ def settings():
         ops_pct=ops_pct
     )
     
+
+
+@app.route("/expenses", methods=["GET", "POST"])
+def expenses():
+    """
+    Quick ledger of payouts.
+    POST creates an Expense, deducts from the chosen envelope, optional bill link.
+    """
+    ensure_default_envelopes()
+
+    if request.method == "POST":
+        try:
+            exp_date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
+            desc = request.form["description"].strip()
+            amount_cents = dollars_to_cents(request.form["amount"])
+            envelope_code = request.form["envelope_code"]  # 'BILLS' or 'SPEND'
+            category = request.form.get("category") or None
+            vendor = request.form.get("vendor") or None
+            payment_method = request.form.get("payment_method") or None
+            bill_id = request.form.get("bill_id")
+            bill_id = int(bill_id) if bill_id else None
+
+            env = db.session.scalar(db.select(Envelope).where(Envelope.code == envelope_code))
+            if not env:
+                raise ValueError("Envelope not found.")
+
+            exp = Expense(
+                date=exp_date,
+                description=desc,
+                amount_cents=amount_cents,
+                category=category,
+                vendor=vendor,
+                payment_method=payment_method,
+                envelope_id=env.id,
+                bill_id=bill_id
+            )
+            db.session.add(exp)
+
+            # Deduct from envelope
+            post_envelope_tx(envelope_code, -amount_cents, "spend", f"Expense: {desc}")
+
+            # If linked to an installment bill, bump counter
+            if bill_id:
+                b = db.session.get(FixedBill, bill_id)
+                if b and (b.frequency == "installment" or b.installments_total):
+                    b.installments_paid = (b.installments_paid or 0) + 1
+
+            db.session.commit()
+            flash("Expense recorded.", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Could not add expense: {e}", "danger")
+        return redirect(url_for("expenses"))
+
+    # GET
+    all_exp = db.session.execute(
+        db.select(Expense).order_by(Expense.date.desc(), Expense.created_at.desc())
+    ).scalars().all()
+    bills = db.session.execute(db.select(FixedBill).order_by(FixedBill.name)).scalars().all()
+    envelopes = db.session.execute(db.select(Envelope).where(Envelope.code.in_(["BILLS","SPEND"]))).scalars().all()
+    return render_template("expenses.html", expenses=all_exp, bills=bills, envelopes=envelopes, currency=CURRENCY)
+
+
+@app.post("/bills/pay/<int:bill_id>")
+def pay_bill(bill_id):
+    """
+    One-click bill payment: deduct from BILLS, create Expense, update installments if any.
+    Amount = bill.monthly_amount_cents (current period).
+    """
+    b = db.session.get(FixedBill, bill_id)
+    if not b or not b.is_active:
+        flash("Bill not found or inactive.", "warning")
+        return redirect(url_for("bills"))
+
+    try:
+        # Create expense
+        today = date.today()
+        desc = f"Pay {b.name}"
+        amount_cents = b.monthly_amount_cents
+
+        env = db.session.scalar(db.select(Envelope).where(Envelope.code == "BILLS"))
+        if not env:
+            raise RuntimeError("BILLS envelope missing.")
+
+        exp = Expense(
+            date=today,
+            description=desc,
+            amount_cents=amount_cents,
+            category="Obligations",
+            vendor=None,
+            payment_method="Cash",
+            envelope_id=env.id,
+            bill_id=b.id
+        )
+        db.session.add(exp)
+
+        # Deduct BILLS balance & bump installments if applicable
+        post_envelope_tx("BILLS", -amount_cents, "spend", desc)
+        if b.frequency == "installment" or b.installments_total:
+            b.installments_paid = (b.installments_paid or 0) + 1
+
+        db.session.commit()
+        flash(f"Paid {b.name}.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error paying bill: {e}", "danger")
+
+    return redirect(url_for("bills"))
+
+
     
 @app.route("/fixed-collections")
 def fixed_collections():
@@ -722,8 +834,10 @@ app.register_blueprint(realtime_bp)
 
 
 
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
         ensure_default_envelopes()
+        ensure_default_settings() 
     app.run(debug=os.getenv("FLASK_ENV") == "development")

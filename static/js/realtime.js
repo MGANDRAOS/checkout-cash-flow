@@ -153,45 +153,45 @@
         if (document.getElementById("rtReceiptModal")) return;
         const div = document.createElement("div");
         div.innerHTML = `
-<div class="modal fade" id="rtReceiptModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h6 class="modal-title">Receipt <span id="rtMdlRcptNo">—</span></h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-2 small text-muted" id="rtMdlMeta"></div>
-        <div class="table-responsive">
-          <table class="table table-sm align-middle">
-            <thead class="table-light">
-              <tr>
-                <th>#</th>
-                <th>Item</th>
-                <th>Category</th>
-                <th class="text-end">Qty</th>
-                <th class="text-end">Unit Price</th>
-                <th class="text-end">Line Total</th>
-              </tr>
-            </thead>
-            <tbody id="rtMdlLines">
-              <tr><td colspan="6" class="text-center text-muted">Loading…</td></tr>
-            </tbody>
-            <tfoot class="table-light">
-              <tr>
-                <td colspan="5" class="text-end fw-semibold">Total</td>
-                <td class="text-end fw-bold" id="rtMdlTotal">0</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
-</div>`;
+            <div class="modal fade" id="rtReceiptModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title">Receipt <span id="rtMdlRcptNo">—</span></h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2 small text-muted" id="rtMdlMeta"></div>
+                    <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Item</th>
+                            <th>Category</th>
+                            <th class="text-end">Qty</th>
+                            <th class="text-end">Unit Price</th>
+                            <th class="text-end">Line Total</th>
+                        </tr>
+                        </thead>
+                        <tbody id="rtMdlLines">
+                        <tr><td colspan="6" class="text-center text-muted">Loading…</td></tr>
+                        </tbody>
+                        <tfoot class="table-light">
+                        <tr>
+                            <td colspan="5" class="text-end fw-semibold">Total</td>
+                            <td class="text-end fw-bold" id="rtMdlTotal">0</td>
+                        </tr>
+                        </tfoot>
+                    </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+                </div>
+            </div>
+            </div>`;
         document.body.appendChild(div.firstElementChild);
     }
 

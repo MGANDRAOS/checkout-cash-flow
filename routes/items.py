@@ -49,14 +49,16 @@ def api_items_subgroups():  # ⬅️ NEW
 def api_item_details(code):
     """
     Read-only item profile used by the Items grid "View" action.
-    Configurable via Flask config keys:
-      BUSINESS_DAY_START_HOUR (default 7)
-      BUSINESS_DAY_END_HOUR   (default 5)  # not used in grouping, kept for future
+    Accepts either a rolling window (days) or explicit start_date / end_date range.
+    If start_date & end_date are provided, they override `days`.
     """
     try:
         days = int(request.args.get("days", 30))
     except Exception:
         days = 30
+
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
 
     biz_start_hour = int(current_app.config.get("BUSINESS_DAY_START_HOUR", 7))
     biz_end_hour   = int(current_app.config.get("BUSINESS_DAY_END_HOUR", 5))
@@ -64,10 +66,13 @@ def api_item_details(code):
     data = get_item_details(
         code=str(code),
         days=days,
+        start_date=start_date,
+        end_date=end_date,
         biz_start_hour=biz_start_hour,
         biz_end_hour=biz_end_hour
     )
     return jsonify(data)
+
 
 
 @items_bp.route("/api/items/<code>", methods=["PATCH"])

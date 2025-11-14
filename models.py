@@ -55,6 +55,11 @@ class FixedBill(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
     monthly_amount_cents = db.Column(db.Integer, nullable=False)
+    frequency = db.Column(db.String(16), default="monthly")   # 'monthly'|'weekly'|'installment'|'one_time'
+    due_rule = db.Column(db.String(64))                       # e.g., 'day=25', 'weekday=FRI', 'immediate'
+    installments_total = db.Column(db.Integer)                # e.g., Mario 7
+    installments_paid = db.Column(db.Integer, default=0)
+    notes = db.Column(db.String(255))
     is_active = db.Column(db.Boolean, default=True)
     custom_start_date = db.Column(db.Date)  # optional: override start-of-month
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -80,3 +85,27 @@ class FixedCollection(db.Model):
     collected_on = db.Column(db.Date, nullable=False)
     notes = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# === [ADD new model below FixedCollection] ================================
+class Expense(db.Model):
+    """Every payout: either BILLS (obligations) or SPEND (restock/ops)."""
+    __tablename__ = "expenses"
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False)                           # expense date
+    description = db.Column(db.String(255), nullable=False)
+    amount_cents = db.Column(db.Integer, nullable=False)
+    category = db.Column(db.String(64))                                  # Restock, Cleaning, Maintenance,...
+    vendor = db.Column(db.String(128))
+    payment_method = db.Column(db.String(32))                            # Cash/Transfer/Other
+
+    # Link to envelope + optional fixed bill
+    envelope_id = db.Column(db.Integer, db.ForeignKey("envelopes.id"), nullable=False)
+    bill_id = db.Column(db.Integer, db.ForeignKey("fixed_bills.id"))    # nullable
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    envelope = db.relationship("Envelope", lazy=True)
+    bill = db.relationship("FixedBill", lazy=True)
+# =========================================================================

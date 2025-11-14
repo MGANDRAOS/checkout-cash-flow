@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
+{% set envelopes = envelopes | selectattr("code","in",["BILLS","SPEND"]) | list %}
+
 <div class="container-fluid">
     <h2 class="mb-4">💰 Envelope Balances</h2>
 

@@ -7,19 +7,142 @@
 
   <!-- Top Tabs -->
   <ul class="nav nav-tabs" id="analyticsTabs" role="tablist">
+
     <li class="nav-item" role="presentation">
-      <button class="nav-link active" id="intelligence-tab" data-bs-toggle="tab" data-bs-target="#tab-intelligence"
-        type="button" role="tab" aria-controls="tab-intelligence" aria-selected="true">Intelligence</button>
+      <button class="nav-link active" id="realtime-tab" data-bs-toggle="tab" data-bs-target="#tab-realtime" type="button"
+        role="tab" aria-controls="tab-realtime" aria-selected="false">Realtime</button>
     </li>
     <li class="nav-item" role="presentation">
-      <button class="nav-link" id="realtime-tab" data-bs-toggle="tab" data-bs-target="#tab-realtime" type="button"
-        role="tab" aria-controls="tab-realtime" aria-selected="false">Realtime</button>
+      <button class="nav-link " id="intelligence-tab" data-bs-toggle="tab" data-bs-target="#tab-intelligence"
+        type="button" role="tab" aria-controls="tab-intelligence" aria-selected="true">Intelligence</button>
     </li>
   </ul>
 
   <div class="tab-content" id="analyticsTabsContent">
-    <!-- =============== Intelligence Historical Tab =============== -->
-    <div class="tab-pane fade show active" id="tab-intelligence" role="tabpanel" aria-labelledby="intelligence-tab">
+
+
+
+    <!-- ================= Realtime (Open Business Day) ================= -->
+    <div class="tab-pane fade show active" id="tab-realtime" role="tabpanel" aria-labelledby="realtime-tab">
+      <!-- KPI Row -->
+      <div class="row g-3 mb-4" id="rtKPI">
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center shadow-sm">
+            <div class="card-body py-3">
+              <div class="text-muted small">Total Sales</div>
+              <div class="fw-bold fs-6" id="rtKpiTotalSales">–</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center shadow-sm">
+            <div class="card-body py-3">
+              <div class="text-muted small">Receipts</div>
+              <div class="fw-bold fs-6" id="rtKpiReceipts">–</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center shadow-sm">
+            <div class="card-body py-3">
+              <div class="text-muted small">Avg Ticket</div>
+              <div class="fw-bold fs-6" id="rtKpiAvgTicket">–</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center shadow-sm">
+            <div class="card-body py-3">
+              <div class="text-muted small">Items Sold</div>
+              <div class="fw-bold fs-6" id="rtKpiItemsSold">–</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center shadow-sm">
+            <div class="card-body py-3">
+              <div class="text-muted small">Peak Hour</div>
+              <div class="fw-bold fs-6" id="rtKpiPeakHour">–</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center shadow-sm">
+            <div class="card-body py-3">
+              <div class="text-muted small">Growth vs Yesterday</div>
+              <div class="fw-bold fs-6" id="rtKpiGrowthYesterday">–</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts: Hourly, Cumulative, Category -->
+      <div class="row g-3 mb-4">
+        <div class="col-lg-6">
+          <div class="card shadow-sm">
+            <div class="card-header fw-semibold">
+              <i class="bi bi-graph-up me-1"></i>Hourly Sales Trend (Live)
+            </div>
+            <div class="card-body">
+              <canvas id="rtChartHourly" height="120"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card shadow-sm">
+            <div class="card-header fw-semibold">
+              <i class="bi bi-graph-up-arrow me-1"></i>Cumulative Sales (Live)
+            </div>
+            <div class="card-body">
+              <canvas id="rtChartCumulative" height="120"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header fw-semibold">
+          <i class="bi bi-diagram-3 me-1"></i>Sales by Category (Live)
+        </div>
+        <div class="card-body">
+          <canvas id="rtChartCategory" height="140"></canvas>
+        </div>
+      </div>
+
+      <!-- Tables: Items Sold + Receipts -->
+      <div class="row g-3">
+        <div class="col-lg-8">
+          <div class="card shadow-sm h-100">
+            <div class="card-header fw-semibold">
+              <i class="bi bi-box-seam me-1"></i>Items Sold (Live)
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table id="rtTblItemsSold" class="table table-striped table-hover align-middle mb-0 w-100"></table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="card shadow-sm h-100">
+            <div class="card-header fw-semibold">
+              <i class="bi bi-receipt me-1"></i>Receipts (Today)
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table id="rtTblReceipts" class="table table-sm mb-0 align-middle"></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <!-- ================= END Realtime Tab ================= -->
+
+        <!-- =============== Intelligence Historical Tab =============== -->
+    <div class="tab-pane fade " id="tab-intelligence" role="tabpanel" aria-labelledby="intelligence-tab">
       <!-- KPI Row -->
       <div class="row g-3">
         <div class="col-md-3">
@@ -258,165 +381,10 @@
     </div>
     <!-- ================= END Historical Tab ================= -->
 
-
-    <!-- ================= Realtime (Open Business Day) ================= -->
-    <div class="tab-pane fade" id="tab-realtime" role="tabpanel" aria-labelledby="realtime-tab">
-      <!-- Header -->
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h5 class="fw-semibold mb-0">
-          <i class="bi bi-broadcast text-success me-2"></i>Realtime POS Overview
-        </h5>
-
-      </div>
-
-      <!-- KPI Row -->
-      <div class="row g-3 mb-4" id="rtKPI">
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Total Sales</div>
-              <div class="fw-bold fs-6" id="rtKpiTotalSales">–</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Receipts</div>
-              <div class="fw-bold fs-6" id="rtKpiReceipts">–</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Avg Ticket</div>
-              <div class="fw-bold fs-6" id="rtKpiAvgTicket">–</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Items Sold</div>
-              <div class="fw-bold fs-6" id="rtKpiItemsSold">–</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Peak Hour</div>
-              <div class="fw-bold fs-6" id="rtKpiPeakHour">–</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Growth vs Yesterday</div>
-              <div class="fw-bold fs-6" id="rtKpiGrowthYesterday">–</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Charts: Hourly, Cumulative, Category -->
-      <div class="row g-3 mb-4">
-        <div class="col-lg-6">
-          <div class="card shadow-sm">
-            <div class="card-header fw-semibold">
-              <i class="bi bi-graph-up me-1"></i>Hourly Sales Trend (Live)
-            </div>
-            <div class="card-body">
-              <canvas id="rtChartHourly" height="120"></canvas>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-6">
-          <div class="card shadow-sm">
-            <div class="card-header fw-semibold">
-              <i class="bi bi-graph-up-arrow me-1"></i>Cumulative Sales (Live)
-            </div>
-            <div class="card-body">
-              <canvas id="rtChartCumulative" height="120"></canvas>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card shadow-sm mb-4">
-        <div class="card-header fw-semibold">
-          <i class="bi bi-diagram-3 me-1"></i>Sales by Category (Live)
-        </div>
-        <div class="card-body">
-          <canvas id="rtChartCategory" height="140"></canvas>
-        </div>
-      </div>
-
-      <!-- Tables: Items Sold + Receipts -->
-      <div class="row g-3">
-        <div class="col-lg-8">
-          <div class="card shadow-sm h-100">
-            <div class="card-header fw-semibold">
-              <i class="bi bi-box-seam me-1"></i>Items Sold (Live)
-            </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table id="rtTblItemsSold" class="table table-striped table-hover align-middle mb-0 w-100"></table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="col-lg-4">
-          <div class="card shadow-sm h-100">
-            <div class="card-header fw-semibold">
-              <i class="bi bi-receipt me-1"></i>Receipts (Today)
-            </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table id="rtTblReceipts" class="table table-sm mb-0 align-middle"></table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-    <!-- ================= END Realtime Tab ================= -->
-
   </div>
 </div>
-<style>
-  /* ensure inactive tabs truly hide */
-  .tab-pane {
-    display: none;
-    opacity: 0;
-    transition: opacity 0.25s ease-in-out;
-  }
 
-  .tab-pane.active.show {
-    display: block;
-    opacity: 1;
-  }
-</style>
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    // force Bootstrap to re-initialize tab behavior
-    document.querySelectorAll('#analyticsTabs button[data-bs-toggle="tab"]').forEach(button => {
-      button.addEventListener('click', event => {
-        const targetId = button.getAttribute('data-bs-target');
-        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('show', 'active'));
-        document.querySelectorAll('#analyticsTabs button').forEach(btn => btn.classList.remove('active'));
 
-        button.classList.add('active');
-        const target = document.querySelector(targetId);
-        if (target) target.classList.add('show', 'active');
-      });
-    });
-  });
-</script>
 
 
 
