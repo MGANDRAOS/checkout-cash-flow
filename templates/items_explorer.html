@@ -4,174 +4,310 @@
 {% block content %}
 <div class="pt-4">
 
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <div>
-      <h3 class="mb-0">Items Explorer</h3>
-      <div class="text-secondary small">
-        Search items and quickly understand activity: average demand, last sold time, and trend.
-      </div>
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h3 class="mb-0">Items Explorer</h3>
+            <div class="text-secondary small">
+                Search items and quickly understand activity: average demand, last sold time, and trend.
+            </div>
+        </div>
+
+        <a href="/items" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-grid"></i> Back to Items
+        </a>
     </div>
 
-    <a href="/items" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-grid"></i> Back to Items
-    </a>
-  </div>
+    <!-- Search + Filters -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
 
-  <!-- Search + Filters -->
-  <div class="card shadow-sm mb-3">
-    <div class="card-body">
-      <div class="row g-3 align-items-end">
-
-        <div class="col-12 col-lg-6">
-          <label class="form-label mb-1">
-            Search
-            <i class="bi bi-info-circle ms-1 text-secondary"
-               data-bs-toggle="tooltip"
-               data-bs-title="Search by item title or item code.
+                <div class="col-12 col-lg-6">
+                    <label class="form-label mb-1">
+                        Search
+                        <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Search by item title or item code.
 Example: 'water' or '500' or an exact code.
 The table updates when you press Search."></i>
-          </label>
-          <input type="text" class="form-control" id="ix-search"
-                 placeholder="Search by item name or code...">
-          <div class="form-text">
-            This finds items by name/code and ranks them by recent activity.
-          </div>
-        </div>
+                    </label>
+                    <input type="text" class="form-control" id="ix-search" placeholder="Search by item name or code...">
+                    <div class="form-text">
+                        This finds items by name/code and ranks them by recent activity.
+                    </div>
+                </div>
 
-        <div class="col-12 col-lg-2">
-          <label class="form-label mb-1">
-            Sold in last
-            <i class="bi bi-info-circle ms-1 text-secondary"
-               data-bs-toggle="tooltip"
-               data-bs-title="Lookback window used to compute average/day, last sold, and trend.
+                <div class="col-12 col-lg-2">
+                    <label class="form-label mb-1">
+                        Sold in last
+                        <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Lookback window used to compute average/day, last sold, and trend.
 30 days is a good default. 7 days is more reactive. 90 days shows long-term demand."></i>
-          </label>
-          <select class="form-select" id="ix-days">
-            <option value="7">7 days</option>
-            <option value="30" selected>30 days</option>
-            <option value="90">90 days</option>
-          </select>
-          <div class="form-text">Controls the analysis window.</div>
-        </div>
+                    </label>
+                    <select class="form-select" id="ix-days">
+                        <option value="7">7 days</option>
+                        <option value="30" selected>30 days</option>
+                        <option value="90">90 days</option>
+                    </select>
+                    <div class="form-text">Controls the analysis window.</div>
+                </div>
 
-        <div class="col-12 col-lg-2">
-          <label class="form-label mb-1">
-            Trend
-            <i class="bi bi-info-circle ms-1 text-secondary"
-               data-bs-toggle="tooltip"
-               data-bs-title="Trend compares the latest business day vs the previous business day in the same window.
+                <div class="col-12 col-lg-2">
+                    <label class="form-label mb-1">
+                        Trend
+                        <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Trend compares the latest business day vs the previous business day in the same window.
 Up means demand increased, Down decreased, Flat means no meaningful change."></i>
-          </label>
-          <select class="form-select" id="ix-trend">
-            <option value="">All</option>
-            <option value="up">Rising</option>
-            <option value="down">Falling</option>
-            <option value="flat">Flat</option>
-          </select>
-          <div class="form-text">Latest day vs previous day.</div>
-        </div>
+                    </label>
+                    <select class="form-select" id="ix-trend">
+                        <option value="">All</option>
+                        <option value="up">Rising</option>
+                        <option value="down">Falling</option>
+                        <option value="flat">Flat</option>
+                    </select>
+                    <div class="form-text">Latest day vs previous day.</div>
+                </div>
 
-        <div class="col-12 col-lg-2">
-          <button class="btn btn-primary w-100" id="ix-run">
-            <i class="bi bi-search"></i> Search
-          </button>
-          <div class="form-text text-center mt-1" id="ix-status"></div>
-        </div>
+                <div class="col-12 col-lg-2">
+                    <button class="btn btn-primary w-100" id="ix-run">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                    <div class="form-text text-center mt-1" id="ix-status"></div>
+                </div>
 
-        <div class="col-12">
-          <button class="btn btn-link px-0" type="button" data-bs-toggle="collapse" data-bs-target="#ix-filters">
-            <i class="bi bi-funnel"></i> More filters
-          </button>
-        </div>
+                <div class="col-12">
+                    <button class="btn btn-link px-0" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#ix-filters">
+                        <i class="bi bi-funnel"></i> More filters
+                    </button>
+                </div>
 
-        <div class="col-12 collapse" id="ix-filters">
-          <div class="row g-3">
-            <div class="col-12 col-lg-4">
-              <label class="form-label mb-1">
-                Subgroup
-                <i class="bi bi-info-circle ms-1 text-secondary"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="Filters results to a specific subgroup (category).
+                <div class="col-12 collapse" id="ix-filters">
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-4">
+                            <label class="form-label mb-1">
+                                Subgroup
+                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Filters results to a specific subgroup (category).
 This helps when you want to review only 'Drinks' or 'Snacks' for example."></i>
-              </label>
-              <input type="text" class="form-control" id="ix-subgroup" placeholder="e.g. Drinks">
-              <div class="form-text">
-                Optional. Leave empty to include all subgroups.
-              </div>
-            </div>
+                            </label>
+                            <input type="text" class="form-control" id="ix-subgroup" placeholder="e.g. Drinks">
+                            <div class="form-text">
+                                Optional. Leave empty to include all subgroups.
+                            </div>
+                        </div>
 
-            <div class="col-12 col-lg-4">
-              <label class="form-label mb-1">
-                Limit
-                <i class="bi bi-info-circle ms-1 text-secondary"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="Maximum number of rows returned.
+                        <div class="col-12 col-lg-4">
+                            <label class="form-label mb-1">
+                                Limit
+                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Maximum number of rows returned.
 Higher limits show more items but can be slower. 500 is a safe default."></i>
-              </label>
-              <input type="number" class="form-control" id="ix-limit" value="500" min="50" max="2000">
-              <div class="form-text">
-                Safety clamp exists server-side to prevent abuse.
-              </div>
-            </div>
+                            </label>
+                            <input type="number" class="form-control" id="ix-limit" value="500" min="50" max="2000">
+                            <div class="form-text">
+                                Safety clamp exists server-side to prevent abuse.
+                            </div>
+                        </div>
 
-            <div class="col-12 col-lg-4 d-flex align-items-end">
-              <button class="btn btn-outline-secondary w-100" id="ix-reset">
-                <i class="bi bi-arrow-counterclockwise"></i> Reset
-              </button>
+                        <div class="col-12 col-lg-4 d-flex align-items-end">
+                            <button class="btn btn-outline-secondary w-100" id="ix-reset">
+                                <i class="bi bi-arrow-counterclockwise"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
             </div>
-          </div>
         </div>
-
-      </div>
     </div>
-  </div>
 
-  <!-- Results -->
-  <div class="card shadow-sm">
-    <div class="card-body">
-      <div class="d-flex align-items-center justify-content-between mb-2">
-        <h6 class="mb-0">
-          Results
-          <i class="bi bi-info-circle ms-1 text-secondary"
-             data-bs-toggle="tooltip"
-             data-bs-title="Each row summarizes the item's activity within the selected lookback window.
+    <!-- Results -->
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <h6 class="mb-0">
+                    Results
+                    <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Each row summarizes the item's activity within the selected lookback window.
 Avg/day is a baseline, Last sold builds trust, Trend is a quick signal."></i>
-        </h6>
-        <span class="small text-secondary" id="ix-count"></span>
-      </div>
+                </h6>
+                <span class="small text-secondary" id="ix-count"></span>
+            </div>
 
-      <div class="table-responsive">
-        <table class="table table-sm table-striped align-middle" id="ix-table" style="width:100%">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Subgroup</th>
-              <th class="text-end">Avg / day</th>
-              <th>Last sold</th>
-              <th>Trend</th>
-              <th class="text-end">Action</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle" id="ix-table" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Subgroup</th>
+                            <th class="text-end">Avg / day</th>
+                            <th>Last sold</th>
+                            <th>Trend</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
 
-      <div class="form-text">
-        Avg/day is computed from total quantity in the window divided by number of days in the window.
-Trend compares the latest business day vs the previous business day.
-      </div>
+            <div class="form-text">
+                Avg/day is computed from total quantity in the window divided by number of days in the window.
+                Trend compares the latest business day vs the previous business day.
+            </div>
+        </div>
     </div>
-  </div>
 
 </div>
+
+<!-- Item 360 Drawer (Right Side) -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="item360Drawer" aria-labelledby="item360DrawerLabel">
+    <div class="offcanvas-header">
+        <div>
+            <h5 class="offcanvas-title" id="item360DrawerLabel"></h5>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+
+    <div class="offcanvas-body">
+        <div class="mb-3">
+            <div class="fw-semibold" id="drawerItemTitle">—</div>
+            <div class="text-muted small" id="drawerSubgroup">—</div>
+            <div class="text-muted small" id="drawerItemCode">—</div>
+
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-12">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="fw-semibold">
+                        Last sold
+                        <span class="ms-1 text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Shows the last timestamp this item appeared in any receipt in your selected window.
+Useful to quickly spot items that stopped moving recently.">ⓘ</span>
+                    </div>
+                    <div id="drawerLastSold" class="fw-bold">—</div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="fw-semibold">
+                        Total qty (range)
+                        <span class="ms-1 text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Sum of quantities sold for this item across the selected date window.
+Use it to understand total movement, not just daily spikes.">ⓘ</span>
+                    </div>
+                    <div id="drawerTotalQty" class="fw-bold">—</div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="fw-semibold">
+                        Avg/day
+                        <span class="ms-1 text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Total qty divided by number of days in the current window.
+This is your baseline demand rate (great for re-order thinking).">ⓘ</span>
+                    </div>
+                    <div id="drawerAvgPerDay" class="fw-bold">—</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="fw-semibold">
+                        Last 14 days trend
+                        <span class="ms-1 text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Daily quantities for the last 14 business dates (0 means no sales that day).
+Use it to spot patterns like weekends, paydays, or sudden drop-offs.">ⓘ</span>
+                    </div>
+                </div>
+                <!-- templates/items_explorer.html -->
+
+                <!-- ✅ Item 360 Drawer: Invoices (Last 10) -->
+                <div class="card mt-3">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <strong>Invoices (Last 10)</strong>
+
+                            <!-- Info bubble (2–3 lines requirement) -->
+                            <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip" data-bs-placement="top"
+                                title="Shows the 10 most recent receipts where this item appears within the selected window. Useful for quick audits and recent activity checks. Full invoice browsing will be added in the upcoming Invoices module."></i>
+                        </div>
+
+                        <!-- Disabled for now (no invoices module yet, no 404, no lies) -->
+                        <button id="drawerInvoicesSeeAll" class="btn btn-sm btn-outline-secondary" type="button"
+                            disabled data-bs-toggle="tooltip" data-bs-placement="top"
+                            title="Coming next: Invoices module (browse full invoice history).">
+                            <i class="bi bi-arrow-right"></i> See all
+                        </button>
+                    </div>
+
+                    <!-- templates/items_explorer.html -->
+
+                    <!-- ✅ Momentum KPIs -->
+                    <div class="row g-2 mt-3">
+                        <div class="col-6">
+                            <div class="border rounded p-2">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div class="small text-secondary">
+                                        Days since last sold
+                                        <i class="bi bi-info-circle ms-1" data-bs-toggle="tooltip"
+                                            data-bs-placement="top"
+                                            title="How many business days since this item last appeared in any receipt. High number means the item is going cold (dead stock risk). Uses the same business-day logic as the rest of the app."></i>
+                                    </div>
+                                </div>
+                                <div class="fs-5 fw-semibold" id="drawerDaysSinceSold">—</div>
+                                <div class="small text-secondary" id="drawerLastBizDateHint">Last biz date: —</div>
+                            </div>
+                        </div>
+
+                        <div class="col-6">
+                            <div class="border rounded p-2">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div class="small text-secondary">
+                                        Peak hour (window)
+                                        <i class="bi bi-info-circle ms-1" data-bs-toggle="tooltip"
+                                            data-bs-placement="top"
+                                            title="The hour where this item sells the most (by qty) in the selected window. Useful for restock timing and staff coverage. It’s a pattern signal, not a guarantee."></i>
+                                    </div>
+                                </div>
+                                <div class="fs-5 fw-semibold" id="drawerPeakHour">—</div>
+                                <div class="small text-secondary" id="drawerPeakHourHint">Qty in peak hour: —</div>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div class="card-body">
+                        <div id="drawerInvoicesStatus" class="small text-secondary mb-2"></div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0" id="drawerInvoicesTable">
+                                <thead>
+                                    <tr>
+                                        <th style="white-space:nowrap;">Date/Time</th>
+                                        <th style="white-space:nowrap;">Receipt ID</th>
+                                        <th class="text-end" style="white-space:nowrap;">Qty</th>
+                                        <th class="text-end" style="white-space:nowrap;">Receipt Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="drawerInvoicesTbody">
+                                    <!-- rows injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="position-relative" style="height:140px;">
+                    <canvas id="itemSparkline"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 <!-- Page module -->
 <script src="{{ url_for('static', filename='js/items_explorer.js') }}"></script>
 <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    if (window.ItemsExplorer && typeof window.ItemsExplorer.init === "function") {
-      window.ItemsExplorer.init();
-    }
-  });
+    document.addEventListener("DOMContentLoaded", function () {
+        if (window.ItemsExplorer && typeof window.ItemsExplorer.init === "function") {
+            window.ItemsExplorer.init();
+        }
+    });
 </script>
 {% endblock %}

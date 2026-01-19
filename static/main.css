@@ -726,3 +726,9 @@ h2.h4 {
 .tab-pane.active.show {
   display: block !important;
 }
+
+
+/* Make Item 360 drawer usable on desktop */
+#item360Drawer.offcanvas-end {
+  width: min(1200px, 60vw);
+}

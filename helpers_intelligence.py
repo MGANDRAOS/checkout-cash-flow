@@ -4,7 +4,7 @@
 
 import os
 import pyodbc
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Dict, List, Tuple, Optional
 
 # ---------- Connection ----------
@@ -38,6 +38,7 @@ def _conn_str() -> str:
 
 def _connect():
     return pyodbc.connect(_conn_str())
+
 
 def execute_sql_readonly(sql_query: str):
     """
@@ -1429,6 +1430,7 @@ SELECT TOP (?)
   a.item_code,
   a.item_title,
   a.subgroup_name,
+  a.total_qty,
   CONVERT(varchar(19), a.last_sold_dt, 120) AS last_sold,
   CAST(a.total_qty AS float) / NULLIF(?, 0) AS avg_per_day,
   a.qty_last_day,
@@ -1494,6 +1496,7 @@ ORDER BY avg_per_day DESC, a.last_sold_dt DESC;
               "subgroup": r.subgroup_name,
               "avg_per_day": round(float(r.avg_per_day or 0.0), 2),
               "last_sold": r.last_sold or "",
+              "total_qty": float(r.total_qty or 0.0),
               "trend": t
           })
 
@@ -1501,3 +1504,284 @@ ORDER BY avg_per_day DESC, a.last_sold_dt DESC;
        
         
 
+def get_item_daily_series(item_code: str, days: int = 30, lookback: int = 14) -> List[Dict]:
+    """
+    Returns the last <lookback> business dates (BizDate) and daily qty for a single item.
+    BizDate is defined as: CAST(DATEADD(HOUR, -7, RCPT_DATE) AS date)
+
+    Bullet-proof rules:
+    - We compare item_code as NVARCHAR to avoid any int/arabic conversion issues.
+    - We generate a full date spine (last 14 BizDates), then LEFT JOIN sales (fills missing days with 0).
+    """
+
+    # Safety clamps (avoid insane requests)
+    lookback = max(7, min(int(lookback or 14), 60))
+    days = max(1, min(int(days or 30), 366))
+
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+    ),
+    MaxBiz AS (
+      SELECT MAX(BizDate) AS MaxBizDate FROM R
+    ),
+    -- Date spine: last <lookback> biz dates
+    Dates AS (
+      SELECT m.MaxBizDate AS BizDate, 0 AS n
+      FROM MaxBiz m
+      UNION ALL
+      SELECT DATEADD(DAY, -1, d.BizDate) AS BizDate, d.n + 1
+      FROM Dates d
+      WHERE d.n + 1 < ?
+    ),
+    -- Sales for that item within the requested window (days) but we only output last <lookback> from the spine
+    Sales AS (
+      SELECT
+        rr.BizDate,
+        SUM(c.ITM_QUANTITY) AS qty
+      FROM R rr
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = rr.RCPT_ID
+      JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+      CROSS JOIN MaxBiz m
+      WHERE rr.BizDate >= DATEADD(DAY, -? + 1, m.MaxBizDate)
+        AND rr.BizDate <= m.MaxBizDate
+        -- Bullet-proof: compare item codes as strings
+        AND CAST(i.ITM_CODE AS nvarchar(50)) = ?
+      GROUP BY rr.BizDate
+    )
+    SELECT
+      CONVERT(varchar(10), d.BizDate, 120) AS biz_date,
+      ISNULL(s.qty, 0) AS qty
+    FROM Dates d
+    LEFT JOIN Sales s ON s.BizDate = d.BizDate
+    ORDER BY d.BizDate
+    OPTION (MAXRECURSION 100);
+    """
+
+    params = [lookback, days, str(item_code)]
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    return [{"biz_date": r.biz_date, "qty": float(r.qty or 0)} for r in rows]
+
+# helpers_intelligence.py
+
+# ✅ IMPORTANT FIX (if not already there):
+# Your previous errors showed timedelta missing.
+# Make sure timedelta is imported once at the top.
+from datetime import datetime, timedelta  # <-- add timedelta if missing
+
+
+def get_item_last_invoices(item_code: str, days: int = 30, limit: int = 10):
+    """
+    Returns the last N receipts where this item appears (within the selected window).
+
+    We return:
+      - biz_dt      : receipt datetime formatted as YYYY-MM-DD HH:MM:SS
+      - rcpt_id     : receipt id
+      - item_qty    : SUM(ITM_QUANTITY) for this item within that receipt (grouped by RCPT_ID)
+      - rcpt_amount : receipt total amount from HISTORIC_RECEIPT
+
+    Notes:
+    - "days" means business days window (based on BizDate = RCPT_DATE shifted -7h).
+    - We never cast subgroup or ITM_CODE to int (avoids PAYMENT / Arabic conversion errors).
+    """
+    safe_days = max(1, min(int(days or 30), 3650))     # clamp 1 .. 10 years
+    safe_limit = max(1, min(int(limit or 10), 100))    # clamp 1 .. 100
+    safe_item_code = (str(item_code or "")).strip()
+
+    if not safe_item_code:
+        return []
+
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+    ),
+    MaxBiz AS (
+      SELECT MAX(BizDate) AS MaxBizDate FROM R
+    ),
+    Windowed AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        r.BizDate
+      FROM R r
+      CROSS JOIN MaxBiz m
+      WHERE r.BizDate >= DATEADD(DAY, -? + 1, m.MaxBizDate)
+        AND r.BizDate <= m.MaxBizDate
+    ),
+    ItemInReceipts AS (
+      SELECT
+        w.RCPT_ID,
+        MAX(w.RCPT_DATE) AS rcpt_date,
+        SUM(COALESCE(c.ITM_QUANTITY, 0)) AS item_qty
+      FROM Windowed w
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = w.RCPT_ID
+      WHERE CAST(c.ITM_CODE AS nvarchar(50)) = ?
+      GROUP BY w.RCPT_ID
+    )
+    SELECT TOP (?)
+      CONVERT(varchar(19), i.rcpt_date, 120) AS biz_dt,
+      i.RCPT_ID                              AS rcpt_id,
+      CAST(i.item_qty AS float)              AS item_qty,
+      CAST(r.RCPT_AMOUNT AS float)           AS rcpt_amount
+    FROM ItemInReceipts i
+    JOIN dbo.HISTORIC_RECEIPT r ON r.RCPT_ID = i.RCPT_ID
+    ORDER BY i.rcpt_date DESC;
+    """
+
+    params = [safe_days, safe_item_code, safe_limit]
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    # ✅ Return dicts (safe for jsonify)
+    result = []
+    for r in rows:
+        result.append({
+            "biz_dt": r.biz_dt,
+            "rcpt_id": r.rcpt_id,
+            "item_qty": float(r.item_qty or 0.0),
+            "rcpt_amount": float(r.rcpt_amount or 0.0),
+        })
+    return result
+
+
+# helpers_intelligence.py
+
+def get_item_momentum_kpis(item_code: str, days: int = 30):
+    """
+    Momentum KPIs for Item 360 drawer:
+      1) days_since_last_sold: business days since last sale in the selected window
+      2) peak_hour: hour (0-23) where item qty is highest in the selected window
+
+    Important:
+    - Uses BizDate = CAST(DATEADD(HOUR, -7, RCPT_DATE) AS date)
+    - Never forces ITM_CODE or subgroup to int (avoids PAYMENT / Arabic conversion errors)
+    """
+    safe_days = max(1, min(int(days or 30), 3650))
+    safe_item_code = (str(item_code or "")).strip()
+    if not safe_item_code:
+        return {
+            "item_code": safe_item_code,
+            "last_biz_date": None,
+            "days_since_last_sold": None,
+            "peak_hour": None,
+            "peak_hour_qty": None,
+        }
+
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+    ),
+    MaxBiz AS (
+      SELECT MAX(BizDate) AS MaxBizDate FROM R
+    ),
+    Windowed AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        r.BizDate
+      FROM R r
+      CROSS JOIN MaxBiz m
+      WHERE r.BizDate >= DATEADD(DAY, -? + 1, m.MaxBizDate)
+        AND r.BizDate <= m.MaxBizDate
+    ),
+    Base AS (
+      SELECT
+        w.RCPT_ID,
+        w.RCPT_DATE,
+        w.BizDate,
+        COALESCE(c.ITM_QUANTITY, 0) AS qty
+      FROM Windowed w
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = w.RCPT_ID
+      WHERE CAST(c.ITM_CODE AS nvarchar(50)) = ?
+    ),
+    LastSold AS (
+      SELECT MAX(BizDate) AS last_biz_date
+      FROM Base
+      WHERE qty > 0
+    ),
+    HourAgg AS (
+      SELECT
+        DATEPART(HOUR, b.RCPT_DATE) AS sale_hour,
+        SUM(b.qty) AS hour_qty
+      FROM Base b
+      GROUP BY DATEPART(HOUR, b.RCPT_DATE)
+    ),
+    PeakHour AS (
+      SELECT TOP (1)
+        sale_hour,
+        hour_qty
+      FROM HourAgg
+      ORDER BY hour_qty DESC, sale_hour ASC
+    )
+    SELECT
+      CONVERT(varchar(10), ls.last_biz_date, 120) AS last_biz_date,
+      CASE
+        WHEN ls.last_biz_date IS NULL THEN NULL
+        ELSE DATEDIFF(DAY, ls.last_biz_date, mb.MaxBizDate)
+      END AS days_since_last_sold,
+      ph.sale_hour AS peak_hour,
+      ph.hour_qty  AS peak_hour_qty
+    FROM MaxBiz mb
+    CROSS JOIN LastSold ls
+    OUTER APPLY (SELECT sale_hour, hour_qty FROM PeakHour) ph;
+    """
+
+    params = [safe_days, safe_item_code]
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, params)
+        row = cur.fetchone()
+
+    if not row:
+        return {
+            "item_code": safe_item_code,
+            "last_biz_date": None,
+            "days_since_last_sold": None,
+            "peak_hour": None,
+            "peak_hour_qty": None,
+        }
+
+    # Defensive parsing: avoid NaN / type issues
+    last_biz_date = row.last_biz_date if row.last_biz_date else None
+    days_since = int(row.days_since_last_sold) if row.days_since_last_sold is not None else None
+    peak_hour = int(row.peak_hour) if row.peak_hour is not None else None
+    peak_qty = float(row.peak_hour_qty) if row.peak_hour_qty is not None else None
+
+    # Clamp peak_hour into range if weird source data exists
+    if peak_hour is not None and (peak_hour < 0 or peak_hour > 23):
+        peak_hour = None
+
+    return {
+        "item_code": safe_item_code,
+        "last_biz_date": last_biz_date,
+        "days_since_last_sold": days_since,
+        "peak_hour": peak_hour,
+        "peak_hour_qty": peak_qty,
+    }
