@@ -4,7 +4,7 @@
 
 import os
 import pyodbc
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 
 # ---------- Connection ----------
@@ -1067,4 +1067,437 @@ def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: 
             else:
                 quiet_rows.append(rec)
         return {"top": top_rows, "quiet": quiet_rows}
+
+
+
+
+# -------------------------------------------------------------------
+# Dynamic Trends helpers (Item Trends report)
+# -------------------------------------------------------------------
+
+def get_subgroups_list() -> List[Dict]:
+    """
+    Returns a clean list of subgroups for dropdowns:
+      [{ "id": <int>, "name": <str> }, ...]
+    """
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute("""
+            SET NOCOUNT ON;
+            SELECT
+              CAST(SubGrp_ID AS int)   AS id,
+              CAST(SubGrp_Name AS nvarchar(200)) AS name
+            FROM dbo.SUBGROUPS
+            WHERE SubGrp_Name IS NOT NULL AND LTRIM(RTRIM(SubGrp_Name)) <> N''
+            ORDER BY SubGrp_Name ASC;
+        """)
+        rows = cur.fetchall()
+        return [{"id": int(r.id), "name": str(r.name)} for r in rows]
+
+
+def get_item_trends(
+    start_date,
+    end_date,
+    bucket: str,
+    top_n: int,
+    rank_by: str = "total",
+    subgroup_label: Optional[str] = None,
+    item_codes: Optional[List[str]] = None,
+    output_format: str = "long",
+) -> List[Dict]:
+    """
+    Fully dynamic Item Trends report.
+
+    - Uses business-day shift (-7h) consistent with your intelligence logic.
+    - Ranks top N items either by:
+        rank_by="total"       => total qty over entire range
+        rank_by="last_bucket" => qty in the last bucket within range
+    - Optional subgroup filter uses your proven subgroup resolution logic.
+    - Optional item_codes limits the universe further.
+
+    Returns (long format):
+      [{bucket_start, item_code, item, subgroup, qty}, ...]
+    """
+
+    # ---------- Safety clamps ----------
+    top_n = max(1, min(int(top_n), 200))
+    bucket = (bucket or "").strip().lower()
+    rank_by = (rank_by or "total").strip().lower()
+    output_format = (output_format or "long").strip().lower()
+
+    if bucket not in ("daily", "weekly", "monthly"):
+        raise ValueError("bucket must be daily|weekly|monthly")
+    if rank_by not in ("total", "last_bucket"):
+        raise ValueError("rank_by must be total|last_bucket")
+
+    # NOTE: wide format can be added later. For now we return long always.
+    # Keeping parameter now avoids breaking the API later.
+    _ = output_format
+
+    # ---------- Bucket expression (SAFE: whitelist only) ----------
+    # We compute BizDate = CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date)
+    # Then bucket_start is derived from BizDate.
+    if bucket == "daily":
+        bucket_expr = "BizDate"
+    elif bucket == "weekly":
+        # Monday-based week start, using the same stable Monday anchor you used in get_dow_profile()
+        bucket_expr = "DATEADD(DAY, -(((DATEDIFF(DAY, '20000103', BizDate) % 7) + 7) % 7), BizDate)"
+    else:  # monthly
+        bucket_expr = "DATEFROMPARTS(YEAR(BizDate), MONTH(BizDate), 1)"
+
+    # ---------- Optional IN (...) for item codes ----------
+    item_code_filter_sql = ""
+    item_code_params: List = []
+    if item_codes:
+        # pyodbc needs ? placeholders; build safely
+        placeholders = ",".join(["?"] * len(item_codes))
+        item_code_filter_sql = f" AND CAST(c.ITM_CODE AS nvarchar(128)) IN ({placeholders}) "
+        item_code_params.extend(item_codes)
+
+    # ---------- Optional subgroup filter ----------
+    subgroup_filter_sql = ""
+    subgroup_params: List = []
+    if subgroup_label and str(subgroup_label).strip():
+        subgroup_filter_sql = " AND UPPER(LTRIM(RTRIM(subgroup_label))) = UPPER(LTRIM(RTRIM(?))) "
+        subgroup_params.append(subgroup_label.strip())
+
+    # ---------- Date window ----------
+    # Inclusive dates: [start_date 00:00 .. end_date+1 00:00)
+    start_dt = datetime.combine(start_date, datetime.min.time())
+    end_dt_exclusive = datetime.combine(end_date, datetime.min.time()) + timedelta(days=1)
+
+    with _connect() as cn:
+        cur = cn.cursor()
+
+        # IMPORTANT: We do a two-phase query:
+        #  1) Build a labeled line dataset with BizDate + subgroup resolution + item labels
+        #  2) Pick TOP N items based on rank_by
+        #  3) Return bucketed trends for those TOP N items
+        #
+        # This keeps performance sane and prevents “everything in DB” results.
+
+        sql = f"""
+            SET NOCOUNT ON;
+
+            WITH Receipts AS (
+              SELECT
+                r.RCPT_ID,
+                r.RCPT_DATE,
+                CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
+              FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
+            ),
+
+            Lines AS (
+              SELECT
+                rc.BizDate,
+
+                -- stable item code as text (safe for mixed numeric types)
+                CAST(c.ITM_CODE AS nvarchar(128)) AS item_code,
+
+                -- item display label (title if present else code)
+                CAST(
+                  CASE
+                    WHEN i.ITM_TITLE IS NOT NULL AND LTRIM(RTRIM(i.ITM_TITLE)) <> N'' THEN i.ITM_TITLE
+                    ELSE CAST(c.ITM_CODE AS nvarchar(128))
+                  END
+                AS nvarchar(128)) AS item_label,
+
+                -- subgroup resolution logic (same pattern you already use)
+                COALESCE(
+                  s_id.SubGrp_Name,
+                  s_nm.SubGrp_Name,
+                  NULLIF(x.SubGrpText, N''),
+                  N'Unknown'
+                ) AS subgroup_label,
+
+                CAST(c.ITM_QUANTITY AS float) AS qty
+
+              FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+              JOIN Receipts rc ON rc.RCPT_ID = c.RCPT_ID
+              LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+
+              CROSS APPLY (
+                SELECT
+                  CASE
+                    WHEN i.ITM_SUBGROUP IS NULL THEN NULL
+                    WHEN LTRIM(RTRIM(i.ITM_SUBGROUP)) = N'' THEN NULL
+                    WHEN i.ITM_SUBGROUP NOT LIKE N'%[^0-9]%' THEN CONVERT(int, i.ITM_SUBGROUP)
+                    ELSE NULL
+                  END AS SubGrpID,
+                  LTRIM(RTRIM(i.ITM_SUBGROUP)) AS SubGrpText
+              ) AS x
+
+              LEFT JOIN dbo.SUBGROUPS AS s_id
+                ON s_id.SubGrp_ID = x.SubGrpID
+              LEFT JOIN dbo.SUBGROUPS AS s_nm
+                ON LTRIM(RTRIM(s_nm.SubGrp_Name)) = x.SubGrpText
+
+              WHERE 1=1
+              {item_code_filter_sql}
+            ),
+
+            Filtered AS (
+              SELECT *
+              FROM Lines
+              WHERE 1=1
+              {subgroup_filter_sql}
+            ),
+
+            LastBucket AS (
+              SELECT MAX({bucket_expr}) AS last_bucket_start
+              FROM Filtered
+            ),
+
+            Ranked AS (
+              SELECT
+                f.item_code,
+                f.item_label,
+                f.subgroup_label,
+                SUM(
+                  CASE
+                    WHEN ? = 'last_bucket'
+                      THEN CASE WHEN {bucket_expr} = lb.last_bucket_start THEN f.qty ELSE 0 END
+                    ELSE f.qty
+                  END
+                ) AS rank_qty
+              FROM Filtered f
+              CROSS JOIN LastBucket lb
+              GROUP BY f.item_code, f.item_label, f.subgroup_label
+            ),
+
+
+            TopItems AS (
+              SELECT TOP (?)
+                item_code, item_label, subgroup_label
+              FROM Ranked
+              WHERE rank_qty > 0
+              ORDER BY rank_qty DESC, item_label ASC
+            )
+
+            SELECT
+              CONVERT(varchar(10), {bucket_expr}, 23) AS bucket_start,
+              f.item_code,
+              f.item_label AS item,
+              f.subgroup_label AS subgroup,
+              SUM(f.qty) AS qty
+            FROM Filtered f
+            JOIN TopItems t ON t.item_code = f.item_code
+            GROUP BY
+              {bucket_expr},
+              f.item_code,
+              f.item_label,
+              f.subgroup_label
+            ORDER BY
+              {bucket_expr} ASC,
+              qty DESC,
+              item ASC;
+        """
+
+        # Params order MUST match ? placeholders above
+        params: List = []
+        params.extend([start_dt, end_dt_exclusive])   # Receipts date range
+        params.extend(item_code_params)               # optional item_codes IN (...)
+        params.extend(subgroup_params)                # optional subgroup label filter
+        params.append(rank_by)                        # ? = 'last_bucket' check
+        params.append(top_n)                          # TOP (?)
+
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+        return [
+            {
+                "bucket_start": r.bucket_start,
+                "item_code": r.item_code,
+                "item": r.item,
+                "subgroup": r.subgroup,
+                "qty": float(r.qty or 0.0),
+            }
+            for r in rows
+        ]
+        
+        
+def search_items_explorer(
+  query: str = "",
+  subgroup_name: str = "",
+  days: int = 30,
+  trend: str = "",
+  limit: int = 500
+) -> List[Dict]:
+  """
+  Items Explorer data source.
+
+  Numbers explained:
+  - avg_per_day: total quantity sold in the window / number of days in the window.
+    This is a baseline demand estimate, not a forecast.
+  - last_sold: most recent receipt datetime for this item within the window.
+    Builds trust that the item is active and shows recency.
+  - trend: compares last business day qty vs previous business day qty (within the window).
+    up/down/flat is a quick signal; details belong to Item 360.
+  """
+  query = (query or "").strip()
+  subgroup_name = (subgroup_name or "").strip()
+
+  days = max(1, min(int(days), 365))
+  limit = max(50, min(int(limit), 2000))
+  trend = (trend or "").strip().lower()
+  if trend not in ("", "up", "down", "flat"):
+      trend = ""
+
+  with _connect() as cn:
+      cur = cn.cursor()
+
+      # IMPORTANT: define the analysis window based on business date (07:00 boundary via DATEADD(HOUR,-7,...))
+      # We anchor on the latest BizDate present in the receipts table, then go back N days.
+      sql = f"""
+SET NOCOUNT ON;
+
+WITH R AS (
+  SELECT
+    r.RCPT_ID,
+    r.RCPT_DATE,
+    CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+  FROM dbo.HISTORIC_RECEIPT r
+),
+MaxBiz AS (
+  SELECT MAX(BizDate) AS MaxBizDate FROM R
+),
+Windowed AS (
+  SELECT
+    r.RCPT_ID,
+    r.RCPT_DATE,
+    r.BizDate
+  FROM R r
+  CROSS JOIN MaxBiz m
+  WHERE r.BizDate >= DATEADD(DAY, -? + 1, m.MaxBizDate)
+    AND r.BizDate <= m.MaxBizDate
+),
+Top2Days AS (
+  SELECT TOP (2) BizDate
+  FROM (SELECT DISTINCT BizDate FROM Windowed) d
+  ORDER BY BizDate DESC
+),
+DayMarks AS (
+  SELECT
+    MAX(BizDate) AS LastBiz,
+    MIN(BizDate) AS PrevBiz
+  FROM Top2Days
+),
+Base AS (
+  SELECT
+CAST(i.ITM_CODE AS nvarchar(50)) AS item_code,
+    COALESCE(
+      NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''),
+      CAST(i.ITM_CODE AS nvarchar(50))
+    ) AS item_title,
+
+    -- subgroup_name:
+    -- We intentionally take it from ITEMS.ITM_SUBGROUP to avoid any int/text conversion issues.
+    -- This supports values like numeric IDs, 'PAYMENT', or Arabic labels.
+    COALESCE(
+      NULLIF(LTRIM(RTRIM(CAST(i.ITM_SUBGROUP AS nvarchar(100)))), ''),
+      ''
+    ) AS subgroup_name,
+
+    w.RCPT_DATE,
+    w.BizDate,
+    c.ITM_QUANTITY AS qty
+  FROM Windowed w
+  JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = w.RCPT_ID
+  JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+),
+Agg AS (
+  SELECT
+    b.item_code,
+    b.item_title,
+    b.subgroup_name,
+    MAX(b.RCPT_DATE) AS last_sold_dt,
+    SUM(b.qty)       AS total_qty,
+    SUM(CASE WHEN b.BizDate = dm.LastBiz THEN b.qty ELSE 0 END) AS qty_last_day,
+    SUM(CASE WHEN b.BizDate = dm.PrevBiz THEN b.qty ELSE 0 END) AS qty_prev_day
+  FROM Base b
+  CROSS JOIN DayMarks dm
+  WHERE ( ? = '' OR b.subgroup_name = ? )
+    AND (
+      ? = '' OR
+      b.item_code LIKE '%' + ? + '%' OR
+      b.item_title LIKE '%' + ? + '%'
+    )
+  GROUP BY b.item_code, b.item_title, b.subgroup_name
+)
+SELECT TOP (?)
+  a.item_code,
+  a.item_title,
+  a.subgroup_name,
+  CONVERT(varchar(19), a.last_sold_dt, 120) AS last_sold,
+  CAST(a.total_qty AS float) / NULLIF(?, 0) AS avg_per_day,
+  a.qty_last_day,
+  a.qty_prev_day
+FROM Agg a
+ORDER BY avg_per_day DESC, a.last_sold_dt DESC;
+"""
+
+
+      # We divide by "days" in SQL (simple baseline average)
+      # IMPORTANT: params order MUST match the ? placeholders in the SQL.
+      # Placeholder order in SQL:
+      # 1) days window (int)
+      # 2) subgroup filter check (? = '')
+      # 3) subgroup filter value (b.subgroup_name = ?)
+      # 4) query empty check (? = '')
+      # 5) item_code LIKE
+      # 6) item_title LIKE
+      # 7) TOP limit
+      # 8) avg_per_day divisor days
+      params = [
+          int(days),
+          subgroup_name, subgroup_name,
+          query, query, query,
+          int(limit),
+          int(days),
+      ]
+      
+      print("DEBUG search_items_explorer params:", params)
+
+      cur.execute(sql, params)
+      rows = cur.fetchall()
+
+      result = []
+      for r in rows:
+          last_qty = float(r.qty_last_day or 0.0)
+          prev_qty = float(r.qty_prev_day or 0.0)
+
+          # IMPORTANT: Trend logic kept simple and explainable:
+          # - prev=0 and last>0 => "up" (new spike)
+          # - small change => "flat"
+          # - otherwise compare
+          if prev_qty == 0 and last_qty == 0:
+              t = "flat"
+          elif prev_qty == 0 and last_qty > 0:
+              t = "up"
+          else:
+              pct = ((last_qty - prev_qty) / prev_qty) * 100.0 if prev_qty else 0.0
+              if abs(pct) < 5.0:
+                  t = "flat"
+              elif pct > 0:
+                  t = "up"
+              else:
+                  t = "down"
+
+          # Apply optional trend filter server-side
+          if trend and t != trend:
+              continue
+
+          result.append({
+              "item_code": r.item_code,
+              "item": r.item_title,
+              "subgroup": r.subgroup_name,
+              "avg_per_day": round(float(r.avg_per_day or 0.0), 2),
+              "last_sold": r.last_sold or "",
+              "trend": t
+          })
+
+      return result
+       
+        
 

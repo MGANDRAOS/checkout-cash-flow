@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="mt-4" id="item-trends-page">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h3 class="mb-0">Item Trends</h3>
+            <div class="text-secondary small">Dynamic trends by date range + bucket + Top N</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+
+                <div class="col-12 col-md-3">
+                    <label class="form-label">Start date</label>
+                    <input type="date" class="form-control" id="it-start-date">
+                </div>
+
+                <div class="col-12 col-md-3">
+                    <label class="form-label">End date</label>
+                    <input type="date" class="form-control" id="it-end-date">
+                </div>
+
+                <div class="col-12 col-md-2">
+                    <label class="form-label">Bucket</label>
+                    <select class="form-select" id="it-bucket">
+                        <option value="daily">Daily</option>
+                        <option value="weekly" selected>Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+
+                <div class="col-12 col-md-2">
+                    <label class="form-label">Top N items</label>
+                    <input type="number" class="form-control" id="it-top-n" value="20" min="1" max="200">
+                </div>
+
+                <div class="col-12 col-md-2">
+                    <label class="form-label">Rank by</label>
+                    <select class="form-select" id="it-rank-by">
+                        <option value="total" selected>Total in range</option>
+                        <option value="last_bucket">Last bucket only</option>
+                    </select>
+                </div>
+
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Subgroup (optional)</label>
+                    <select class="form-select" id="it-subgroup">
+                        <option value="">All subgroups</option>
+                    </select>
+                </div>
+
+                <!-- Forecast Controls -->
+                <div class="col-12 col-md-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <label class="form-label mb-1">
+                            Forecast overlay
+                            <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Adds a simple forecast after your selected end date.
+It uses the average of the last N buckets (moving average), then extends the line forward.
+Good for planning orders (summer stock) without heavy ML."></i>
+                        </label>
+
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="it-forecast-enabled">
+                        </div>
+                    </div>
+
+                    <div class="form-text">
+                        When enabled, the chart will extend each item’s line beyond the end date using a moving average.
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-4">
+                    <label class="form-label">
+                        Forecast horizon
+                        <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="How far ahead to forecast (in buckets).
+If bucket=weekly and horizon=8, you’ll get 8 future weeks.
+Use 4–8 for best signal; 12+ is usually noisier."></i>
+                    </label>
+                    <select class="form-select" id="it-forecast-horizon">
+                        <option value="4">4 buckets</option>
+                        <option value="8" selected>8 buckets</option>
+                        <option value="12">12 buckets</option>
+                    </select>
+                    <div class="form-text">
+                        More buckets = further forecast, but confidence drops. Start with 4–8.
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-4">
+                    <label class="form-label">
+                        Moving average window
+                        <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="How many recent buckets we average to produce the forecast value.
+Example: window=6 means the forecast is based on the last 6 buckets only.
+Smaller window reacts faster; larger window is smoother."></i>
+                    </label>
+                    <select class="form-select" id="it-forecast-window">
+                        <option value="4">4 buckets</option>
+                        <option value="6" selected>6 buckets</option>
+                        <option value="8">8 buckets</option>
+                    </select>
+                    <div class="form-text">
+                        Use 6 as default. Use 4 for fast-changing items, 8 for stable items.
+                    </div>
+                </div>
+
+
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Item codes (optional, CSV)</label>
+                    <input type="text" class="form-control" id="it-item-codes" placeholder="Example: 123,456,789">
+                </div>
+
+                <div class="col-12 d-flex gap-2">
+                    <button class="btn btn-primary" id="it-generate">
+                        <i class="bi bi-play-circle"></i> Generate
+                    </button>
+                    <button class="btn btn-outline-secondary" id="it-reset">
+                        <i class="bi bi-arrow-counterclockwise"></i> Reset
+                    </button>
+                    <div class="ms-auto text-end">
+                        <div class="small text-secondary" id="it-status"></div>
+                        <div class="small text-secondary">
+                            <i class="bi bi-info-circle"></i>
+                            Forecast is visual guidance only; always confirm with stock on hand + supplier lead time.
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- Momentum KPIs -->
+    <div class="row g-3 mb-4" id="it-momentum-row">
+
+        <div class="col-12 col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h6 class="mb-0">
+                            Top Risers (1 bucket)
+                            <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Compares the latest bucket vs the one right before it.
+Percent change is based on quantities (not revenue).
+Best for spotting sudden demand spikes early."></i>
+                        </h6>
+                        <span class="badge text-bg-success">Up</span>
+                    </div>
+                    <div class="form-text mb-2">
+                        Shows the strongest % increases from the last bucket to the previous bucket.
+                    </div>
+                    <div id="it-kpi-risers" class="small"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h6 class="mb-0">
+                            Top Fallers (1 bucket)
+                            <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Compares the latest bucket vs the one right before it.
+Helps detect items that suddenly slowed down or went out of stock.
+Use it to investigate before it becomes a weekly problem."></i>
+                        </h6>
+                        <span class="badge text-bg-danger">Down</span>
+                    </div>
+                    <div class="form-text mb-2">
+                        Shows the strongest % drops from the last bucket to the previous bucket.
+                    </div>
+                    <div id="it-kpi-fallers" class="small"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h6 class="mb-0">
+                            Fast Movers (4 vs 4)
+                            <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Compares total quantity in the last 4 buckets vs the previous 4 buckets.
+This is smoother than 1-bucket change and reduces noise.
+Great for seasonal shifts (summer ramp-up)."></i>
+                        </h6>
+                        <span class="badge text-bg-primary">Trend</span>
+                    </div>
+                    <div class="form-text mb-2">
+                        More stable signal: last 4 buckets vs previous 4 buckets (totals).
+                    </div>
+                    <div id="it-kpi-fastmovers" class="small"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Chart -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h6 class="mb-3">Trend Chart</h6>
+            <canvas id="it-chart" height="90"></canvas>
+        </div>
+    </div>
+
+    <!-- Forecast Table -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <h6 class="mb-0">
+                    Forecast Table (Action View)
+                    <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="This table turns trends into action.
+It summarizes each top item with average, last bucket, and a simple forecast.
+Use it to plan summer ordering and detect rising demand early."></i>
+                </h6>
+                <span class="small text-secondary" id="it-forecast-table-note"></span>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle" id="it-forecast-table" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>
+                                Item
+                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Item name from your POS items table.
+If the title is missing, we fallback to item code."></i>
+                            </th>
+                            <th class="text-end">
+                                Avg / bucket
+                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Average quantity per bucket across your selected date range.
+Useful as a baseline for normal demand."></i>
+                            </th>
+                            <th class="text-end">
+                                Last bucket
+                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Quantity in the latest bucket inside your selected date range.
+This reflects the most recent real demand."></i>
+                            </th>
+                            <th class="text-end">
+                                Forecast (next H)
+                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Forecast value is the moving average of the last N buckets.
+We multiply it by the horizon (H) to estimate next period total.
+Use it as guidance, not a guarantee."></i>
+                            </th>
+                            <th>
+                                Direction
+                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="A simple direction indicator based on the last few buckets.
+Up means demand is increasing recently, Down means decreasing.
+Flat means stable/sideways."></i>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="form-text">
+                Forecast uses the same settings above (horizon + moving average window). Direction is based on recent
+                slope.
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Table -->
+    <div class="card shadow-sm mb-5">
+        <div class="card-body">
+            <h6 class="mb-3">Data (Long Format)</h6>
+            <div class="table-responsive">
+                <table class="table table-striped table-sm" id="it-table" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Bucket Start</th>
+                            <th>Item Code</th>
+                            <th>Item</th>
+                            <th>Subgroup</th>
+                            <th class="text-end">Qty</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
