@@ -4,7 +4,7 @@ body {
     font-family: 'Inter', sans-serif;
     background-color: #f6f8fb;
     color: #222;
-    font-size: 18px;
+    font-size: 16px;
     padding-top: 25px;
     background-color: #f9f9f9;
 }
@@ -731,4 +731,10 @@ h2.h4 {
 /* Make Item 360 drawer usable on desktop */
 #item360Drawer.offcanvas-end {
   width: min(1200px, 60vw);
+}
+
+
+
+div.dataTables_wrapper div.dataTables_length select {
+    width: 80px !important;
 }

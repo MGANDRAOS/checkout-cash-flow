@@ -1,0 +1,294 @@
+<!-- templates/invoices.html -->
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-3">
+
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h4 class="mb-1">Invoices</h4>
+            <div class="text-secondary small">
+                Browse receipts, drill into line items, and view daily unique items sold.
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+
+                <div class="col-12 col-md-2">
+                    <label class="form-label">
+                        Start date
+                        <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                            title="Filters by business date (BizDate). BizDate is RCPT_DATE shifted by -7 hours and then converted to a date. Use this for accurate store-day reporting."></i>
+                    </label>
+                    <input type="date" class="form-control" id="inv-start">
+                </div>
+
+                <div class="col-12 col-md-2">
+                    <label class="form-label">
+                        End date
+                        <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                            title="Inclusive business date (BizDate). If empty, the module defaults to the most recent 30 business days in your data."></i>
+                    </label>
+                    <input type="date" class="form-control" id="inv-end">
+                </div>
+
+                <div class="col-12 col-md-3">
+                    <label class="form-label">
+                        Search
+                        <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                            title="Search by Receipt ID, Item Code, or Item Title that appears inside invoices. Useful for quick audits and tracking specific items."></i>
+                    </label>
+                    <input type="text" class="form-control" id="inv-q" placeholder="Receipt ID, Item code, or title">
+                </div>
+
+                <div class="col-12 col-md-2">
+                    <label class="form-label">
+                        Item code (optional)
+                        <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                            title="If set, shows only invoices that contain this item code. This is how the Item 360 drawer deep-links into invoices."></i>
+                    </label>
+                    <input type="text" class="form-control" id="inv-item-code" value="{{ prefill_item_code or '' }}">
+                </div>
+
+                <div class="col-6 col-md-1">
+                    <label class="form-label">Min $</label>
+                    <input type="number" step="0.01" class="form-control" id="inv-min">
+                </div>
+
+                <div class="col-6 col-md-1">
+                    <label class="form-label">Max $</label>
+                    <input type="number" step="0.01" class="form-control" id="inv-max">
+                </div>
+
+                <div class="col-12 col-md-1 d-grid">
+                    <button class="btn btn-primary" id="inv-run">
+                        <i class="bi bi-search"></i> Run
+                    </button>
+                </div>
+
+            </div>
+            <div class="small text-secondary mt-2" id="inv-status"></div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" id="inv-tabs">
+        <li class="nav-item">
+            <button class="nav-link active" id="tab-invoices" data-tab="invoices" type="button">Invoices</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-daily" data-tab="daily" type="button">Daily Items</button>
+        </li>
+    </ul>
+
+    <!-- Invoices Tab -->
+    <div id="panel-invoices">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="small text-secondary" id="inv-count"></div>
+                    <div class="small text-secondary">
+                        <i class="bi bi-info-circle"></i>
+                        Click any row to view full invoice lines.
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle" id="invoicesTable">
+                        <thead>
+                            <tr>
+                                <th>
+                                    Receipt ID
+                                    <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                                        title="Unique receipt identifier from the POS. Use it to trace exact sales events."></i>
+                                </th>
+                                <th>
+                                    Date/Time
+                                    <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                                        title="Receipt timestamp from the POS. BizDate is calculated by shifting -7h then taking the date."></i>
+                                </th>
+                                <th class="text-end">
+                                    Amount
+                                    <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                                        title="Total receipt amount. Use it to spot big baskets, refunds, or unusual totals."></i>
+                                </th>
+                                <th class="text-end">
+                                    Lines
+                                    <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                                        title="Number of item lines inside the receipt. Helpful to estimate basket complexity."></i>
+                                </th>
+                                <th>BizDate</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Daily Items Tab -->
+    <div id="panel-daily" class="d-none">
+        <div class="card">
+            <div class="card-body">
+                <div class="text-secondary small mb-2">
+                    <i class="bi bi-info-circle"></i>
+                    Unique items = distinct item codes sold that day. Click a day to see the full list.
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle" id="dailyItemsTable">
+                        <thead>
+                            <tr>
+                                <th>
+                                    BizDate
+                                    <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                                        title="Business day computed from RCPT_DATE shifted -7h. This matches your store daily closing logic."></i>
+                                </th>
+                                <th class="text-end">
+                                    Unique items
+                                    <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                                        title="Count of distinct item codes sold that day. Shows how broad the day’s activity was."></i>
+                                </th>
+                                <th class="text-end">
+                                    Total qty
+                                    <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                                        title="Sum of quantities sold across all items that day. Useful for volume trends."></i>
+                                </th>
+                                <th class="text-end">
+                                    Receipts
+                                    <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                                        title="How many receipts were recorded that day. A proxy for customer traffic."></i>
+                                </th>
+                                <th class="text-end">
+                                    Total sales
+                                    <i class="bi bi-info-circle text-secondary" data-bs-toggle="tooltip"
+                                        title="Sum of RCPT_AMOUNT for that day. Use it to compare revenue day-to-day."></i>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Day drill-down -->
+        <div class="card mt-3">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <strong id="day-title">Day items</strong>
+                <span class="small text-secondary" id="day-status"></span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle" id="day-items-table">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th class="text-end">Total qty</th>
+                                <th class="text-end">Receipts</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- Invoice details modal -->
+<div class="modal fade" id="invoiceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <!-- IMPORTANT: JS expects this exact ID -->
+                    <div class="fw-semibold" id="invoiceModalTitle">Invoice</div>
+
+                    <!-- Optional subtitle (keep if your JS uses it) -->
+                    <div class="small text-secondary" id="invModalSub"></div>
+                </div>
+
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <!-- IMPORTANT: JS expects this exact ID (so openModal() can safely write into it) -->
+            <div class="modal-body" id="invoiceModalBody">
+                <!-- ADD THIS: Invoice summary strip (A) -->
+                <div class="d-flex flex-wrap gap-3 mb-3">
+
+                    <div class="border rounded p-2">
+                        <div class="small text-secondary">
+                            Total amount
+                            <i class="bi bi-info-circle ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                title="Invoice total from HISTORIC_RECEIPT.RCPT_AMOUNT.\nThis is the official receipt total.\nIt may not equal sum of line prices if prices are not stored."></i>
+                        </div>
+                        <div class="fw-semibold" id="invSumAmount">—</div>
+                    </div>
+
+                    <div class="border rounded p-2">
+                        <div class="small text-secondary">
+                            Lines
+                            <i class="bi bi-info-circle ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                title="Number of unique item lines in this invoice.\nEach row is one item_code.\nUseful to gauge basket size."></i>
+                        </div>
+                        <div class="fw-semibold" id="invSumLines">—</div>
+                    </div>
+
+                    <div class="border rounded p-2">
+                        <div class="small text-secondary">
+                            Total qty
+                            <i class="bi bi-info-circle ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                title="Sum of ITM_QUANTITY across all lines.\nShows how many total units were sold in this invoice.\nQty is taken from receipt contents."></i>
+                        </div>
+                        <div class="fw-semibold" id="invSumQty">—</div>
+                    </div>
+
+                </div>
+
+                <!-- Keep your table exactly as-is (your details renderer likely fills tbody) -->
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0" id="inv-lines-table">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th class="text-end">Qty</th>
+                                <th>Subgroup</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- JS module -->
+<script src="/static/js/invoices.js"></script>
+<script>
+    window.__prefill_item_code = "{{ prefill_item_code|default('') }}";
+
+    document.addEventListener("DOMContentLoaded", function () {
+        if (window.InvoicesModule && typeof window.InvoicesModule.init === "function") {
+            window.InvoicesModule.init();
+        }
+        // Enable tooltips
+        const list = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        list.forEach(el => new bootstrap.Tooltip(el));
+    });
+</script>
+
+{% endblock %}

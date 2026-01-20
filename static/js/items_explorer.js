@@ -230,6 +230,18 @@ window.ItemsExplorer = (function () {
         const kpis = await fetchItemMomentumKpis(itemCode, days);
         renderItemMomentumKpis(kpis);
 
+        // items_explorer.js (inside openItem360Drawer)
+
+        const seeAllBtn = document.getElementById("drawerSeeAllInvoices");
+        if (seeAllBtn) {
+            // Important: deep-link to invoices module with the current item_code
+            seeAllBtn.href = `/invoices?item_code=${encodeURIComponent(itemCode)}`;
+            seeAllBtn.classList.remove("disabled");
+            seeAllBtn.removeAttribute("aria-disabled");
+            seeAllBtn.title = "Open the Invoices module filtered to this item.";
+        }
+
+
     }
 
     async function fetchItemSeries(itemCode, days, lookback) {

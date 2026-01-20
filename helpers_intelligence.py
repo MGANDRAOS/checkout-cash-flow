@@ -1573,7 +1573,6 @@ def get_item_daily_series(item_code: str, days: int = 30, lookback: int = 14) ->
 
     return [{"biz_date": r.biz_date, "qty": float(r.qty or 0)} for r in rows]
 
-# helpers_intelligence.py
 
 # ✅ IMPORTANT FIX (if not already there):
 # Your previous errors showed timedelta missing.
@@ -1664,7 +1663,6 @@ def get_item_last_invoices(item_code: str, days: int = 30, limit: int = 10):
     return result
 
 
-# helpers_intelligence.py
 
 def get_item_momentum_kpis(item_code: str, days: int = 30):
     """
@@ -1785,3 +1783,590 @@ def get_item_momentum_kpis(item_code: str, days: int = 30):
         "peak_hour": peak_hour,
         "peak_hour_qty": peak_qty,
     }
+
+
+# ------------------------------------------------------------
+# Invoices Module (read-only MSSQL helpers)
+# ------------------------------------------------------------
+
+
+def search_invoices(
+    start_date: date | None = None,
+    end_date: date | None = None,
+    item_code: str = "",
+    q: str = "",
+    min_amount: float | None = None,
+    max_amount: float | None = None,
+    limit: int = 200,
+    offset: int = 0,
+):
+    """
+    List receipts (invoices) with filters + pagination.
+    - Uses BizDate (RCPT_DATE shifted -7h) for date range filtering.
+    - Does NOT do any int conversion on item codes (avoids Arabic / PAYMENT / mixed types issues).
+    """
+    safe_limit = max(1, min(int(limit or 200), 500))
+    safe_offset = max(0, int(offset or 0))
+
+    safe_item_code = (item_code or "").strip()
+    safe_q = (q or "").strip()
+
+    # Default date range: last 30 biz days ending at max biz date in table
+    # Important: we avoid relying on system time; we anchor on data's max BizDate.
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        r.RCPT_AMOUNT,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+    ),
+    MaxBiz AS (
+      SELECT MAX(BizDate) AS MaxBizDate FROM R
+    ),
+    Windowed AS (
+      SELECT r.*
+      FROM R r
+      CROSS JOIN MaxBiz m
+      WHERE
+        (
+          (? IS NOT NULL AND ? IS NOT NULL AND r.BizDate BETWEEN ? AND ?)
+          OR
+          (? IS NULL OR ? IS NULL) AND r.BizDate BETWEEN DATEADD(DAY, -30 + 1, m.MaxBizDate) AND m.MaxBizDate
+        )
+    ),
+    -- Receipts filter by item_code (optional)
+    ItemFiltered AS (
+      SELECT w.*
+      FROM Windowed w
+      WHERE
+        (? = '')
+        OR EXISTS (
+          SELECT 1
+          FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+          WHERE c.RCPT_ID = w.RCPT_ID
+            AND CAST(c.ITM_CODE AS nvarchar(50)) = ?
+        )
+    ),
+    -- Search filter (optional): match on RCPT_ID as text or item title/code inside receipt
+    SearchFiltered AS (
+      SELECT f.*
+      FROM ItemFiltered f
+      WHERE
+        (? = '')
+        OR CAST(f.RCPT_ID AS nvarchar(50)) LIKE '%' + ? + '%'
+        OR EXISTS (
+          SELECT 1
+          FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+          JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+          WHERE c.RCPT_ID = f.RCPT_ID
+            AND (
+              CAST(c.ITM_CODE AS nvarchar(50)) LIKE '%' + ? + '%'
+              OR CAST(i.ITM_TITLE AS nvarchar(255)) LIKE '%' + ? + '%'
+            )
+        )
+    ),
+    AmountFiltered AS (
+      SELECT s.*
+      FROM SearchFiltered s
+      WHERE
+        (? IS NULL OR s.RCPT_AMOUNT >= ?)
+        AND
+        (? IS NULL OR s.RCPT_AMOUNT <= ?)
+    ),
+    -- Count distinct line items per receipt (for display)
+    LinesAgg AS (
+      SELECT
+        c.RCPT_ID,
+        COUNT(DISTINCT CAST(c.ITM_CODE AS nvarchar(50))) AS items_count
+      FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+      GROUP BY c.RCPT_ID
+    ),
+    Ranked AS (
+      SELECT
+        a.RCPT_ID,
+        a.RCPT_DATE,
+        a.BizDate,
+        a.RCPT_AMOUNT,
+        COALESCE(la.items_count, 0) AS items_count,
+        ROW_NUMBER() OVER (ORDER BY a.RCPT_DATE DESC, a.RCPT_ID DESC) AS rn
+      FROM AmountFiltered a
+      LEFT JOIN LinesAgg la ON la.RCPT_ID = a.RCPT_ID
+    )
+    SELECT
+      RCPT_ID,
+      CONVERT(varchar(19), RCPT_DATE, 120) AS rcpt_dt,
+      CONVERT(varchar(10), BizDate, 120)   AS biz_date,
+      CAST(RCPT_AMOUNT AS float)           AS rcpt_amount,
+      CAST(items_count AS int)             AS items_count
+    FROM Ranked
+    WHERE rn BETWEEN (? + 1) AND (? + ?)
+    ORDER BY rn;
+    """
+
+    params = [
+        start_date, end_date, start_date, end_date,
+        start_date, end_date,
+
+        safe_item_code, safe_item_code,
+
+        safe_q, safe_q, safe_q, safe_q,
+
+        min_amount, min_amount,
+        max_amount, max_amount,
+
+        safe_offset, safe_offset, safe_limit
+    ]
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    result = []
+    for r in rows:
+        result.append({
+            "rcpt_id": r.RCPT_ID,
+            "rcpt_dt": r.rcpt_dt,
+            "biz_date": r.biz_date,
+            "rcpt_amount": float(r.rcpt_amount or 0.0),
+            "items_count": int(r.items_count or 0),
+        })
+    return result
+
+
+def get_invoices_list(
+    start_date: str = "",
+    end_date: str = "",
+    q: str = "",
+    item_code: str = "",
+    min_amount: float | None = None,
+    max_amount: float | None = None,
+    page: int = 1,
+    page_size: int = 50,
+):
+    """
+    Returns paginated receipts (invoice headers) with safe filtering.
+
+    Notes:
+    - BizDate = RCPT_DATE shifted by -7 hours, cast to date.
+    - Uses ROW_NUMBER() pagination (works on older SQL Server versions).
+    - Avoids any int conversions on item codes.
+    """
+    safe_page = max(1, int(page or 1))
+    safe_page_size = max(10, min(int(page_size or 50), 200))
+    row_start = (safe_page - 1) * safe_page_size + 1
+    row_end = safe_page * safe_page_size
+
+    q = (q or "").strip()
+    item_code = (item_code or "").strip()
+
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        r.RCPT_AMOUNT,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+    ),
+    Filtered AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        r.RCPT_AMOUNT,
+        r.BizDate
+      FROM R r
+      WHERE
+        ( ? = '' OR r.BizDate >= CAST(? AS date) )
+        AND ( ? = '' OR r.BizDate <= CAST(? AS date) )
+        AND ( ? IS NULL OR r.RCPT_AMOUNT >= ? )
+        AND ( ? IS NULL OR r.RCPT_AMOUNT <= ? )
+        AND (
+          ? = '' OR
+          CAST(r.RCPT_ID AS nvarchar(50)) LIKE '%' + ? + '%'
+        )
+        AND (
+          ? = '' OR EXISTS (
+            SELECT 1
+            FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+            WHERE c.RCPT_ID = r.RCPT_ID
+              AND CAST(c.ITM_CODE AS nvarchar(50)) = ?
+          )
+        )
+    ),
+    Enriched AS (
+      SELECT
+        f.RCPT_ID,
+        f.RCPT_DATE,
+        f.RCPT_AMOUNT,
+        f.BizDate,
+        (SELECT COUNT(*) FROM dbo.HISTORIC_RECEIPT_CONTENTS c WHERE c.RCPT_ID = f.RCPT_ID) AS lines_count
+      FROM Filtered f
+    ),
+    Numbered AS (
+      SELECT
+        e.*,
+        ROW_NUMBER() OVER (ORDER BY e.RCPT_DATE DESC, e.RCPT_ID DESC) AS rn
+      FROM Enriched e
+    )
+    SELECT
+      (SELECT COUNT(*) FROM Enriched) AS total_rows,
+      n.RCPT_ID,
+      CONVERT(varchar(19), n.RCPT_DATE, 120) AS rcpt_date,
+      CONVERT(varchar(10), n.BizDate, 120) AS biz_date,
+      CAST(n.RCPT_AMOUNT AS float) AS amount,
+      CAST(n.lines_count AS int) AS lines_count
+    FROM Numbered n
+    WHERE n.rn BETWEEN ? AND ?
+    ORDER BY n.rn ASC;
+    """
+
+    params = [
+        start_date, start_date,
+        end_date, end_date,
+        min_amount, min_amount,
+        max_amount, max_amount,
+        q, q,
+        item_code, item_code,
+        row_start, row_end
+    ]
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    if not rows:
+        return {"total": 0, "rows": []}
+
+    total = int(rows[0].total_rows or 0)
+
+    result_rows = []
+    for r in rows:
+        result_rows.append({
+            "rcpt_id": str(r.RCPT_ID),
+            "rcpt_date": r.rcpt_date,
+            "biz_date": r.biz_date,
+            "amount": float(r.amount or 0.0),
+            "lines_count": int(r.lines_count or 0),
+        })
+
+    return {"total": total, "rows": result_rows}
+
+
+def get_invoice_details(rcpt_id: str):
+    """
+    Returns line items for a single receipt:
+    - item_code, item_title, qty, subgroup
+    """
+    rcpt_id = (rcpt_id or "").strip()
+    if not rcpt_id:
+        return []
+
+    sql = """
+    SET NOCOUNT ON;
+
+    SELECT
+      CAST(c.ITM_CODE AS nvarchar(50)) AS item_code,
+      COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''), CAST(c.ITM_CODE AS nvarchar(50))) AS item_title,
+      COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_SUBGROUP AS nvarchar(100)))), ''), '') AS subgroup,
+      CAST(COALESCE(c.ITM_QUANTITY, 0) AS float) AS qty
+    FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+    LEFT JOIN dbo.ITEMS i ON CAST(i.ITM_CODE AS nvarchar(50)) = CAST(c.ITM_CODE AS nvarchar(50))
+    WHERE c.RCPT_ID = ?
+    ORDER BY item_title ASC, item_code ASC;
+    """
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, [rcpt_id])
+        rows = cur.fetchall()
+
+    result = []
+    for r in rows:
+        result.append({
+            "item_code": r.item_code,
+            "item_title": r.item_title,
+            "subgroup": r.subgroup,
+            "qty": float(r.qty or 0.0),
+        })
+    return result
+
+
+def get_daily_items_summary(start_date: str = "", end_date: str = "", page: int = 1, page_size: int = 31):
+    """
+    Returns day-level aggregates:
+    - unique_items: distinct item codes sold that day
+    - total_qty: sum of quantities that day
+    - receipts_count: distinct receipts that day
+    - total_sales: sum of receipt amounts that day
+    """
+    safe_page = max(1, int(page or 1))
+    safe_page_size = max(7, min(int(page_size or 31), 90))
+    row_start = (safe_page - 1) * safe_page_size + 1
+    row_end = safe_page * safe_page_size
+
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        r.RCPT_AMOUNT,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+    ),
+    Filtered AS (
+      SELECT *
+      FROM R
+      WHERE
+        ( ? = '' OR BizDate >= CAST(? AS date) )
+        AND ( ? = '' OR BizDate <= CAST(? AS date) )
+    ),
+    DayAgg AS (
+      SELECT
+        f.BizDate,
+        COUNT(DISTINCT f.RCPT_ID) AS receipts_count,
+        SUM(COALESCE(f.RCPT_AMOUNT, 0)) AS total_sales
+      FROM Filtered f
+      GROUP BY f.BizDate
+    ),
+    ItemAgg AS (
+      SELECT
+        f.BizDate,
+        COUNT(DISTINCT CAST(c.ITM_CODE AS nvarchar(50))) AS unique_items,
+        SUM(COALESCE(c.ITM_QUANTITY, 0)) AS total_qty
+      FROM Filtered f
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = f.RCPT_ID
+      GROUP BY f.BizDate
+    ),
+    Joined AS (
+      SELECT
+        d.BizDate,
+        d.receipts_count,
+        CAST(d.total_sales AS float) AS total_sales,
+        i.unique_items,
+        CAST(i.total_qty AS float) AS total_qty
+      FROM DayAgg d
+      LEFT JOIN ItemAgg i ON i.BizDate = d.BizDate
+    ),
+    Numbered AS (
+      SELECT
+        j.*,
+        ROW_NUMBER() OVER (ORDER BY j.BizDate DESC) AS rn
+      FROM Joined j
+    )
+    SELECT
+      (SELECT COUNT(*) FROM Joined) AS total_rows,
+      CONVERT(varchar(10), BizDate, 120) AS biz_date,
+      CAST(COALESCE(unique_items, 0) AS int) AS unique_items,
+      CAST(COALESCE(total_qty, 0) AS float) AS total_qty,
+      CAST(COALESCE(receipts_count, 0) AS int) AS receipts_count,
+      CAST(COALESCE(total_sales, 0) AS float) AS total_sales
+    FROM Numbered
+    WHERE rn BETWEEN ? AND ?
+    ORDER BY rn ASC;
+    """
+
+    params = [start_date, start_date, end_date, end_date, row_start, row_end]
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    if not rows:
+        return {"total": 0, "rows": []}
+
+    total = int(rows[0].total_rows or 0)
+
+    out = []
+    for r in rows:
+        out.append({
+            "biz_date": r.biz_date,
+            "unique_items": int(r.unique_items or 0),
+            "total_qty": float(r.total_qty or 0.0),
+            "receipts_count": int(r.receipts_count or 0),
+            "total_sales": float(r.total_sales or 0.0),
+        })
+
+    return {"total": total, "rows": out}
+
+
+def get_daily_items_for_date(biz_date: str):
+    """
+    Returns unique items sold on one BizDate:
+    - item_code, item_title, total_qty
+    """
+    biz_date = (biz_date or "").strip()
+    if not biz_date:
+        return []
+
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        r.RCPT_ID,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+    )
+    SELECT
+      CAST(c.ITM_CODE AS nvarchar(50)) AS item_code,
+      COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''), CAST(c.ITM_CODE AS nvarchar(50))) AS item_title,
+      CAST(SUM(COALESCE(c.ITM_QUANTITY, 0)) AS float) AS total_qty
+    FROM R r
+    JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
+    LEFT JOIN dbo.ITEMS i ON CAST(i.ITM_CODE AS nvarchar(50)) = CAST(c.ITM_CODE AS nvarchar(50))
+    WHERE r.BizDate = CAST(? AS date)
+    GROUP BY CAST(c.ITM_CODE AS nvarchar(50)), COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''), CAST(c.ITM_CODE AS nvarchar(50)))
+    ORDER BY total_qty DESC, item_title ASC;
+    """
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, [biz_date])
+        rows = cur.fetchall()
+
+    result = []
+    for r in rows:
+        result.append({
+            "item_code": r.item_code,
+            "item_title": r.item_title,
+            "total_qty": float(r.total_qty or 0.0),
+        })
+    return result
+
+
+def get_daily_items_summary(start_date: date, end_date: date, item_code: str = "", subgroup: str = ""):
+    """
+    Returns one row per BizDate with:
+    - unique_items: COUNT(DISTINCT ITM_CODE)
+    - total_qty: SUM(ITM_QUANTITY)
+    - receipts: COUNT(DISTINCT RCPT_ID)
+    - sales_amount: SUM(RCPT_AMOUNT) (receipt totals)
+    """
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        r.RCPT_AMOUNT,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+      WHERE CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) >= ?
+        AND CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) <= ?
+    ),
+    L AS (
+      SELECT
+        r.BizDate,
+        r.RCPT_ID,
+        r.RCPT_AMOUNT,
+        CAST(c.ITM_CODE AS nvarchar(50)) AS ITM_CODE,
+        CAST(c.ITM_QUANTITY AS float) AS ITM_QUANTITY,
+        CAST(i.ITM_SUBGROUP AS nvarchar(100)) AS ITM_SUBGROUP
+      FROM R r
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
+      JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+      WHERE ( ? = '' OR CAST(c.ITM_CODE AS nvarchar(50)) = ? )
+        AND ( ? = '' OR CAST(i.ITM_SUBGROUP AS nvarchar(100)) = ? )
+    )
+    SELECT
+      BizDate,
+      COUNT(DISTINCT ITM_CODE) AS unique_items,
+      SUM(ITM_QUANTITY)        AS total_qty,
+      COUNT(DISTINCT RCPT_ID)  AS receipts,
+      SUM(DISTINCT RCPT_AMOUNT) AS sales_amount
+    FROM L
+    GROUP BY BizDate
+    ORDER BY BizDate DESC;
+    """
+
+    params = [
+        start_date, end_date,
+        item_code, item_code,
+        subgroup, subgroup
+    ]
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    return [
+        {
+            "biz_date": str(r.BizDate),
+            "unique_items": int(r.unique_items or 0),
+            "total_qty": float(r.total_qty or 0.0),
+            "receipts": int(r.receipts or 0),
+            "sales_amount": float(r.sales_amount or 0.0),
+        }
+        for r in rows
+    ]
+
+
+def get_daily_items_detail(biz_date: date, item_code: str = "", subgroup: str = "", limit: int = 5000):
+    """
+    Returns the unique items sold on a given BizDate with qty totals + last_sold timestamp.
+    """
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+      WHERE CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) = ?
+    ),
+    L AS (
+      SELECT
+        CAST(c.ITM_CODE AS nvarchar(50)) AS item_code,
+        COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''), CAST(c.ITM_CODE AS nvarchar(50))) AS item_title,
+        CAST(i.ITM_SUBGROUP AS nvarchar(100)) AS subgroup,
+        CAST(c.ITM_QUANTITY AS float) AS qty,
+        r.RCPT_DATE
+      FROM R r
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
+      JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+      WHERE ( ? = '' OR CAST(c.ITM_CODE AS nvarchar(50)) = ? )
+        AND ( ? = '' OR CAST(i.ITM_SUBGROUP AS nvarchar(100)) = ? )
+    )
+    SELECT TOP (?)
+      item_code,
+      item_title,
+      subgroup,
+      SUM(qty) AS total_qty,
+      MAX(RCPT_DATE) AS last_sold_dt
+    FROM L
+    GROUP BY item_code, item_title, subgroup
+    ORDER BY total_qty DESC, last_sold_dt DESC;
+    """
+
+    params = [biz_date, item_code, item_code, subgroup, subgroup, limit]
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    return [
+        {
+            "item_code": r.item_code,
+            "item": r.item_title,
+            "subgroup": r.subgroup or "",
+            "total_qty": float(r.total_qty or 0.0),
+            "last_sold": r.last_sold_dt.strftime("%Y-%m-%d %H:%M:%S") if r.last_sold_dt else "",
+        }
+        for r in rows
+    ]

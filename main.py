@@ -27,6 +27,7 @@ from routes.analytics_assistant import bp as analytics_assistant_bp
 from routes.realtime import realtime_bp
 from routes.item_trends import item_trends_bp
 from routes.items_explorer import items_explorer_bp
+from routes.invoices import invoices_bp
 
 
 
@@ -836,6 +837,7 @@ app.register_blueprint(analytics_assistant_bp)
 app.register_blueprint(realtime_bp)
 app.register_blueprint(item_trends_bp)
 app.register_blueprint(items_explorer_bp)
+app.register_blueprint(invoices_bp)
 
 
 
