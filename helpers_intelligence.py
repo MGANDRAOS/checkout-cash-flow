@@ -2245,7 +2245,7 @@ def get_daily_items_for_date(biz_date: str):
     return result
 
 
-def get_daily_items_summary(start_date: date, end_date: date, item_code: str = "", subgroup: str = ""):
+def get_daily_items_summary_legacy(start_date: date, end_date: date, item_code: str = "", subgroup: str = ""):
     """
     Returns one row per BizDate with:
     - unique_items: COUNT(DISTINCT ITM_CODE)
