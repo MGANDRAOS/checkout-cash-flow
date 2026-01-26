@@ -2315,6 +2315,7 @@ def get_daily_items_summary_legacy(start_date: date, end_date: date, item_code: 
 
 
 def get_daily_items_detail(biz_date: date, item_code: str = "", subgroup: str = "", limit: int = 5000):
+  
     """
     Returns the unique items sold on a given BizDate with qty totals + last_sold timestamp.
     """
@@ -2370,3 +2371,319 @@ def get_daily_items_detail(biz_date: date, item_code: str = "", subgroup: str = 
         }
         for r in rows
     ]
+    
+    
+    
+  
+# ------------------------------------------------------------
+# Dead Items Report (read-only MSSQL helper)
+# ------------------------------------------------------------
+def get_dead_items(
+    dead_days: int = 60,
+    window_days: int = 180,
+    subgroup: str = "",
+    q: str = "",
+    min_total_qty: float | None = None,
+    page: int = 1,
+    page_size: int = 100,
+):
+    """
+    Dead Items Report
+    Definition:
+      dead item = last_sold_biz_date <= (max_biz_date - dead_days)
+
+    Notes:
+    - BizDate = CAST(DATEADD(HOUR, -7, RCPT_DATE) AS date)
+    - Anchors max_biz_date from data (not server/system date)
+    - Avoids ALL int conversions on subgroup/item_code
+    """
+
+    safe_dead_days = max(1, int(dead_days or 60))
+    safe_window_days = max(7, min(int(window_days or 180), 3650))  # up to 10 years if needed
+    safe_page = max(1, int(page or 1))
+    safe_page_size = max(25, min(int(page_size or 100), 500))
+
+    row_start = (safe_page - 1) * safe_page_size + 1
+    row_end = safe_page * safe_page_size
+
+    subgroup = (subgroup or "").strip()
+    q = (q or "").strip()
+
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        r.RCPT_AMOUNT,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+    ),
+    MaxBiz AS (
+      SELECT MAX(BizDate) AS MaxBizDate FROM R
+    ),
+    Windowed AS (
+      SELECT r.*
+      FROM R r
+      CROSS JOIN MaxBiz m
+      WHERE r.BizDate >= DATEADD(DAY, -? + 1, m.MaxBizDate)
+        AND r.BizDate <= m.MaxBizDate
+    ),
+
+    -- Last sold (ALL TIME, anchored to data)
+    ItemLastSold AS (
+      SELECT
+        CAST(c.ITM_CODE AS nvarchar(50)) AS item_code,
+        MAX(w.BizDate)  AS last_sold_biz_date,
+        MAX(w.RCPT_DATE) AS last_sold_dt
+      FROM R w
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = w.RCPT_ID
+      GROUP BY CAST(c.ITM_CODE AS nvarchar(50))
+    ),
+
+    -- Totals (within window for performance / meaningful “recent” measure)
+    ItemWindowAgg AS (
+      SELECT
+        CAST(c.ITM_CODE AS nvarchar(50)) AS item_code,
+        SUM(CAST(COALESCE(c.ITM_QUANTITY, 0) AS float)) AS total_qty_window
+      FROM Windowed w
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = w.RCPT_ID
+      GROUP BY CAST(c.ITM_CODE AS nvarchar(50))
+    ),
+
+    Enriched AS (
+      SELECT
+        ils.item_code,
+        COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''), ils.item_code) AS item_title,
+        COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_SUBGROUP AS nvarchar(100)))), ''), '') AS subgroup_name,
+        ils.last_sold_dt,
+        ils.last_sold_biz_date,
+        CAST(COALESCE(iwa.total_qty_window, 0) AS float) AS total_qty_window,
+        m.MaxBizDate
+      FROM ItemLastSold ils
+      CROSS JOIN MaxBiz m
+      LEFT JOIN dbo.ITEMS i
+        ON CAST(i.ITM_CODE AS nvarchar(50)) = ils.item_code
+      LEFT JOIN ItemWindowAgg iwa
+        ON iwa.item_code = ils.item_code
+      WHERE 1=1
+        AND ils.last_sold_biz_date IS NOT NULL
+        AND ils.last_sold_biz_date <= DATEADD(DAY, -?, m.MaxBizDate)
+        AND ( ? = '' OR COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_SUBGROUP AS nvarchar(100)))), ''), '') = ? )
+        AND (
+          ? = '' OR
+          ils.item_code LIKE '%' + ? + '%' OR
+          COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''), ils.item_code) LIKE '%' + ? + '%'
+        )
+        AND ( ? IS NULL OR CAST(COALESCE(iwa.total_qty_window, 0) AS float) >= ? )
+    ),
+
+    Numbered AS (
+      SELECT
+        *,
+        DATEDIFF(DAY, last_sold_biz_date, MaxBizDate) AS days_dead,
+        ROW_NUMBER() OVER (
+          ORDER BY DATEDIFF(DAY, last_sold_biz_date, MaxBizDate) DESC, last_sold_dt DESC, item_code ASC
+        ) AS rn
+      FROM Enriched
+    )
+
+    SELECT
+      (SELECT COUNT(*) FROM Enriched) AS total_rows,
+      item_code,
+      item_title,
+      subgroup_name,
+      CONVERT(varchar(19), last_sold_dt, 120) AS last_sold,
+      CONVERT(varchar(10), last_sold_biz_date, 120) AS last_sold_biz_date,
+      CAST(days_dead AS int) AS days_dead,
+      CAST(total_qty_window AS float) AS total_qty_window
+    FROM Numbered
+    WHERE rn BETWEEN ? AND ?
+    ORDER BY rn ASC;
+    """
+
+    params = [
+        safe_window_days,         # Windowed: -window_days + 1
+        safe_dead_days,           # dead_days threshold
+
+        subgroup, subgroup,       # subgroup filter
+        q, q, q,                  # search filter
+        min_total_qty, min_total_qty,  # min_total_qty filter
+
+        row_start, row_end        # pagination
+    ]
+
+    with _connect() as cn:
+      cur = cn.cursor()
+      cur.execute(sql, params)
+      rows = cur.fetchall()
+
+    if not rows:
+      return {"total": 0, "rows": []}
+
+    total = int(rows[0].total_rows or 0)
+
+    out = []
+    for r in rows:
+      out.append({
+        "item_code": r.item_code,
+        "item_title": r.item_title,
+        "subgroup": r.subgroup_name,
+        "last_sold": r.last_sold,
+        "last_sold_biz_date": r.last_sold_biz_date,
+        "days_dead": int(r.days_dead or 0),
+        "total_qty_window": float(r.total_qty_window or 0.0),
+      })
+
+    return {"total": total, "rows": out}
+
+
+from typing import Any
+from datetime import date
+
+# NOTE: assumes you already have _connect() defined in helpers_intelligence.py
+
+
+def get_dead_items_page(
+    q: str = "",
+    subgroup: str = "",
+    dead_days: int = 60,
+    page: int = 1,
+    page_size: int = 50,
+) -> dict[str, Any]:
+    """
+    Dead Items Report (paged)
+    Definition:
+      - Item is "dead" if it has NOT been sold in the last `dead_days` BizDates.
+      - BizDate = CAST(DATEADD(HOUR, -7, RCPT_DATE) AS date)
+
+    Returns:
+      { "total": int, "rows": [ ... ] }
+
+    Rows include:
+      - item_code, item_title, subgroup
+      - last_sold (timestamp string or "")
+      - last_biz_date (YYYY-MM-DD or "")
+      - days_since_sold (int or None)
+    """
+    safe_q = (q or "").strip()
+    safe_subgroup = (subgroup or "").strip()
+
+    safe_dead_days = max(1, min(int(dead_days or 60), 3650))  # up to 10 years
+    safe_page = max(1, int(page or 1))
+    safe_page_size = max(10, min(int(page_size or 50), 200))  # HARD CAP
+    row_start = (safe_page - 1) * safe_page_size + 1
+    row_end = safe_page * safe_page_size
+
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH MaxBiz AS (
+      SELECT MAX(CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date)) AS MaxBizDate
+      FROM dbo.HISTORIC_RECEIPT r
+    ),
+    SalesAgg AS (
+      SELECT
+        CAST(c.ITM_CODE AS nvarchar(50)) AS item_code,
+        MAX(r.RCPT_DATE) AS last_sold_dt,
+        MAX(CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date)) AS last_biz_date
+      FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+      JOIN dbo.HISTORIC_RECEIPT r ON r.RCPT_ID = c.RCPT_ID
+      GROUP BY CAST(c.ITM_CODE AS nvarchar(50))
+    ),
+    ItemsBase AS (
+      SELECT
+        CAST(i.ITM_CODE AS nvarchar(50)) AS item_code,
+        COALESCE(
+          NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''),
+          CAST(i.ITM_CODE AS nvarchar(50))
+        ) AS item_title,
+        COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_SUBGROUP AS nvarchar(100)))), ''), '') AS subgroup
+      FROM dbo.ITEMS i
+    ),
+    Joined AS (
+      SELECT
+        b.item_code,
+        b.item_title,
+        b.subgroup,
+        s.last_sold_dt,
+        s.last_biz_date,
+        m.MaxBizDate,
+        CASE
+          WHEN s.last_biz_date IS NULL THEN NULL
+          ELSE DATEDIFF(DAY, s.last_biz_date, m.MaxBizDate)
+        END AS days_since_sold
+      FROM ItemsBase b
+      CROSS JOIN MaxBiz m
+      LEFT JOIN SalesAgg s ON s.item_code = b.item_code
+      WHERE
+        ( ? = '' OR b.subgroup = ? )
+        AND (
+          ? = '' OR
+          b.item_code LIKE '%' + ? + '%' OR
+          b.item_title LIKE '%' + ? + '%'
+        )
+    ),
+    DeadOnly AS (
+      SELECT *
+      FROM Joined
+      WHERE
+        -- dead if never sold OR sold >= dead_days ago
+        last_biz_date IS NULL
+        OR DATEDIFF(DAY, last_biz_date, MaxBizDate) >= ?
+    ),
+    Numbered AS (
+      SELECT
+        (SELECT COUNT(*) FROM DeadOnly) AS total_rows,
+        d.*,
+        ROW_NUMBER() OVER (
+          ORDER BY
+            CASE WHEN d.last_sold_dt IS NULL THEN 1 ELSE 0 END DESC,  -- never sold first
+            d.days_since_sold DESC,
+            d.item_title ASC
+        ) AS rn
+      FROM DeadOnly d
+    )
+    SELECT
+      total_rows,
+      item_code,
+      item_title,
+      subgroup,
+      CONVERT(varchar(19), last_sold_dt, 120) AS last_sold,
+      CONVERT(varchar(10), last_biz_date, 120) AS last_biz_date,
+      days_since_sold
+    FROM Numbered
+    WHERE rn BETWEEN ? AND ?
+    ORDER BY rn ASC;
+    """
+
+    params = [
+        safe_subgroup, safe_subgroup,
+        safe_q, safe_q, safe_q,
+        safe_dead_days,
+        row_start, row_end
+    ]
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    if not rows:
+        return {"total": 0, "rows": []}
+
+    total = int(rows[0].total_rows or 0)
+
+    out = []
+    for r in rows:
+        out.append({
+            "item_code": r.item_code,
+            "item_title": r.item_title,
+            "subgroup": r.subgroup or "",
+            "last_sold": r.last_sold or "",
+            "last_biz_date": r.last_biz_date or "",
+            "days_since_sold": int(r.days_since_sold) if r.days_since_sold is not None else None,
+        })
+
+    return {"total": total, "rows": out}

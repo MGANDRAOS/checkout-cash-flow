@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <div>
+      <h5 class="mb-0">Dead Items Report</h5>
+      <div class="text-secondary small">
+        Items not sold in the last <span class="fw-semibold">N BizDays</span> (BizDate = RCPT_DATE - 7h, date-only).
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label mb-1">
+            Search
+            <i class="bi bi-info-circle ms-1"
+               data-bs-toggle="tooltip"
+               title="Search by item code or title.
+Keeps results lightweight (paged) so the browser doesn’t choke."></i>
+          </label>
+          <input id="di-q" class="form-control" placeholder="e.g. 490 or Tannourine" />
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label mb-1">
+            Subgroup
+            <i class="bi bi-info-circle ms-1"
+               data-bs-toggle="tooltip"
+               title="Filter by exact subgroup value as stored in ITEMS.ITM_SUBGROUP.
+Works with numeric or text subgroups."></i>
+          </label>
+          <input id="di-subgroup" class="form-control" placeholder="e.g. 6" />
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label mb-1">
+            Dead threshold (BizDays)
+            <i class="bi bi-info-circle ms-1"
+               data-bs-toggle="tooltip"
+               title="Dead = not sold for at least N BizDays.
+Higher value means stricter definition of ‘dead’."></i>
+          </label>
+          <input id="di-dead-days" class="form-control" type="number" min="1" max="3650" value="60" />
+        </div>
+
+        <div class="col-md-2 d-flex gap-2">
+          <button id="di-run" class="btn btn-primary w-100">
+            <i class="bi bi-search"></i> Run
+          </button>
+          <button id="di-reset" class="btn btn-outline-secondary w-100">
+            Reset
+          </button>
+        </div>
+      </div>
+      <div id="di-status" class="small text-secondary mt-2"></div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <div class="small text-secondary" id="di-count">—</div>
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-sm btn-outline-secondary" id="di-prev">Prev</button>
+          <div class="small text-secondary" id="di-page">Page 1</div>
+          <button class="btn btn-sm btn-outline-secondary" id="di-next">Next</button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle" id="di-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Subgroup</th>
+              <th>Last sold</th>
+              <th class="text-end">Days since sold</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="small text-secondary mt-2">
+        <i class="bi bi-info-circle"></i>
+        “Days since sold” is computed from the last BizDate this item appeared in any receipt, compared to the Max BizDate in your data.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/dead_items.js"></script>
+<script>
+  window.DeadItemsModule?.init();
+</script>
+
+{% endblock %}
