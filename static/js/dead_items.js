@@ -21,7 +21,7 @@ window.DeadItemsModule = (function () {
   }
 
   function initTooltips() {
-    // Avoid crashing if Bootstrap JS isn't loaded for some reason
+    // Avoid crashing if Bootstrap JS isn't loaded
     if (!window.bootstrap || !window.bootstrap.Tooltip) return;
     const list = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     list.forEach(el => new bootstrap.Tooltip(el));
@@ -31,7 +31,16 @@ window.DeadItemsModule = (function () {
     return {
       q: (qs("di-q")?.value || "").trim(),
       subgroup: (qs("di-subgroup")?.value || "").trim(),
-      dead_days: (qs("di-dead-days")?.value || "60").trim()
+
+      // NEW: “recently active window”
+      lookback_days: (qs("di-lookback-days")?.value || "90").trim(),
+
+      // “now dead window”
+      dead_days: (qs("di-dead-days")?.value || "30").trim(),
+
+      // Optional noise filters (if you add inputs later, they’ll work automatically)
+      min_qty: (qs("di-min-qty")?.value || "").trim(),
+      min_receipts: (qs("di-min-receipts")?.value || "").trim(),
     };
   }
 
@@ -44,19 +53,25 @@ window.DeadItemsModule = (function () {
   }
 
   async function fetchPage(pageNumber) {
-    const filters = getFilters();
-    const url = buildUrl("/api/reports/dead-items", {
-      q: filters.q,
-      subgroup: filters.subgroup,
-      dead_days: filters.dead_days,
+    const f = getFilters();
+
+    // ✅ Correct endpoint
+    const url = buildUrl("/api/dead-items", {
+      q: f.q,
+      subgroup: f.subgroup,
+      lookback_days: f.lookback_days,
+      dead_days: f.dead_days,
+      min_qty: f.min_qty,
+      min_receipts: f.min_receipts,
       page: pageNumber,
       page_size: pageSize
     });
 
     setStatus("Loading...");
     const res = await fetch(url);
+
     if (!res.ok) {
-      setStatus("Failed to load");
+      setStatus(`Failed to load (${res.status})`);
       return { total: 0, rows: [] };
     }
 
@@ -92,11 +107,22 @@ window.DeadItemsModule = (function () {
     tbody.innerHTML = "";
 
     rows.forEach(r => {
-      const itemTitle = r.item_title || r.item_code;
+      const itemTitle = r.item_title || r.item_code || "—";
+      const subgroup = r.subgroup || "";
       const lastSold = r.last_sold || "—";
-      const daysSince = (r.days_since_sold === null || r.days_since_sold === undefined)
+
+      // ✅ Correct field name from backend
+      const daysSince = (r.days_since_last_sold === null || r.days_since_last_sold === undefined)
         ? "—"
-        : Number(r.days_since_sold).toLocaleString();
+        : Number(r.days_since_last_sold).toLocaleString();
+
+      const qtyLookback = (r.qty_lookback === null || r.qty_lookback === undefined)
+        ? "—"
+        : Number(r.qty_lookback).toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+      const receiptsLookback = (r.receipts_lookback === null || r.receipts_lookback === undefined)
+        ? "—"
+        : Number(r.receipts_lookback).toLocaleString();
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -104,9 +130,11 @@ window.DeadItemsModule = (function () {
           <div class="fw-semibold">${escapeHtml(itemTitle)}</div>
           <div class="text-secondary small">${escapeHtml(r.item_code || "")}</div>
         </td>
-        <td>${escapeHtml(r.subgroup || "")}</td>
+        <td>${escapeHtml(subgroup)}</td>
         <td>${escapeHtml(lastSold)}</td>
         <td class="text-end">${escapeHtml(daysSince)}</td>
+        <td class="text-end">${escapeHtml(qtyLookback)}</td>
+        <td class="text-end">${escapeHtml(receiptsLookback)}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -122,9 +150,12 @@ window.DeadItemsModule = (function () {
   }
 
   function reset() {
-    qs("di-q").value = "";
-    qs("di-subgroup").value = "";
-    qs("di-dead-days").value = "60";
+    if (qs("di-q")) qs("di-q").value = "";
+    if (qs("di-subgroup")) qs("di-subgroup").value = "";
+    if (qs("di-lookback-days")) qs("di-lookback-days").value = "90";
+    if (qs("di-dead-days")) qs("di-dead-days").value = "30";
+    if (qs("di-min-qty")) qs("di-min-qty").value = "";
+    if (qs("di-min-receipts")) qs("di-min-receipts").value = "";
     run(1);
   }
 
@@ -141,7 +172,7 @@ window.DeadItemsModule = (function () {
       if (endRow < lastTotalRows) run(currentPageNumber + 1);
     });
 
-    // Enter key in search triggers run
+    // Enter key triggers run
     qs("di-q")?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") run(1);
     });

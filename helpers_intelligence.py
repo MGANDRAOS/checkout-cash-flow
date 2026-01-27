@@ -5,7 +5,11 @@
 import os
 import pyodbc
 from datetime import datetime, timedelta, date
-from typing import Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
+from datetime import date
+
+# NOTE: assumes you already have _connect() defined in helpers_intelligence.py
+
 
 # ---------- Connection ----------
 def _conn_str() -> str:
@@ -2539,111 +2543,170 @@ def get_dead_items(
     return {"total": total, "rows": out}
 
 
-from typing import Any
-from datetime import date
-
-# NOTE: assumes you already have _connect() defined in helpers_intelligence.py
 
 
 def get_dead_items_page(
     q: str = "",
     subgroup: str = "",
-    dead_days: int = 60,
+    lookback_days: int = 90,
+    dead_days: int = 30,
+    min_qty: float = 1.0,
+    min_receipts: int = 1,
     page: int = 1,
     page_size: int = 50,
-) -> dict[str, Any]:
+):
     """
-    Dead Items Report (paged)
-    Definition:
-      - Item is "dead" if it has NOT been sold in the last `dead_days` BizDates.
-      - BizDate = CAST(DATEADD(HOUR, -7, RCPT_DATE) AS date)
-
-    Returns:
-      { "total": int, "rows": [ ... ] }
-
-    Rows include:
-      - item_code, item_title, subgroup
-      - last_sold (timestamp string or "")
-      - last_biz_date (YYYY-MM-DD or "")
-      - days_since_sold (int or None)
+    Recently Active -> Now Dead (actionable).
+    - Active window: sold at least once in last `lookback_days` BizDates
+    - Dead window: zero sales in last `dead_days` BizDates
+    - Anchored to Max RCPT_DATE in data (not system time)
+    - No int conversions on item_code/subgroup (safe with Arabic/text)
+    - Returns: {"total": int, "rows": [...]}
     """
+    safe_page = max(1, int(page or 1))
+    safe_page_size = max(10, min(int(page_size or 50), 200))
+    row_start = (safe_page - 1) * safe_page_size + 1
+    row_end = safe_page * safe_page_size
+
     safe_q = (q or "").strip()
     safe_subgroup = (subgroup or "").strip()
 
-    safe_dead_days = max(1, min(int(dead_days or 60), 3650))  # up to 10 years
-    safe_page = max(1, int(page or 1))
-    safe_page_size = max(10, min(int(page_size or 50), 200))  # HARD CAP
-    row_start = (safe_page - 1) * safe_page_size + 1
-    row_end = safe_page * safe_page_size
+    safe_lookback = max(1, min(int(lookback_days or 90), 3650))
+    safe_dead = max(1, min(int(dead_days or 30), 3650))
+    safe_min_qty = float(min_qty or 1.0)
+    safe_min_receipts = max(1, int(min_receipts or 1))
 
     sql = """
     SET NOCOUNT ON;
 
-    WITH MaxBiz AS (
-      SELECT MAX(CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date)) AS MaxBizDate
+    -- 1) Anchor on data (fast when RCPT_DATE is indexed)
+    WITH MaxDt AS (
+      SELECT MAX(r.RCPT_DATE) AS MaxRCPT_DATE
       FROM dbo.HISTORIC_RECEIPT r
     ),
-    SalesAgg AS (
+    MaxBiz AS (
+      SELECT
+        CAST(DATEADD(HOUR, -7, MaxRCPT_DATE) AS date) AS MaxBizDate,
+        MaxRCPT_DATE
+      FROM MaxDt
+    ),
+
+    -- 2) Convert BizDate windows to RCPT_DATE datetime boundaries (index-friendly)
+    Bounds AS (
+      SELECT
+        m.MaxBizDate,
+
+        -- Lookback BizDate start
+        DATEADD(DAY, -? + 1, m.MaxBizDate) AS LookbackStartBiz,
+
+        -- Dead BizDate start
+        DATEADD(DAY, -? + 1, m.MaxBizDate) AS DeadStartBiz,
+
+        -- Lookback window datetime start: BizDate + 07:00
+        DATEADD(HOUR, 7, CAST(DATEADD(DAY, -? + 1, m.MaxBizDate) AS datetime)) AS LookbackStartDT,
+
+        -- Dead window datetime start: BizDate + 07:00
+        DATEADD(HOUR, 7, CAST(DATEADD(DAY, -? + 1, m.MaxBizDate) AS datetime)) AS DeadStartDT,
+
+        -- Window end datetime (exclusive): (MaxBizDate + 1 day) + 07:00
+        DATEADD(HOUR, 7, CAST(DATEADD(DAY, 1, m.MaxBizDate) AS datetime)) AS EndDT
+      FROM MaxBiz m
+    ),
+
+    -- 3) Receipts in lookback window (filter by RCPT_DATE so indexes work)
+    LookbackReceipts AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+      CROSS JOIN Bounds b
+      WHERE r.RCPT_DATE >= b.LookbackStartDT
+        AND r.RCPT_DATE <  b.EndDT
+    ),
+
+    -- 4) Receipts in dead window (again index-friendly)
+    DeadReceipts AS (
+      SELECT
+        r.RCPT_ID,
+        r.RCPT_DATE,
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate
+      FROM dbo.HISTORIC_RECEIPT r
+      CROSS JOIN Bounds b
+      WHERE r.RCPT_DATE >= b.DeadStartDT
+        AND r.RCPT_DATE <  b.EndDT
+    ),
+
+    -- 5) Lines in lookback window
+    LbLines AS (
       SELECT
         CAST(c.ITM_CODE AS nvarchar(50)) AS item_code,
-        MAX(r.RCPT_DATE) AS last_sold_dt,
-        MAX(CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date)) AS last_biz_date
-      FROM dbo.HISTORIC_RECEIPT_CONTENTS c
-      JOIN dbo.HISTORIC_RECEIPT r ON r.RCPT_ID = c.RCPT_ID
-      GROUP BY CAST(c.ITM_CODE AS nvarchar(50))
+        COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''), CAST(c.ITM_CODE AS nvarchar(50))) AS item_title,
+        COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_SUBGROUP AS nvarchar(100)))), ''), '') AS subgroup,
+        CAST(COALESCE(c.ITM_QUANTITY, 0) AS float) AS qty,
+        lr.RCPT_ID,
+        lr.RCPT_DATE,
+        lr.BizDate
+      FROM LookbackReceipts lr
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = lr.RCPT_ID
+      LEFT JOIN dbo.ITEMS i
+        ON CAST(i.ITM_CODE AS nvarchar(50)) = CAST(c.ITM_CODE AS nvarchar(50))
     ),
-    ItemsBase AS (
+
+    -- 6) Aggregate per item over lookback
+    LbAgg AS (
       SELECT
-        CAST(i.ITM_CODE AS nvarchar(50)) AS item_code,
-        COALESCE(
-          NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''),
-          CAST(i.ITM_CODE AS nvarchar(50))
-        ) AS item_title,
-        COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_SUBGROUP AS nvarchar(100)))), ''), '') AS subgroup
-      FROM dbo.ITEMS i
+        l.item_code,
+        MAX(l.item_title) AS item_title,
+        MAX(l.subgroup)   AS subgroup,
+        MAX(l.RCPT_DATE)  AS last_sold_dt,
+        MAX(l.BizDate)    AS last_sold_biz,
+        SUM(l.qty)        AS qty_lookback,
+        COUNT(DISTINCT l.RCPT_ID) AS receipts_lookback
+      FROM LbLines l
+      GROUP BY l.item_code
+      HAVING
+        SUM(l.qty) >= ?
+        AND COUNT(DISTINCT l.RCPT_ID) >= ?
     ),
-    Joined AS (
+
+    -- 7) Anything sold in dead window is NOT dead
+    DeadSold AS (
+      SELECT DISTINCT CAST(c.ITM_CODE AS nvarchar(50)) AS item_code
+      FROM DeadReceipts dr
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = dr.RCPT_ID
+    ),
+
+    -- 8) Apply filters + compute days since last sold
+    Filtered AS (
       SELECT
-        b.item_code,
-        b.item_title,
-        b.subgroup,
-        s.last_sold_dt,
-        s.last_biz_date,
-        m.MaxBizDate,
-        CASE
-          WHEN s.last_biz_date IS NULL THEN NULL
-          ELSE DATEDIFF(DAY, s.last_biz_date, m.MaxBizDate)
-        END AS days_since_sold
-      FROM ItemsBase b
-      CROSS JOIN MaxBiz m
-      LEFT JOIN SalesAgg s ON s.item_code = b.item_code
-      WHERE
-        ( ? = '' OR b.subgroup = ? )
+        a.item_code,
+        a.item_title,
+        a.subgroup,
+        a.last_sold_dt,
+        a.last_sold_biz,
+        a.qty_lookback,
+        a.receipts_lookback,
+        DATEDIFF(DAY, a.last_sold_biz, b.MaxBizDate) AS days_since_last_sold
+      FROM LbAgg a
+      CROSS JOIN Bounds b
+      WHERE NOT EXISTS (SELECT 1 FROM DeadSold d WHERE d.item_code = a.item_code)
+        AND ( ? = '' OR a.subgroup = ? )
         AND (
-          ? = '' OR
-          b.item_code LIKE '%' + ? + '%' OR
-          b.item_title LIKE '%' + ? + '%'
+          ? = ''
+          OR a.item_code LIKE '%' + ? + '%'
+          OR a.item_title LIKE '%' + ? + '%'
         )
     ),
-    DeadOnly AS (
-      SELECT *
-      FROM Joined
-      WHERE
-        -- dead if never sold OR sold >= dead_days ago
-        last_biz_date IS NULL
-        OR DATEDIFF(DAY, last_biz_date, MaxBizDate) >= ?
-    ),
+
     Numbered AS (
       SELECT
-        (SELECT COUNT(*) FROM DeadOnly) AS total_rows,
-        d.*,
+        (SELECT COUNT(*) FROM Filtered) AS total_rows,
+        f.*,
         ROW_NUMBER() OVER (
-          ORDER BY
-            CASE WHEN d.last_sold_dt IS NULL THEN 1 ELSE 0 END DESC,  -- never sold first
-            d.days_since_sold DESC,
-            d.item_title ASC
+          ORDER BY f.days_since_last_sold DESC, f.qty_lookback DESC, f.item_code ASC
         ) AS rn
-      FROM DeadOnly d
+      FROM Filtered f
     )
     SELECT
       total_rows,
@@ -2651,17 +2714,27 @@ def get_dead_items_page(
       item_title,
       subgroup,
       CONVERT(varchar(19), last_sold_dt, 120) AS last_sold,
-      CONVERT(varchar(10), last_biz_date, 120) AS last_biz_date,
-      days_since_sold
+      CAST(days_since_last_sold AS int)       AS days_since_last_sold,
+      CAST(qty_lookback AS float)             AS qty_lookback,
+      CAST(receipts_lookback AS int)          AS receipts_lookback
     FROM Numbered
     WHERE rn BETWEEN ? AND ?
     ORDER BY rn ASC;
     """
 
+    # NOTE: lookback/dead are used twice in Bounds, so we pass them twice.
     params = [
+        safe_lookback,  # LookbackStartBiz
+        safe_dead,      # DeadStartBiz
+        safe_lookback,  # LookbackStartDT
+        safe_dead,      # DeadStartDT
+
+        safe_min_qty,
+        safe_min_receipts,
+
         safe_subgroup, safe_subgroup,
         safe_q, safe_q, safe_q,
-        safe_dead_days,
+
         row_start, row_end
     ]
 
@@ -2682,8 +2755,9 @@ def get_dead_items_page(
             "item_title": r.item_title,
             "subgroup": r.subgroup or "",
             "last_sold": r.last_sold or "",
-            "last_biz_date": r.last_biz_date or "",
-            "days_since_sold": int(r.days_since_sold) if r.days_since_sold is not None else None,
+            "days_since_last_sold": int(r.days_since_last_sold or 0),
+            "qty_lookback": float(r.qty_lookback or 0.0),
+            "receipts_lookback": int(r.receipts_lookback or 0),
         })
 
     return {"total": total, "rows": out}

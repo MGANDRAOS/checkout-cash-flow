@@ -6,7 +6,9 @@
     <div>
       <h5 class="mb-0">Dead Items Report</h5>
       <div class="text-secondary small">
-        Items not sold in the last <span class="fw-semibold">N BizDays</span> (BizDate = RCPT_DATE - 7h, date-only).
+        Shows items that were active in the last <span class="fw-semibold">Lookback</span> window,
+        but have not sold in the last <span class="fw-semibold">Dead</span> window.
+        <span class="ms-1">(BizDate = RCPT_DATE - 7h)</span>
       </div>
     </div>
   </div>
@@ -21,31 +23,41 @@
             <i class="bi bi-info-circle ms-1"
                data-bs-toggle="tooltip"
                title="Search by item code or title.
-Keeps results lightweight (paged) so the browser doesn’t choke."></i>
+Paged results so the browser doesn’t choke."></i>
           </label>
           <input id="di-q" class="form-control" placeholder="e.g. 490 or Tannourine" />
         </div>
 
-        <div class="col-md-3">
+        <div class="col-md-2">
           <label class="form-label mb-1">
             Subgroup
             <i class="bi bi-info-circle ms-1"
                data-bs-toggle="tooltip"
-               title="Filter by exact subgroup value as stored in ITEMS.ITM_SUBGROUP.
-Works with numeric or text subgroups."></i>
+               title="Exact match vs ITEMS.ITM_SUBGROUP (numeric or text)."></i>
           </label>
           <input id="di-subgroup" class="form-control" placeholder="e.g. 6" />
         </div>
 
-        <div class="col-md-3">
+        <div class="col-md-2">
           <label class="form-label mb-1">
-            Dead threshold (BizDays)
+            Lookback (BizDays)
+            <i class="bi bi-info-circle ms-1"
+               data-bs-toggle="tooltip"
+               title="Only consider items that sold at least once within this window.
+This removes old inactive POS junk."></i>
+          </label>
+          <input id="di-lookback-days" class="form-control" type="number" min="7" max="3650" value="90" />
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label mb-1">
+            Dead (BizDays)
             <i class="bi bi-info-circle ms-1"
                data-bs-toggle="tooltip"
                title="Dead = not sold for at least N BizDays.
-Higher value means stricter definition of ‘dead’."></i>
+Lower = more sensitive, higher = stricter."></i>
           </label>
-          <input id="di-dead-days" class="form-control" type="number" min="1" max="3650" value="60" />
+          <input id="di-dead-days" class="form-control" type="number" min="1" max="3650" value="30" />
         </div>
 
         <div class="col-md-2 d-flex gap-2">
@@ -57,6 +69,7 @@ Higher value means stricter definition of ‘dead’."></i>
           </button>
         </div>
       </div>
+
       <div id="di-status" class="small text-secondary mt-2"></div>
     </div>
   </div>
@@ -81,6 +94,8 @@ Higher value means stricter definition of ‘dead’."></i>
               <th>Subgroup</th>
               <th>Last sold</th>
               <th class="text-end">Days since sold</th>
+              <th class="text-end">Qty (lookback)</th>
+              <th class="text-end">Receipts (lookback)</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -89,12 +104,13 @@ Higher value means stricter definition of ‘dead’."></i>
 
       <div class="small text-secondary mt-2">
         <i class="bi bi-info-circle"></i>
-        “Days since sold” is computed from the last BizDate this item appeared in any receipt, compared to the Max BizDate in your data.
+        “Days since sold” is based on the last BizDate the item appeared in any receipt, compared to your dataset’s Max BizDate.
       </div>
     </div>
   </div>
 </div>
 
+<!-- IMPORTANT: your module is under /static/js/modules/ ... -->
 <script src="/static/js/dead_items.js"></script>
 <script>
   window.DeadItemsModule?.init();
