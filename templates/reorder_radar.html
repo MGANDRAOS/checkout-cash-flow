@@ -1,0 +1,138 @@
+<!-- templates/reorder_radar.html -->
+{% extends "base.html" %}
+
+{% block title %}Reorder Radar{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h4 class="mb-0">Reorder Radar</h4>
+            <div class="text-muted small">Daily top-up list (BizDate = RCPT_DATE - 7h)</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <form id="reorderFilters" class="row g-2 align-items-end">
+
+                <div class="col-12 col-md-3">
+                    <!-- Search -->
+                    <label class="form-label d-flex align-items-center gap-2">
+                        Search
+                        <span class="text-muted" role="button" tabindex="0" data-bs-toggle="tooltip"
+                            data-bs-placement="top" data-bs-html="true"
+                            title="Filter by item code or name.<br/>Example: <b>12345</b> or <b>Pepsi</b>.">
+                            <i class="bi bi-info-circle"></i>
+                        </span>
+                    </label> <input id="q" name="q" class="form-control" placeholder="Item code or name" />
+                </div>
+
+                <div class="col-6 col-md-2">
+                    <!-- Lookback -->
+                    <label class="form-label d-flex align-items-center gap-2">
+                        Lookback
+                        <span class="text-muted" role="button" tabindex="0" data-bs-toggle="tooltip"
+                            data-bs-placement="top" data-bs-html="true"
+                            title="Controls how recent sales history is emphasized.<br/>Shorter = more “today-focused”.">
+                            <i class="bi bi-info-circle"></i>
+                        </span>
+                    </label>
+
+                    <select id="lookback" name="lookback" class="form-select">
+                        <option value="7">7 days</option>
+                        <option value="14">14 days</option>
+                        <option value="30" selected>30 days</option>
+                        <option value="90">90 days</option>
+                    </select>
+                </div>
+
+                <div class="col-6 col-md-2">
+                    <!-- Only action items -->
+                    <label class="form-label d-flex align-items-center gap-2">
+                        Only action items
+                        <span class="text-muted" role="button" tabindex="0" data-bs-toggle="tooltip"
+                            data-bs-placement="top" data-bs-html="true"
+                            title="Shows only items that look worth reordering now.<br/>Hides low-signal items to keep the list short.">
+                            <i class="bi bi-info-circle"></i>
+                        </span>
+                    </label> <select id="onlyAction" name="onlyAction" class="form-select">
+                        <option value="1" selected>Yes</option>
+                        <option value="0">No</option>
+                    </select>
+                </div>
+
+                <div class="col-12 col-md-3">
+                    <!-- Subgroup -->
+                    <label class="form-label d-flex align-items-center gap-2">
+                        Subgroup
+                        <span class="text-muted" role="button" tabindex="0" data-bs-toggle="tooltip"
+                            data-bs-placement="top" data-bs-html="true"
+                            title="Optional category filter from ITEMS.<br/>Leave empty to show all items.">
+                            <i class="bi bi-info-circle"></i>
+                        </span>
+                    </label> <input id="subgroup" name="subgroup" class="form-control"
+                        placeholder="Optional subgroup filter" />
+                </div>
+
+                <div class="col-12 col-md-2 d-grid">
+                    <button id="applyFilters" type="button" class="btn btn-primary">Apply</button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table id="reorderTable" class="table table-striped table-hover align-middle w-100">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th class="text-end">Score</th>
+                            <th class="text-end">Qty 7d</th>
+                            <th class="text-end">Qty 30d</th>
+                            <th class="text-end">Avg/day 30d</th>
+                            <th class="text-end">Trend (7/90)</th>
+                            <th class="text-end">Days since last sale</th>
+                            <th>Last sold</th>
+                            <th>Flags</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="d-flex justify-content-end mt-2">
+                <a id="exportCsv" class="btn btn-outline-secondary btn-sm" href="#">Export CSV (current filters)</a>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- IMPORTANT: keep JS modular -->
+<script src="{{ url_for('static', filename='js/reorder_radar.js') }}"></script>
+<script>
+    window.ReorderRadarModule.init({
+        tableSelector: "#reorderTable",
+        filtersFormSelector: "#reorderFilters",
+        applyButtonSelector: "#applyFilters",
+        exportLinkSelector: "#exportCsv"
+    });
+</script>
+
+<script>
+    // IMPORTANT: Bootstrap tooltips must be initialized once per page.
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (tooltipTriggerEl) {
+        new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+</script>
+{% endblock %}

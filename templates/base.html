@@ -24,8 +24,6 @@
 
     <!-- DataTables CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
-
-
 </head>
 
 <body>
@@ -36,6 +34,7 @@
                 data-bs-target="#sidebar" aria-controls="sidebar">
                 <i class="bi bi-list"></i>
             </button>
+            <!-- NOTE: leaving your logo path as-is (works for you today) -->
             <a class="navbar-brand" href="/"><img src="static/assets/logo.png"></a>
         </div>
     </nav>
@@ -50,40 +49,21 @@
 
         <div class="offcanvas-body d-flex flex-column px-0">
 
-            <!-- Accounting Section -->
-            <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">Accounting</div>
-
-            <a href="/" class="sidebar-link {% if request.path == '/' %}bg-primary text-white{% endif %}">
-                <i class="bi bi-house-door"></i> Dashboard
-            </a>
-
-            <a href="/closings"
-                class="sidebar-link {% if request.path.startswith('/closings') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-calendar-check"></i> Daily Closings
-            </a>
-
-            <a href="/fixed-collections"
-                class="sidebar-link {% if request.path.startswith('/fixed-collections') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-wallet2"></i> Collections
-            </a>
-
-            <a href="/expenses"
-                class="sidebar-link {% if request.path.startswith('/bills') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-file-earmark-text"></i> Expenses
-            </a>
-
             <hr class="border-secondary my-3">
 
             <!-- POS Section -->
             <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">POS</div>
 
-            <a href="/intelligence"
-                class="sidebar-link {% if request.path.startswith('/intelligence') %}bg-primary text-white{% endif %}">
+            <a href="/"
+                class="sidebar-link {% if request.path.startswith('/') %}bg-primary text-white{% endif %}">
                 <i class="bi bi-bar-chart"></i> Dashboard
             </a>
 
+            <!-- Items Section -->
+            <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">Items</div>
+
             <a href="{{ url_for('items.items_home') }}"
-                class="sidebar-link {% if request.path.startswith('/items') %}bg-primary text-white{% endif %}">
+                class="sidebar-link {% if request.path == url_for('items.items_home') %}bg-primary text-white{% endif %}">
                 <i class="bi bi-basket"></i> Items
             </a>
 
@@ -92,13 +72,29 @@
                 <i class="bi bi-search"></i> Items Explorer
             </a>
 
-            <a href="/sales"
-                class="sidebar-link {% if request.path.startswith('/pos/sales') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-cash-stack"></i> Sales
-            </a>
             <a href="/reports/item-trends"
                 class="sidebar-link {% if request.path.startswith('/reports/item-trends') %}bg-primary text-white{% endif %}">
                 <i class="bi bi-graph-up"></i> Item Trends
+            </a>
+
+            <a href="/reports/dead-items"
+                class="sidebar-link {% if request.path.startswith('/reports/dead-items') %}bg-primary text-white{% endif %}">
+                <i class="bi bi-graph-down"></i> Dead Items
+            </a>
+
+            <!-- IMPORTANT: Fix active condition for Reorder Radar (was mistakenly checking dead-items) -->
+            <a href="{{ url_for('reorder_radar.reorder_radar_page') }}"
+                class="sidebar-link {% if request.path.startswith('/reorder-radar') %}bg-primary text-white{% endif %}">
+                <i class="bi bi-basket"></i>
+                Reorder Radar
+            </a>
+
+            <!-- Sales Section -->
+            <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">Sales</div>
+
+            <a href="/sales"
+                class="sidebar-link {% if request.path.startswith('/sales') %}bg-primary text-white{% endif %}">
+                <i class="bi bi-cash-stack"></i> Sales
             </a>
 
             <a href="/invoices"
@@ -117,7 +113,6 @@
             </a>
         </div>
     </div>
-
 
     <main class="container px-4">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -150,29 +145,30 @@
         </div>
     </div>
 
+    <!-- Core JS libs -->
     <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- Items grid module -->
-    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.noStyle.js" defer></script>
-    <script src="{{ url_for('static', filename='js/items_grid.js') }}"></script>
-
-    <script src="{{ url_for('static', filename='js/intelligence.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/realtime.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/item_trends.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/items_explorer.js') }}"></script>
-
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-
 
     <!-- DataTables + Bootstrap5 JS -->
     <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
 
+    <!-- Items grid module -->
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.noStyle.js" defer></script>
+    <script src="{{ url_for('static', filename='js/items_grid.js') }}"></script>
 
+    <!-- Global modules -->
+    <script src="{{ url_for('static', filename='js/intelligence.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/realtime.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/item_trends.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/items_explorer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
+    <!-- IMPORTANT:
+         This block is REQUIRED so child templates can inject page-specific JS.
+         Example: reorder_radar.html injects /static/js/reorder_radar.js and init code here. -->
+    {% block scripts %}{% endblock %}
 
 </body>
 

@@ -18,7 +18,7 @@ from helpers_intelligence import (
 
 intelligence_bp = Blueprint("intelligence", __name__)
 
-@intelligence_bp.route("/intelligence")
+@intelligence_bp.route("/")
 def intelligence_home():
     return render_template("intelligence.html")
 

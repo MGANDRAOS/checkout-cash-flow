@@ -69,6 +69,45 @@ def execute_sql_readonly(sql_query: str):
         raise
 
 
+def mssql_readonly_query(sql_query: str, params: dict | None = None):
+    """
+    Alias used by analytics pages (Reorder Radar, etc.).
+
+    IMPORTANT:
+    - Read-only enforced (SELECT-only)
+    - Supports parameterized queries to prevent injection
+    - Returns list[dict] like execute_sql_readonly
+    """
+    normalized_query = sql_query.strip().lower()
+
+    # IMPORTANT: enforce read-only
+    if not normalized_query.startswith("select") and not normalized_query.startswith("with"):
+        raise ValueError("Only SELECT/CTE (WITH...) statements are allowed.")
+
+    if ";" in normalized_query[:-1]:
+        raise ValueError("Multiple statements detected; query rejected.")
+
+    try:
+        conn = _connect()
+        cursor = conn.cursor()
+
+        # IMPORTANT: pass params safely if provided
+        if params:
+            cursor.execute(sql_query, tuple(params))
+        else:
+            cursor.execute(sql_query)
+
+        columns = [col[0] for col in cursor.description]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        cursor.close()
+        conn.close()
+        return rows
+
+    except Exception as e:
+        print(f"[mssql_readonly_query] Error executing SQL: {e}")
+        raise
+
 # ---------- Time window helpers ----------
 def _last_business_window(cur) -> Optional[Tuple[datetime, datetime, datetime]]:
     """
@@ -1667,7 +1706,6 @@ def get_item_last_invoices(item_code: str, days: int = 30, limit: int = 10):
     return result
 
 
-
 def get_item_momentum_kpis(item_code: str, days: int = 30):
     """
     Momentum KPIs for Item 360 drawer:
@@ -1788,10 +1826,6 @@ def get_item_momentum_kpis(item_code: str, days: int = 30):
         "peak_hour_qty": peak_qty,
     }
 
-
-# ------------------------------------------------------------
-# Invoices Module (read-only MSSQL helpers)
-# ------------------------------------------------------------
 
 
 def search_invoices(
@@ -2376,8 +2410,7 @@ def get_daily_items_detail(biz_date: date, item_code: str = "", subgroup: str = 
         for r in rows
     ]
     
-    
-    
+        
   
 # ------------------------------------------------------------
 # Dead Items Report (read-only MSSQL helper)
@@ -2541,8 +2574,6 @@ def get_dead_items(
       })
 
     return {"total": total, "rows": out}
-
-
 
 
 def get_dead_items_page(
