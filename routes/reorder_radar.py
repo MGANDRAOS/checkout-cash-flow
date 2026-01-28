@@ -357,16 +357,34 @@ SELECT
     subgroup_name
     flags
 FROM filtered
-ORDER BY {safe_order_by} {safe_order_dir}, score DESC
+ORDER BY
+    CASE WHEN ? = 'itm_code' THEN CAST(itm_code AS varchar(50)) END,
+    CASE WHEN ? = 'itm_name' THEN itm_name END,
+    CASE WHEN ? = 'score' THEN score END,
+    CASE WHEN ? = 'qty_7d' THEN qty_7d END,
+    CASE WHEN ? = 'qty_30d' THEN qty_30d END,
+    CASE WHEN ? = 'avg_daily_30d' THEN avg_daily_30d END,
+    CASE WHEN ? = 'trend_ratio' THEN trend_ratio END,
+    CASE WHEN ? = 'days_since_last_sale' THEN days_since_last_sale END,
+    CASE WHEN ? = 'last_sold_bizdate' THEN last_sold_bizdate END,
+    CASE WHEN ? = 'flags' THEN flags END
+    -- Stable tie-breaker (ONLY ONCE, always safe)
+    , itm_code
 OFFSET ? ROWS
 FETCH NEXT ? ROWS ONLY;
+
 """.strip()
 
     # IMPORTANT: positional params must match '?' order exactly
     params: List[Any] = [
-        q, q, q,           # three uses in LIKE section
-        subgroup, subgroup, # subgroup check + value
+        q, q, q,
+        subgroup, subgroup,
         1 if only_action else 0,
+
+        # ORDER BY selector repeated 10 times (must match the 10 CASE WHEN ? = '...' lines)
+        safe_order_by, safe_order_by, safe_order_by, safe_order_by, safe_order_by,
+        safe_order_by, safe_order_by, safe_order_by, safe_order_by, safe_order_by,
+
         int(offset),
         int(page_size),
     ]
@@ -380,11 +398,7 @@ def build_reorder_radar_count_sql(
     subgroup: str,
     lookback_days: int,
     only_action: bool,
-) -> Tuple[str, Sequence[Any]]:
-    """
-    Count query using positional params for pyodbc.
-    Keep filters consistent with main query.
-    """
+):
     sql = """
 WITH receipts AS (
     SELECT
@@ -417,63 +431,64 @@ agg AS (
 scored AS (
     SELECT
         a.ITM_CODE AS itm_code,
+
+        -- score (same idea as main query, simplified but consistent)
         CAST(
             (
                 (ISNULL(a.qty_30d, 0) / 30.0) * 10.0
-                + (
-                    CASE
-                        WHEN ((ISNULL(a.qty_7d, 0) / 7.0 + 0.001) / (ISNULL(a.qty_90d, 0) / 90.0 + 0.001)) >= 1.4 THEN 6
-                        WHEN ((ISNULL(a.qty_7d, 0) / 7.0 + 0.001) / (ISNULL(a.qty_90d, 0) / 90.0 + 0.001)) >= 1.1 THEN 3
-                        ELSE 0
-                    END
-                )
-                + (
-                    CASE
-                        WHEN (a.last_sold_bizdate IS NOT NULL)
-                             AND (DATEDIFF(DAY, a.last_sold_bizdate, CAST(GETDATE() AS date)) >= 5)
-                             AND (ISNULL(a.days_sold_90d, 0) >= 10)
-                        THEN 8
-                        ELSE 0
-                    END
-                )
+                + CASE
+                    WHEN ((ISNULL(a.qty_7d, 0) / 7.0 + 0.001) / (ISNULL(a.qty_90d, 0) / 90.0 + 0.001)) >= 1.4 THEN 6
+                    WHEN ((ISNULL(a.qty_7d, 0) / 7.0 + 0.001) / (ISNULL(a.qty_90d, 0) / 90.0 + 0.001)) >= 1.1 THEN 3
+                    ELSE 0
+                  END
+                + CASE
+                    WHEN a.last_sold_bizdate IS NOT NULL
+                         AND DATEDIFF(DAY, a.last_sold_bizdate, CAST(GETDATE() AS date)) >= 5
+                         AND ISNULL(a.days_sold_90d, 0) >= 10
+                    THEN 8
+                    ELSE 0
+                  END
             ) AS decimal(10, 2)
         ) AS score,
-        LTRIM(RTRIM(
-            CONCAT(
-                CASE WHEN (a.last_sold_bizdate IS NOT NULL)
-                          AND (DATEDIFF(DAY, a.last_sold_bizdate, CAST(GETDATE() AS date)) >= 5)
-                          AND (ISNULL(a.days_sold_90d, 0) >= 10)
-                     THEN 'STOCKOUT? ' ELSE '' END
-            )
-        )) AS flags
-        FROM agg a
-        INNER JOIN ITEMS i
-            ON i.ITM_CODE = a.ITM_CODE
-        WHERE 1=1
-        AND (
-                ? = ''
-                OR CAST(a.ITM_CODE AS varchar(50)) LIKE '%' + ? + '%'
-                OR i.ITM_TITLE LIKE '%' + ? + '%'
-            )
-        AND ( ? = '' OR CAST(i.ITM_SUBGROUP AS varchar(50)) = ? )
+
+        CASE
+            WHEN a.last_sold_bizdate IS NOT NULL
+                 AND DATEDIFF(DAY, a.last_sold_bizdate, CAST(GETDATE() AS date)) >= 5
+                 AND ISNULL(a.days_sold_90d, 0) >= 10
+            THEN 'STOCKOUT?'
+            ELSE ''
+        END AS flags
+
+    FROM agg a
+    INNER JOIN ITEMS i
+        ON i.ITM_CODE = a.ITM_CODE
+    WHERE 1=1
+      AND (
+            ? = ''
+            OR CAST(a.ITM_CODE AS varchar(50)) LIKE '%' + ? + '%'
+            OR i.ITM_TITLE LIKE '%' + ? + '%'
+          )
+      AND ( ? = '' OR CAST(i.ITM_SUBGROUP AS varchar(50)) = ? )
 ),
 filtered AS (
     SELECT *
     FROM scored
     WHERE 1=1
       AND (
-        ? = 0
-        OR score >= 5
-        OR flags LIKE '%STOCKOUT?%'
-      )
+            ? = 0
+            OR score >= 5
+            OR flags = 'STOCKOUT?'
+          )
 )
-SELECT COUNT(1) AS cnt FROM filtered;
+SELECT COUNT(1) AS cnt
+FROM filtered;
 """.strip()
 
-    params: List[Any] = [
+    params = [
         q, q, q,
         subgroup, subgroup,
         1 if only_action else 0,
     ]
-
     return sql, params
+
+
