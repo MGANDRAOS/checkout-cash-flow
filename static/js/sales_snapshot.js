@@ -15,6 +15,7 @@
       const exportCsvBtn = document.getElementById("exportCsvBtn");
 
       const totalSalesEl = document.getElementById("totalSales");
+      const totalSalesElUsd = document.getElementById("totalSalesUSD");
       const kpiSublineEl = document.getElementById("kpiSubline");
       const breakdownHintEl = document.getElementById("breakdownHint");
       const breakdownBodyEl = document.getElementById("breakdownBody");
@@ -178,6 +179,7 @@
 
           // Render KPI
           totalSalesEl.textContent = formatNumber(data.total_sales);
+          totalSalesElUsd.textContent = formatNumber(data.total_sales/89000);
 
           // Render KPI subline
           const countLabel = mode === "monthly" ? "months" : "days";
