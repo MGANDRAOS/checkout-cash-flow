@@ -738,3 +738,39 @@ h2.h4 {
 div.dataTables_wrapper div.dataTables_length select {
     width: 80px !important;
 }
+
+
+/* static/main.css */
+
+/* =========================
+   Sales Snapshot (Big Fonts)
+   ========================= */
+
+/* Massive number style (works great on kiosk/TV too) */
+.snapshot-total-number {
+  font-size: clamp(48px, 6vw, 110px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+/* Make big inputs feel “premium” */
+#salesSnapshotPage .form-control-lg {
+  padding-top: 16px;
+  padding-bottom: 16px;
+  font-size: 22px;
+}
+
+/* Big buttons */
+#salesSnapshotPage .btn-lg {
+  padding: 14px 18px;
+  font-size: 18px;
+  border-radius: 14px;
+}
+
+/* Bigger table text + comfy rows */
+#salesSnapshotPage table td,
+#salesSnapshotPage table th {
+  padding-top: 18px;
+  padding-bottom: 18px;
+}

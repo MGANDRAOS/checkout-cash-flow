@@ -288,6 +288,11 @@ document.addEventListener("DOMContentLoaded", function () {
     if (window.fixedKpis) FixedWidget.init(window.fixedKpis, window.fixedPoints);
     IntelligencePOS.init();
 
+    // Sales Snapshot page init (runs only if page exists)
+    if (window.SalesSnapshotModule && document.getElementById("salesSnapshotPage")) {
+        window.SalesSnapshotModule.init();
+    }
+
     const salesInput = document.getElementById("sales");
     if (salesInput && salesInput.form) {
 

@@ -54,8 +54,7 @@
             <!-- POS Section -->
             <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">POS</div>
 
-            <a href="/"
-                class="sidebar-link {% if request.path.startswith('/') %}bg-primary text-white{% endif %}">
+            <a href="/" class="sidebar-link {% if request.path.startswith('/') %}bg-primary text-white{% endif %}">
                 <i class="bi bi-bar-chart"></i> Dashboard
             </a>
 
@@ -92,10 +91,15 @@
             <!-- Sales Section -->
             <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">Sales</div>
 
+            <a href="/sales-snapshot"
+                class="sidebar-link {% if request.path.startswith('/sales-snapshot') %}bg-primary text-white{% endif %}">
+                <i class="bi bi-graph-up"></i> Sales Snapshot
+            </a>
             <a href="/sales"
                 class="sidebar-link {% if request.path.startswith('/sales') %}bg-primary text-white{% endif %}">
                 <i class="bi bi-cash-stack"></i> Sales
             </a>
+
 
             <a href="/invoices"
                 class="sidebar-link {% if request.path.startswith('/invoices') %}bg-primary text-white{% endif %}">

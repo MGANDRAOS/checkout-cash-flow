@@ -1,5 +1,5 @@
 # routes/sales.py
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, Response
 from datetime import datetime
 from helpers_sales import (
     get_sales_summary,
@@ -11,7 +11,8 @@ from helpers_sales import (
     get_receipts,
     get_sales_cumulative_by_hour,
     get_sales_last14days,
-    get_items_sold
+    get_items_sold,
+    get_sales_summary_range
 )
 
 # Blueprint setup
@@ -134,3 +135,88 @@ def api_sales_daily_14days():
     return jsonify(data)
 
 
+@sales_bp.route("/sales-snapshot")
+def sales_snapshot():
+    return render_template("sales_snapshot.html")
+
+@sales_bp.route("/api/sales-summary")
+def api_sales_summary_range():
+    """
+    API used by the Sales Snapshot page.
+    Query params:
+      - from=YYYY-MM-DD
+      - to=YYYY-MM-DD
+      - mode=daily|monthly
+    """
+    from_str = (request.args.get("from") or "").strip()
+    to_str = (request.args.get("to") or "").strip()
+    mode = (request.args.get("mode") or "daily").strip().lower()
+
+    if not from_str or not to_str:
+        return jsonify({"total_sales": 0.0, "rows": [], "meta": {"count": 0, "avg": 0.0}}), 400
+
+    try:
+        data = get_sales_summary_range(from_str, to_str, mode)
+        return jsonify(data)
+    except Exception as e:
+        # IMPORTANT: don’t crash the UI — return a structured error
+        return jsonify({
+            "total_sales": 0.0,
+            "rows": [],
+            "meta": {"count": 0, "avg": 0.0},
+            "error": str(e)
+        }), 500
+        
+
+@sales_bp.route("/api/sales-summary/export-csv")
+def api_sales_summary_export_csv():
+    """
+    Downloads CSV for the selected range + mode (daily/monthly).
+    Query params:
+      - from=YYYY-MM-DD
+      - to=YYYY-MM-DD
+      - mode=daily|monthly
+    """
+    from_str = (request.args.get("from") or "").strip()
+    to_str = (request.args.get("to") or "").strip()
+    mode = (request.args.get("mode") or "daily").strip().lower()
+
+    if not from_str or not to_str:
+        return Response("Missing from/to dates", status=400, mimetype="text/plain")
+
+    if mode not in ("daily", "monthly"):
+        mode = "daily"
+
+    try:
+        data = get_sales_summary_range(from_str, to_str, mode)
+        rows = data.get("rows", []) or []
+        total_sales = float(data.get("total_sales") or 0.0)
+    except Exception as e:
+        return Response(f"Failed to build CSV: {str(e)}", status=500, mimetype="text/plain")
+
+    # Build CSV safely
+    # IMPORTANT: keep it simple: label,total
+    import csv
+    import io
+
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    writer.writerow(["label", "total_sales"])  # header
+
+    for r in rows:
+        writer.writerow([r.get("label", ""), r.get("total", 0)])
+
+    # Add a final total row (optional but useful)
+    writer.writerow([])
+    writer.writerow(["TOTAL", total_sales])
+
+    csv_text = csv_buffer.getvalue()
+
+    filename = f"sales_summary_{mode}_{from_str}_to_{to_str}.csv"
+    return Response(
+        csv_text,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )

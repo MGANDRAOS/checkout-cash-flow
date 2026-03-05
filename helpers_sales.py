@@ -14,6 +14,104 @@ END
 # Rotate real clock hour to "business hour" bucket where 0==08:00, 23==07:00
 BIZ_HOUR_SQL = "((DATEPART(HOUR, r.RCPT_DATE) + 24 - 8) % 24)"
 
+
+# helpers_sales.py
+
+# ----------------------------------------------------------
+# RANGE SALES SUMMARY (DAILY / MONTHLY)
+# ----------------------------------------------------------
+def get_sales_summary_range(from_str: str, to_str: str, mode: str = "daily"):
+    """
+    Returns total sales + breakdown for a business-date range.
+
+    Inputs:
+      - from_str: YYYY-MM-DD
+      - to_str:   YYYY-MM-DD
+      - mode:     "daily" | "monthly"
+
+    Output:
+      {
+        "total_sales": float,
+        "rows": [{"label": "2026-03-01", "total": 123.0}, ...],
+        "meta": {"count": int, "avg": float}
+      }
+    """
+    from datetime import datetime
+
+    mode = (mode or "daily").strip().lower()
+    if mode not in ("daily", "monthly"):
+        mode = "daily"
+
+    # Parse dates safely
+    from_date = datetime.strptime(from_str, "%Y-%m-%d").date()
+    to_date = datetime.strptime(to_str, "%Y-%m-%d").date()
+
+    if from_date > to_date:
+        # Caller should validate too, but we keep this safe.
+        return {"total_sales": 0.0, "rows": [], "meta": {"count": 0, "avg": 0.0}}
+
+    with _connect() as cn:
+        cur = cn.cursor()
+
+        if mode == "monthly":
+            # IMPORTANT:
+            # We group by MONTH of the *business date*, not the raw receipt date.
+            # Using FORMAT on the business-date expression keeps it correct.
+            cur.execute(f"""
+                SELECT
+                  FORMAT({BUSINESS_DATE_SQL}, 'yyyy-MM') AS label,
+                  SUM(r.RCPT_AMOUNT) AS total
+                FROM dbo.HISTORIC_RECEIPT r
+                WHERE {BUSINESS_DATE_SQL} BETWEEN ? AND ?
+                GROUP BY FORMAT({BUSINESS_DATE_SQL}, 'yyyy-MM')
+                ORDER BY label ASC
+            """, (from_date, to_date))
+        else:
+            # Daily by business date
+            cur.execute(f"""
+                SELECT
+                  {BUSINESS_DATE_SQL} AS label,
+                  SUM(r.RCPT_AMOUNT) AS total
+                FROM dbo.HISTORIC_RECEIPT r
+                WHERE {BUSINESS_DATE_SQL} BETWEEN ? AND ?
+                GROUP BY {BUSINESS_DATE_SQL}
+                ORDER BY label ASC
+            """, (from_date, to_date))
+
+        rows = cur.fetchall()
+
+    parsed_rows = []
+    total_sales = 0.0
+
+    for r in rows:
+        # label could be a date or a string (yyyy-MM)
+        label_value = getattr(r, "label", None)
+
+        if label_value is None:
+          label_text = "—"
+        else:
+          try:
+              # If it's a date/datetime, format it
+              label_text = label_value.strftime("%Y-%m-%d")
+          except Exception:
+              # Otherwise it's already a string like "2026-03"
+              label_text = str(label_value)
+
+        row_total = float(getattr(r, "total", 0) or 0)
+        total_sales += row_total
+
+        parsed_rows.append({"label": label_text, "total": row_total})
+
+    count = len(parsed_rows)
+    avg = (total_sales / count) if count else 0.0
+
+    return {
+        "total_sales": total_sales,
+        "rows": parsed_rows,
+        "meta": {"count": count, "avg": avg},
+    }
+
+
 # ----------------------------------------------------------
 # DAILY SALES SUMMARY
 # ----------------------------------------------------------
@@ -84,6 +182,11 @@ def get_sales_summary(date_str: str):
         "growth_vs_4week": growth_vs_4w,
         "peak_hour": peak_hour,
     }
+
+
+
+
+
 
 # ----------------------------------------------------------
 # HOURLY SALES (TODAY)
