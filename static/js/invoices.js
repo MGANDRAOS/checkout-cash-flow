@@ -248,34 +248,63 @@ window.InvoicesModule = (function () {
 
     const rows = data.rows || [];
 
-    const body = `
-      <div class="small text-secondary mb-2">
-        Unique items sold on <b>${escapeHtml(bizDate)}</b>. Sorted by total qty.
-      </div>
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <thead class="table-light">
-            <tr>
-              <th>Item</th>
-              <th class="text-end">Total qty</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map(r => `
+    // Group rows by subgroup
+    const grouped = {};
+    rows.forEach(r => {
+      const subgroup = (r.subgroup || "Uncategorized").trim() || "Uncategorized";
+      if (!grouped[subgroup]) grouped[subgroup] = [];
+      grouped[subgroup].push(r);
+    });
+
+    const subgroupSections = Object.entries(grouped).map(([subgroup, items]) => {
+      const subtotalQty = items.reduce((sum, item) => sum + Number(item.total_qty || 0), 0);
+
+      return `
+      <div class="mb-3">
+        <div class="fw-semibold border-bottom pb-1 mb-2">
+          ${escapeHtml(subgroup)}
+          <span class="text-secondary small ms-2">
+            (${items.length} items • ${formatNumber(subtotalQty)} qty)
+          </span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
               <tr>
-                <td>
-                  <div class="fw-semibold">${escapeHtml(r.item_title || r.item_code)}</div>
-                  <div class="text-secondary small">${escapeHtml(r.item_code || "")}</div>
-                </td>
-                <td class="text-end">${formatNumber(r.total_qty)}</td>
+                <th>Item</th>
+                <th class="text-end">Total qty</th>
               </tr>
-            `).join("")}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              ${items.map(r => `
+                <tr>
+                  <td>
+                    <div class="fw-semibold">${escapeHtml(r.item_title || r.item_code)}</div>
+                    <div class="text-secondary small">${escapeHtml(r.item_code || "")}</div>
+                  </td>
+                  <td class="text-end">${formatNumber(r.total_qty)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
       </div>
     `;
+    }).join("");
 
-    await openModal(`Daily Items — ${bizDate}`, `Unique items: ${rows.length}`, body);
+    const body = `
+    <div class="small text-secondary mb-3">
+      Unique items sold on <b>${escapeHtml(bizDate)}</b>, grouped by subgroup.
+    </div>
+    ${subgroupSections || '<div class="text-secondary small">No items found for this date.</div>'}
+  `;
+
+    await openModal(
+      `Daily Items — ${bizDate}`,
+      `Grouped by subgroup • ${rows.length} unique items`,
+      body
+    );
   }
 
   // ---------------------------

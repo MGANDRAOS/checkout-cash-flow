@@ -2240,8 +2240,11 @@ def get_daily_items_summary(start_date: str = "", end_date: str = "", page: int 
 
 def get_daily_items_for_date(biz_date: str):
     """
-    Returns unique items sold on one BizDate:
-    - item_code, item_title, total_qty
+    Returns unique items sold on one BizDate, grouped-ready by subgroup NAME:
+    - item_code
+    - item_title
+    - subgroup
+    - total_qty
     """
     biz_date = (biz_date or "").strip()
     if not biz_date:
@@ -2258,14 +2261,40 @@ def get_daily_items_for_date(biz_date: str):
     )
     SELECT
       CAST(c.ITM_CODE AS nvarchar(50)) AS item_code,
-      COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''), CAST(c.ITM_CODE AS nvarchar(50))) AS item_title,
+
+      COALESCE(
+        NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''),
+        CAST(c.ITM_CODE AS nvarchar(50))
+      ) AS item_title,
+
+      COALESCE(
+        NULLIF(LTRIM(RTRIM(CAST(sg.SubGrp_Name AS nvarchar(255)))), ''),
+        'Uncategorized'
+      ) AS subgroup,
+
       CAST(SUM(COALESCE(c.ITM_QUANTITY, 0)) AS float) AS total_qty
     FROM R r
-    JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
-    LEFT JOIN dbo.ITEMS i ON CAST(i.ITM_CODE AS nvarchar(50)) = CAST(c.ITM_CODE AS nvarchar(50))
+    JOIN dbo.HISTORIC_RECEIPT_CONTENTS c
+      ON c.RCPT_ID = r.RCPT_ID
+    LEFT JOIN dbo.ITEMS i
+      ON CAST(i.ITM_CODE AS nvarchar(50)) = CAST(c.ITM_CODE AS nvarchar(50))
+    LEFT JOIN dbo.SUBGROUPS sg
+      ON CAST(sg.SubGrp_ID AS nvarchar(50)) = CAST(i.ITM_SUBGROUP AS nvarchar(50))
     WHERE r.BizDate = CAST(? AS date)
-    GROUP BY CAST(c.ITM_CODE AS nvarchar(50)), COALESCE(NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''), CAST(c.ITM_CODE AS nvarchar(50)))
-    ORDER BY total_qty DESC, item_title ASC;
+    GROUP BY
+      CAST(c.ITM_CODE AS nvarchar(50)),
+      COALESCE(
+        NULLIF(LTRIM(RTRIM(CAST(i.ITM_TITLE AS nvarchar(255)))), ''),
+        CAST(c.ITM_CODE AS nvarchar(50))
+      ),
+      COALESCE(
+        NULLIF(LTRIM(RTRIM(CAST(sg.SubGrp_Name AS nvarchar(255)))), ''),
+        'Uncategorized'
+      )
+    ORDER BY
+      subgroup ASC,
+      total_qty DESC,
+      item_title ASC;
     """
 
     with _connect() as cn:
@@ -2278,6 +2307,7 @@ def get_daily_items_for_date(biz_date: str):
         result.append({
             "item_code": r.item_code,
             "item_title": r.item_title,
+            "subgroup": r.subgroup or "Uncategorized",
             "total_qty": float(r.total_qty or 0.0),
         })
     return result
