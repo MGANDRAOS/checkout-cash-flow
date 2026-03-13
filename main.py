@@ -1,6 +1,6 @@
 import os
 from datetime import date, datetime, timedelta
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 # Local imports
@@ -44,6 +44,13 @@ load_dotenv()
 # Flask configuration
 # ───────────────────────────────
 app = Flask(__name__, template_folder="templates", static_folder="static")
+# ----------------------------------------------------
+# Simple App Authentication (username + password)
+# ----------------------------------------------------
+
+APP_USERNAME = os.getenv("APP_USERNAME")
+APP_PASSWORD = os.getenv("APP_PASSWORD")
+
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret")
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///checkout.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -826,6 +833,36 @@ def fixed_coverage_report():
 
     return render_template("report_fixed_coverage.html", kpis=kpis, points=points, today=today )
 
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """
+    Very simple login page.
+    Checks username/password from .env
+    and stores login status in Flask session.
+    """
+
+    if request.method == "POST":
+
+        username = request.form.get("username")
+        password = request.form.get("password")
+
+        if username == APP_USERNAME and password == APP_PASSWORD:
+            session["logged_in"] = True
+            return redirect("/")
+
+        return render_template("login.html", error="Invalid credentials")
+
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    """
+    Clears login session.
+    """
+    session.clear()
+    return redirect("/login")
+
     
 # ───────────────────────────────
 # App entry
@@ -844,7 +881,19 @@ app.register_blueprint(dead_items_bp)
 app.register_blueprint(reorder_radar_bp)  # NEW
 
 
+@app.before_request
+def require_login():
+    """
+    This runs before every request.
+    If the user is not logged in,
+    redirect them to the login page.
+    """
 
+    allowed_routes = ["login", "static"]
+
+    if request.endpoint not in allowed_routes:
+        if not session.get("logged_in"):
+            return redirect(url_for("login"))
 
 if __name__ == "__main__":
     with app.app_context():

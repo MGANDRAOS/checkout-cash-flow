@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Login</title>
+
+<style>
+/* --------------------------------------------------
+   Very simple centered login screen
+-------------------------------------------------- */
+
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f6f8;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.login-box {
+    background: white;
+    padding: 40px;
+    width: 320px;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+}
+
+.login-box h2 {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.login-box input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.login-box button {
+    width: 100%;
+    padding: 10px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.login-box button:hover {
+    background: #1d4ed8;
+}
+
+.error {
+    color: red;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="login-box">
+
+    <h2>Checkout Login</h2>
+
+    <!-- Show error message if login fails -->
+    {% if error %}
+        <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <!-- Login form -->
+    <form method="POST">
+
+        <!-- Username field -->
+        <input type="text" name="username" placeholder="Username" required>
+
+        <!-- Password field -->
+        <input type="password" name="password" placeholder="Password" required>
+
+        <!-- Submit -->
+        <button type="submit">Login</button>
+
+    </form>
+
+</div>
+
+</body>
+</html>
