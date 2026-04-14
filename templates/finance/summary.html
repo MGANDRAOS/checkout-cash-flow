@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="py-4">
+    <!-- Simple breadcrumb / page context -->
+    <div class="mb-3">
+        <span class="text-muted small">Finance / Sales vs Spending</span>
+    </div>
+
+    <!-- Page header -->
+    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+        <div>
+            <h1 class="fw-bold mb-1">Sales vs Spending</h1>
+            <p class="text-muted mb-0">
+                Pull sales from POS, add paid items manually, and track remaining cash by source day.
+            </p>
+        </div>
+        <div class="text-end">
+            <div class="small text-muted">Exchange Rate</div>
+            <div class="fw-semibold">1 USD = {{ "{:,.0f}".format(usd_exchange_rate) }} LBP</div>
+        </div>
+    </div>
+
+    <!-- Date range filter -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('finance_summary') }}">
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label fw-semibold">From Date</label>
+                        <input type="date" name="from_date" class="form-control" value="{{ from_str }}" min="2026-04-11"
+                            max="{{ yesterday.isoformat() }}" required>
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label class="form-label fw-semibold">To Date</label>
+                        <input type="date" name="to_date" class="form-control" value="{{ to_str }}" min="2026-04-11"
+                            max="{{ yesterday.isoformat() }}" required>
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <button type="submit" class="btn btn-dark w-100">
+                            Apply Range
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- KPI cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="text-muted small mb-2">Total Sales</div>
+                    <h4 class="fw-bold mb-1">{{ "{:,.0f}".format(total_sales_lbp) }} LBP</h4>
+                    <div class="text-muted">${{ "{:,.2f}".format(total_sales_usd) }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="text-muted small mb-2">Total Used From Selected Days</div>
+                    <h4 class="fw-bold mb-1">{{ "{:,.0f}".format(total_spending_lbp) }} LBP</h4>
+                    <div class="text-muted">${{ "{:,.2f}".format(total_spending_usd) }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="text-muted small mb-2">Remaining Cash</div>
+                    <h4 class="fw-bold mb-1">{{ "{:,.0f}".format(total_profit_lbp) }} LBP</h4>
+                    <div class="text-muted">${{ "{:,.2f}".format(total_profit_usd) }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Add paid item -->
+        <div class="col-12 col-xl-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">Add Paid Item</h5>
+
+                    <form method="POST" action="{{ url_for('finance_summary_add_paid_item') }}">
+                        <!-- Keep selected date range after submit -->
+                        <input type="hidden" name="from_date_redirect" value="{{ from_str }}">
+                        <input type="hidden" name="to_date_redirect" value="{{ to_str }}">
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Paid Date</label>
+                            <input type="date" name="paid_date" class="form-control" value="{{ default_paid_date_str }}"
+                                required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Cash Source Date</label>
+                            <input type="date" name="source_date" class="form-control"
+                                value="{{ default_source_date_str }}" min="2026-04-11" max="{{ yesterday.isoformat() }}"
+                                required>
+                            <div class="form-text">
+                                Pick which business day’s cash you used (from April 11 onward).
+                            </div>
+                            <div class="form-text">
+                                Pick which business day’s cash you used.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Title</label>
+                            <input type="text" name="title" class="form-control" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Amount (LBP)</label>
+                            <input type="number" step="0.01" min="0" name="amount_lbp" class="form-control">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Amount (USD)</label>
+                            <input type="number" step="0.01" min="0" name="amount_usd" class="form-control">
+                            <div class="form-text">
+                                Enter either LBP or USD. If USD is provided, it will be converted automatically.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Payment Type</label>
+                            <select name="payment_type" class="form-select" required>
+                                <option value="">Select type</option>
+                                {% for item_type in paid_item_types %}
+                                <option value="{{ item_type }}">{{ item_type }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Notes</label>
+                            <textarea name="notes" class="form-control" rows="3"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-dark w-100">
+                            Save Paid Item
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Paid items in selected source-date range -->
+        <div class="col-12 col-xl-8">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                        <h5 class="fw-bold mb-0">Paid Items Using Selected Cash Days</h5>
+                        <span class="text-muted small">{{ paid_items|length }} record(s)</span>
+                    </div>
+
+                    {% if paid_items %}
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Paid Date</th>
+                                    <th>Source Date</th>
+                                    <th>Title</th>
+                                    <th>Type</th>
+                                    <th>LBP</th>
+                                    <th>USD</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in paid_items %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">{{ item.paid_date.strftime('%A') }}</div>
+                                        <div class="text-muted small">{{ item.paid_date.strftime('%Y-%m-%d') }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">{{ item.source_date.strftime('%A') }}</div>
+                                        <div class="text-muted small">{{ item.source_date.strftime('%Y-%m-%d') }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">{{ item.title }}</div>
+                                        {% if item.notes %}
+                                        <div class="text-muted small">{{ item.notes }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ item.payment_type }}</td>
+                                    <td>
+                                        <div>{{ "{:,.0f}".format((item.amount_cents or 0) / 100) }} LBP</div>
+                                    </td>
+                                    <td>
+                                        <div>${{ "{:,.2f}".format(((item.amount_cents or 0) / 100) /
+                                            usd_exchange_rate)}}
+                                        </div>
+                                    </td>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <h6 class="fw-bold mb-2">No paid items yet</h6>
+                        <p class="text-muted mb-0">
+                            Add manual spending entries and assign them to the correct cash source day.
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Daily breakdown -->
+    <div class="card shadow-sm border-0 mt-4">
+        <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                <h5 class="fw-bold mb-0">Daily Cash Breakdown</h5>
+                <span class="text-muted small">{{ daily_rows|length }} day(s)</span>
+            </div>
+
+            {% if daily_rows %}
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Business Day</th>
+                            <th>Sales (LBP)</th>
+                            <th>Used From This Day (LBP)</th>
+                            <th>Remaining Cash (LBP)</th>
+                            <th>Sales (USD)</th>
+                            <th>Used (USD)</th>
+                            <th>Remaining (USD)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in daily_rows %}
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">{{ row.day_name }}</div>
+                                <div class="text-muted small">{{ row.biz_date }}</div>
+                            </td>
+                            <td>{{ "{:,.0f}".format(row.sales_lbp) }}</td>
+                            <td>{{ "{:,.0f}".format(row.used_lbp) }}</td>
+                            <td class="fw-bold">{{ "{:,.0f}".format(row.remaining_lbp) }}</td>
+                            <td>${{ "{:,.2f}".format(row.sales_usd) }}</td>
+                            <td>${{ "{:,.2f}".format(row.used_usd) }}</td>
+                            <td class="fw-bold">${{ "{:,.2f}".format(row.remaining_usd) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <h6 class="fw-bold mb-2">No data in this range</h6>
+                <p class="text-muted mb-0">
+                    Try a different date range or add paid items using those source days.
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

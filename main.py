@@ -4,7 +4,20 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 # Local imports
-from models import db, Envelope, DailyClosing, FixedBill, FixedCollection, Expense
+from models import (
+    db,
+    Envelope,
+    EnvelopeTransaction,
+    DailyClosing,
+    FixedBill,
+    FixedCollection,
+    Expense,
+    Supplier,
+    Payable,
+    PayablePayment,
+    DailyPaidItem
+)
+
 from helpers import (
     dollars_to_cents,
     cents_to_dollars,
@@ -30,8 +43,8 @@ from routes.items_explorer import items_explorer_bp
 from routes.invoices import invoices_bp
 from routes.dead_items import dead_items_bp
 from routes.reorder_radar import reorder_radar_bp  # NEW
-
-
+from helpers_intelligence import get_pos_sales_total_by_range
+from helpers_intelligence import get_pos_sales_daily_by_range
 
 
 
@@ -62,7 +75,19 @@ db.init_app(app)
 CURRENCY = os.getenv("CURRENCY", "USD")
 DEFAULT_INVENTORY_RATE = float(os.getenv("INVENTORY_RATE", "0.50"))
 DEFAULT_OPS_RATE = float(os.getenv("OPS_RATE", "0.03"))
-
+USD_EXCHANGE_RATE = 89000
+# IMPORTANT:
+# Controlled payment types for manual paid items.
+# Keep this list aligned with the dropdown in the template.
+PAID_ITEM_TYPES = [
+    "Generator",
+    "EDL",
+    "Wifi",
+    "Restock",
+    "Salary",
+    "Other",
+]
+MIN_TRACKING_DATE = date(2026, 4, 11)
 
 # ───────────────────────────────
 # Routes
@@ -81,6 +106,7 @@ def dashboard():
     bills = db.session.execute(db.select(FixedBill).order_by(FixedBill.created_at.desc())).scalars().all()
 
     today = date.today()
+    yesterday = today - timedelta(days=1)
     month_target = current_month_target_cents(today)
     fixed_balance = db.session.scalar(db.select(Envelope.balance_cents).where(Envelope.code == "FIXED")) or 0
     funded_pct = (fixed_balance / month_target * 100) if month_target > 0 else 0
@@ -189,6 +215,553 @@ def dashboard():
         data_points=data_points,
     )
 
+
+@app.route("/finance")
+def finance_home():
+    """
+    Finance entry point.
+    Redirect directly to the simple Sales vs Spending Summary page.
+    """
+    return redirect(url_for("finance_summary"))
+
+
+@app.route("/finance/payables", methods=["GET", "POST"])
+def finance_payables():
+    """
+    Payables main page.
+    GET  -> show all payables + suppliers
+    POST -> create a new payable
+    """
+    if request.method == "POST":
+        try:
+            supplier_name = request.form["supplier_name"].strip()
+            description = request.form["description"].strip()
+            bill_date = datetime.strptime(request.form["bill_date"], "%Y-%m-%d").date()
+            due_date_raw = request.form.get("due_date", "").strip()
+            due_date = datetime.strptime(due_date_raw, "%Y-%m-%d").date() if due_date_raw else None
+
+            total_amount_cents = dollars_to_cents(request.form["total_amount"])
+            reference = request.form.get("reference", "").strip() or None
+            notes = request.form.get("notes", "").strip() or None
+
+            if not supplier_name:
+                raise ValueError("Supplier name is required.")
+            if not description:
+                raise ValueError("Description is required.")
+            if total_amount_cents <= 0:
+                raise ValueError("Amount must be greater than zero.")
+
+            # Important: reuse supplier if it already exists, otherwise create it
+            supplier = db.session.execute(
+                db.select(Supplier).where(db.func.lower(Supplier.name) == supplier_name.lower())
+            ).scalar_one_or_none()
+
+            if not supplier:
+                supplier = Supplier(name=supplier_name)
+                db.session.add(supplier)
+                db.session.flush()
+
+            payable = Payable(
+                supplier_id=supplier.id,
+                bill_date=bill_date,
+                due_date=due_date,
+                reference=reference,
+                description=description,
+                total_amount_cents=total_amount_cents,
+                paid_amount_cents=0,
+                remaining_amount_cents=total_amount_cents,
+                notes=notes,
+            )
+            payable.refresh_status()
+
+            db.session.add(payable)
+            db.session.commit()
+            flash("Payable created successfully.", "success")
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Could not create payable: {e}", "danger")
+
+        return redirect(url_for("finance_payables"))
+
+    # GET
+    payables = db.session.execute(
+        db.select(Payable).order_by(Payable.bill_date.desc(), Payable.created_at.desc())
+    ).scalars().all()
+
+    suppliers = db.session.execute(
+        db.select(Supplier).where(Supplier.is_active == True).order_by(Supplier.name)
+    ).scalars().all()
+
+    return render_template(
+        "finance/payables.html",
+        payables=payables,
+        suppliers=suppliers,
+        currency=CURRENCY,
+        today=date.today(),
+    )
+
+
+@app.post("/finance/payables/<int:payable_id>/payment")
+def finance_payable_payment(payable_id):
+    """
+    Record a payment against a payable.
+    This updates payment history, payable totals/status,
+    and optionally creates a cash movement from an envelope.
+    """
+    ensure_default_envelopes()
+
+    payable = db.session.get(Payable, payable_id)
+    if not payable:
+        flash("Payable not found.", "warning")
+        return redirect(url_for("finance_payables"))
+
+    try:
+        payment_date = datetime.strptime(request.form["payment_date"], "%Y-%m-%d").date()
+        amount_cents = dollars_to_cents(request.form["amount"])
+        payment_method = request.form.get("payment_method", "").strip() or None
+        envelope_code = request.form.get("envelope_code", "").strip() or None
+        notes = request.form.get("notes", "").strip() or None
+
+        if amount_cents <= 0:
+            raise ValueError("Payment amount must be greater than zero.")
+        if amount_cents > (payable.remaining_amount_cents or 0):
+            raise ValueError("Payment amount cannot exceed remaining balance.")
+
+        envelope = None
+        if envelope_code:
+            envelope = db.session.execute(
+                db.select(Envelope).where(Envelope.code == envelope_code)
+            ).scalar_one_or_none()
+
+            if not envelope:
+                raise ValueError("Selected envelope was not found.")
+
+        payment = PayablePayment(
+            payable_id=payable.id,
+            payment_date=payment_date,
+            amount_cents=amount_cents,
+            payment_method=payment_method,
+            envelope_id=envelope.id if envelope else None,
+            notes=notes,
+        )
+        db.session.add(payment)
+
+        # Important: update payable totals and status
+        payable.paid_amount_cents = (payable.paid_amount_cents or 0) + amount_cents
+        payable.refresh_status()
+
+        # Optional: move cash if an envelope was selected
+        if envelope_code:
+            post_envelope_tx(
+                envelope_code,
+                -amount_cents,
+                "payable_payment",
+                f"Payable payment: {payable.description}",
+            )
+
+        db.session.commit()
+        flash("Payment recorded successfully.", "success")
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Could not record payment: {e}", "danger")
+
+    return redirect(url_for("finance_payables"))
+
+
+@app.route("/finance/ledger")
+def finance_ledger():
+    """
+    Unified finance ledger.
+    Combines expenses, payable payments, and envelope transactions
+    into one chronological operational view.
+    """
+    # ------------------------------------------------------------
+    # Collect expenses
+    # ------------------------------------------------------------
+    expense_rows = db.session.execute(
+        db.select(Expense).order_by(Expense.date.desc(), Expense.created_at.desc())
+    ).scalars().all()
+
+    ledger_items = []
+
+    for expense in expense_rows:
+        envelope_name = expense.envelope.name if expense.envelope else None
+
+        ledger_items.append({
+            "entry_date": expense.date,
+            "created_at": expense.created_at,
+            "source_type": "expense",
+            "direction": "out",
+            "title": expense.description,
+            "subtitle": expense.category or "Expense",
+            "party": expense.vendor,
+            "payment_method": expense.payment_method,
+            "account_name": envelope_name,
+            "amount_cents": expense.amount_cents,
+            "status": None,
+            "reference_text": f"Expense #{expense.id}",
+        })
+
+    # ------------------------------------------------------------
+    # Collect payable payments
+    # ------------------------------------------------------------
+    payable_payment_rows = db.session.execute(
+        db.select(PayablePayment).order_by(PayablePayment.payment_date.desc(), PayablePayment.created_at.desc())
+    ).scalars().all()
+
+    for payment in payable_payment_rows:
+        payable = payment.payable
+        supplier_name = payable.supplier.name if payable and payable.supplier else None
+        envelope_name = payment.envelope.name if payment.envelope else None
+
+        ledger_items.append({
+            "entry_date": payment.payment_date,
+            "created_at": payment.created_at,
+            "source_type": "payable_payment",
+            "direction": "out",
+            "title": payable.description if payable else "Payable Payment",
+            "subtitle": "Payable Payment",
+            "party": supplier_name,
+            "payment_method": payment.payment_method,
+            "account_name": envelope_name,
+            "amount_cents": payment.amount_cents,
+            "status": payable.status if payable else None,
+            "reference_text": f"Payment #{payment.id}",
+        })
+
+    # ------------------------------------------------------------
+    # Collect envelope transactions
+    # Important:
+    # skip pure daily-close allocation noise for now where needed later
+    # but keep them visible now because this is the true cash movement log
+    # ------------------------------------------------------------
+    envelope_tx_rows = db.session.execute(
+        db.select(EnvelopeTransaction).order_by(EnvelopeTransaction.created_at.desc())
+    ).scalars().all()
+
+    for tx in envelope_tx_rows:
+        envelope_name = tx.envelope.name if tx.envelope else None
+        amount_cents = abs(tx.amount_cents or 0)
+
+        ledger_items.append({
+            "entry_date": tx.created_at.date() if tx.created_at else None,
+            "created_at": tx.created_at,
+            "source_type": "envelope_transaction",
+            "direction": "in" if (tx.amount_cents or 0) > 0 else "out",
+            "title": tx.description or tx.type or "Envelope Transaction",
+            "subtitle": tx.type or "Envelope Transaction",
+            "party": None,
+            "payment_method": None,
+            "account_name": envelope_name,
+            "amount_cents": amount_cents,
+            "status": None,
+            "reference_text": f"Envelope Tx #{tx.id}",
+        })
+
+    # ------------------------------------------------------------
+    # Sort newest first by entry date then exact creation time
+    # ------------------------------------------------------------
+    ledger_items.sort(
+        key=lambda item: (
+            item["entry_date"] or date.min,
+            item["created_at"] or datetime.min
+        ),
+        reverse=True
+    )
+
+    return render_template(
+        "finance/ledger.html",
+        ledger_items=ledger_items,
+        today=date.today(),
+        currency=CURRENCY,
+    )
+
+
+@app.route("/finance/reconciliation", methods=["GET", "POST"])
+def finance_reconciliation():
+    """
+    Simple reconciliation page.
+    Compare expected envelope balances with actual counted balances.
+    """
+    ensure_default_envelopes()
+
+    # ------------------------------------------------------------
+    # Load the two main finance envelopes
+    # ------------------------------------------------------------
+    bills_envelope = db.session.execute(
+        db.select(Envelope).where(Envelope.code == "BILLS")
+    ).scalar_one_or_none()
+
+    spend_envelope = db.session.execute(
+        db.select(Envelope).where(Envelope.code == "SPEND")
+    ).scalar_one_or_none()
+
+    bills_expected_cents = bills_envelope.balance_cents if bills_envelope else 0
+    spend_expected_cents = spend_envelope.balance_cents if spend_envelope else 0
+
+    # Default values for GET
+    bills_actual = ""
+    spend_actual = ""
+    bills_diff_cents = None
+    spend_diff_cents = None
+    total_expected_cents = bills_expected_cents + spend_expected_cents
+    total_actual_cents = None
+    total_diff_cents = None
+
+    if request.method == "POST":
+        try:
+            bills_actual_cents = dollars_to_cents(request.form.get("bills_actual", "0"))
+            spend_actual_cents = dollars_to_cents(request.form.get("spend_actual", "0"))
+
+            bills_actual = request.form.get("bills_actual", "").strip()
+            spend_actual = request.form.get("spend_actual", "").strip()
+
+            bills_diff_cents = bills_actual_cents - bills_expected_cents
+            spend_diff_cents = spend_actual_cents - spend_expected_cents
+
+            total_actual_cents = bills_actual_cents + spend_actual_cents
+            total_diff_cents = total_actual_cents - total_expected_cents
+
+        except Exception as e:
+            flash(f"Could not calculate reconciliation: {e}", "danger")
+
+    return render_template(
+        "finance/reconciliation.html",
+        today=date.today(),
+        bills_expected_cents=bills_expected_cents,
+        spend_expected_cents=spend_expected_cents,
+        total_expected_cents=total_expected_cents,
+        bills_actual=bills_actual,
+        spend_actual=spend_actual,
+        bills_diff_cents=bills_diff_cents,
+        spend_diff_cents=spend_diff_cents,
+        total_actual_cents=total_actual_cents,
+        total_diff_cents=total_diff_cents,
+        currency=CURRENCY,
+    )
+
+@app.route("/finance/summary")
+def finance_summary():
+    """
+    Sales vs Spending summary page.
+
+    Real business logic:
+    - Sales belong to a business day
+    - Paid items are linked to a source_date (which cash batch was used)
+    - Remaining Cash = Sales - Used From This Day
+    """
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+
+    # ------------------------------------------------------------
+    # Default range = current week (Monday -> today)
+    # ------------------------------------------------------------
+    default_from = today - timedelta(days=today.weekday())
+    default_to = today
+
+    from_str = request.args.get("from_date", default_from.isoformat()).strip()
+    to_str = request.args.get("to_date", default_to.isoformat()).strip()
+
+    try:
+        from_date = datetime.strptime(from_str, "%Y-%m-%d").date()
+        to_date = datetime.strptime(to_str, "%Y-%m-%d").date()
+    except ValueError:
+        flash("Invalid date range. Reset to current week.", "warning")
+        from_date = default_from
+        to_date = default_to
+        from_str = from_date.isoformat()
+        to_str = to_date.isoformat()
+
+    if from_date > to_date:
+        flash("From date cannot be after To date. Reset to current week.", "warning")
+        from_date = default_from
+        to_date = default_to
+        from_str = from_date.isoformat()
+        to_str = to_date.isoformat()
+        
+            # ------------------------------------------------------------
+    # Enforce minimum tracking date
+    # ------------------------------------------------------------
+    if from_date < MIN_TRACKING_DATE:
+        from_date = MIN_TRACKING_DATE
+        from_str = from_date.isoformat()
+        flash("Start date adjusted to tracking start (April 11, 2026).", "warning")
+
+    if to_date < MIN_TRACKING_DATE:
+        to_date = MIN_TRACKING_DATE
+        to_str = to_date.isoformat()
+
+    # ------------------------------------------------------------
+    # POS sales totals in LBP for the selected business-date range
+    # ------------------------------------------------------------
+    total_sales_lbp = float(get_pos_sales_total_by_range(from_date, to_date) or 0.0)
+
+    # ------------------------------------------------------------
+    # Paid items:
+    # We load by source_date because spending is tied to the cash batch used
+    # ------------------------------------------------------------
+    paid_items = db.session.execute(
+        db.select(DailyPaidItem)
+        .where(DailyPaidItem.source_date >= from_date)
+        .where(DailyPaidItem.source_date <= to_date)
+        .order_by(DailyPaidItem.paid_date.desc(), DailyPaidItem.created_at.desc())
+    ).scalars().all()
+
+    total_spending_lbp = sum((item.amount_cents or 0) / 100 for item in paid_items)
+    total_profit_lbp = total_sales_lbp - total_spending_lbp
+
+    # ------------------------------------------------------------
+    # Currency conversion
+    # ------------------------------------------------------------
+    total_sales_usd = total_sales_lbp / USD_EXCHANGE_RATE
+    total_spending_usd = total_spending_lbp / USD_EXCHANGE_RATE
+    total_profit_usd = total_profit_lbp / USD_EXCHANGE_RATE
+
+    # ------------------------------------------------------------
+    # Daily sales from POS
+    # ------------------------------------------------------------
+    sales_daily_rows = get_pos_sales_daily_by_range(from_date, to_date)
+
+    sales_by_day = {
+        row["biz_date"]: float(row["sales_lbp"] or 0.0)
+        for row in sales_daily_rows
+    }
+
+    # ------------------------------------------------------------
+    # Spending grouped by SOURCE DATE (cash batch used)
+    # ------------------------------------------------------------
+    spending_by_day = {}
+    for item in paid_items:
+        day_key = item.source_date.isoformat()
+        spending_by_day[day_key] = spending_by_day.get(day_key, 0.0) + ((item.amount_cents or 0) / 100)
+
+    # Build one combined set of dates for the selected range
+    all_days = sorted(set(list(sales_by_day.keys()) + list(spending_by_day.keys())), reverse=True)
+
+    daily_rows = []
+    for day_key in all_days:
+        biz_date_obj = datetime.strptime(day_key, "%Y-%m-%d").date()
+        sales_lbp = sales_by_day.get(day_key, 0.0)
+        used_lbp = spending_by_day.get(day_key, 0.0)
+        remaining_lbp = sales_lbp - used_lbp
+
+        daily_rows.append({
+            "biz_date": day_key,
+            "day_name": biz_date_obj.strftime("%A"),
+            "display_date": biz_date_obj.strftime("%A, %Y-%m-%d"),
+            "sales_lbp": sales_lbp,
+            "used_lbp": used_lbp,
+            "remaining_lbp": remaining_lbp,
+            "sales_usd": sales_lbp / USD_EXCHANGE_RATE,
+            "used_usd": used_lbp / USD_EXCHANGE_RATE,
+            "remaining_usd": remaining_lbp / USD_EXCHANGE_RATE,
+        })
+
+    # ------------------------------------------------------------
+    # Default values for the add form
+    # - paid_date defaults to today
+    # - source_date defaults to yesterday
+    # ------------------------------------------------------------
+    default_paid_date_str = today.isoformat()
+    default_source_date_str = (today - timedelta(days=1)).isoformat()
+
+    return render_template(
+        "finance/summary.html",
+        today=today,
+        yesterday=yesterday,
+        from_date=from_date,
+        to_date=to_date,
+        from_str=from_str,
+        to_str=to_str,
+        paid_items=paid_items,
+        daily_rows=daily_rows,
+        total_sales_lbp=total_sales_lbp,
+        total_spending_lbp=total_spending_lbp,
+        total_profit_lbp=total_profit_lbp,
+        total_sales_usd=total_sales_usd,
+        total_spending_usd=total_spending_usd,
+        total_profit_usd=total_profit_usd,
+        usd_exchange_rate=USD_EXCHANGE_RATE,
+        paid_item_types=PAID_ITEM_TYPES,
+        default_paid_date_str=default_paid_date_str,
+        default_source_date_str=default_source_date_str,
+        currency=CURRENCY,
+    )
+
+@app.post("/finance/summary/add-paid-item")
+def finance_summary_add_paid_item():
+    """
+    Add a manual paid item for the Sales vs Spending page.
+
+    Important business logic:
+    - paid_date   = when payment happened
+    - source_date = which business day's cash was used
+    - payment_type must be selected from a fixed list
+    """
+    try:
+        paid_date = datetime.strptime(request.form["paid_date"], "%Y-%m-%d").date()
+        source_date = datetime.strptime(request.form["source_date"], "%Y-%m-%d").date()
+
+        title = request.form["title"].strip()
+        amount_lbp_raw = request.form.get("amount_lbp", "").strip()
+        amount_usd_raw = request.form.get("amount_usd", "").strip()
+
+        amount_lbp = 0.0
+
+        # ------------------------------------------------------------
+        # Handle input logic:
+        # - Prefer USD if provided
+        # - Otherwise use LBP
+        # ------------------------------------------------------------
+        if amount_usd_raw:
+            amount_usd = float(amount_usd_raw)
+            if amount_usd <= 0:
+                raise ValueError("USD amount must be greater than zero.")
+            amount_lbp = amount_usd * USD_EXCHANGE_RATE
+
+        elif amount_lbp_raw:
+            amount_lbp = float(amount_lbp_raw)
+            if amount_lbp <= 0:
+                raise ValueError("LBP amount must be greater than zero.")
+
+        else:
+            raise ValueError("Please enter either LBP or USD amount.")
+        payment_type = request.form.get("payment_type", "").strip()
+        notes = request.form.get("notes", "").strip() or None
+
+        if not title:
+            raise ValueError("Title is required.")
+
+        if payment_type not in PAID_ITEM_TYPES:
+            raise ValueError("Invalid payment type selected.")
+
+        paid_item = DailyPaidItem(
+            paid_date=paid_date,
+            source_date=source_date,
+            title=title,
+            amount_cents=int(round(amount_lbp * 100)),
+            payment_type=payment_type,
+            notes=notes,
+        )
+        db.session.add(paid_item)
+        db.session.commit()
+        flash("Paid item added successfully.", "success")
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Could not add paid item: {e}", "danger")
+
+    # IMPORTANT:
+    # Keep user on the same selected range after save.
+    from_str = request.form.get("from_date_redirect", "").strip()
+    to_str = request.form.get("to_date_redirect", "").strip()
+
+    if from_str and to_str:
+        return redirect(url_for("finance_summary", from_date=from_str, to_date=to_str))
+
+    return redirect(url_for("finance_summary"))
 
 @app.post("/daily-close")
 def daily_close():

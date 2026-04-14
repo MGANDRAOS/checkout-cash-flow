@@ -2822,3 +2822,92 @@ def get_dead_items_page(
         })
 
     return {"total": total, "rows": out}
+
+
+# ------------------------------------------------------------
+# Cash Summary helpers
+# ------------------------------------------------------------
+def get_pos_sales_total_by_range(start_date, end_date) -> float:
+    """
+    Returns total POS sales amount for a BizDate date range.
+
+    BizDate rule:
+    CAST(DATEADD(HOUR, -7, RCPT_DATE) AS date)
+
+    This matches your existing business-date logic used in the app.
+    """
+    if not start_date or not end_date:
+        return 0.0
+
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate,
+        CAST(r.RCPT_AMOUNT AS float) AS RCPT_AMOUNT
+      FROM dbo.HISTORIC_RECEIPT r
+    )
+    SELECT
+      CAST(COALESCE(SUM(RCPT_AMOUNT), 0) AS float) AS total_sales
+    FROM R
+    WHERE BizDate >= CAST(? AS date)
+      AND BizDate <= CAST(? AS date);
+    """
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, [start_date, end_date])
+        row = cur.fetchone()
+
+    return float(row.total_sales or 0.0) if row else 0.0
+  
+  
+  
+def get_pos_sales_daily_by_range(start_date, end_date):
+    """
+    Returns daily POS sales grouped by BizDate for a selected date range.
+
+    Output:
+    [
+        {"biz_date": "2026-04-01", "sales_lbp": 1234567.0},
+        ...
+    ]
+
+    BizDate rule:
+    CAST(DATEADD(HOUR, -7, RCPT_DATE) AS date)
+    """
+    if not start_date or not end_date:
+        return []
+
+    sql = """
+    SET NOCOUNT ON;
+
+    WITH R AS (
+      SELECT
+        CAST(DATEADD(HOUR, -7, r.RCPT_DATE) AS date) AS BizDate,
+        CAST(r.RCPT_AMOUNT AS float) AS RCPT_AMOUNT
+      FROM dbo.HISTORIC_RECEIPT r
+    )
+    SELECT
+      CONVERT(varchar(10), BizDate, 120) AS biz_date,
+      CAST(COALESCE(SUM(RCPT_AMOUNT), 0) AS float) AS sales_lbp
+    FROM R
+    WHERE BizDate >= CAST(? AS date)
+      AND BizDate <= CAST(? AS date)
+    GROUP BY BizDate
+    ORDER BY BizDate ASC;
+    """
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, [start_date, end_date])
+        rows = cur.fetchall()
+
+    return [
+        {
+            "biz_date": r.biz_date,
+            "sales_lbp": float(r.sales_lbp or 0.0),
+        }
+        for r in rows
+    ]

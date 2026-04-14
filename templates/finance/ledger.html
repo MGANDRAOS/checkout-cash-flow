@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="py-4">
+    <!-- Finance breadcrumb -->
+    <div class="mb-3">
+        <a href="{{ url_for('finance_home') }}" class="text-decoration-none small">
+            ← Back to Finance
+        </a>
+    </div>
+
+    <!-- Page header -->
+    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+        <div>
+            <h1 class="fw-bold mb-1">Finance Ledger</h1>
+            <p class="text-muted mb-0">
+                Unified operational view of expenses, payable payments, and envelope movements.
+            </p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('expenses') }}" class="btn btn-outline-dark">
+                Expenses
+            </a>
+            <a href="{{ url_for('finance_payables') }}" class="btn btn-outline-dark">
+                Payables
+            </a>
+            <a href="{{ url_for('finance_reconciliation') }}" class="btn btn-outline-dark">
+                Reconciliation
+            </a>
+        </div>
+    </div>
+
+    <!-- Ledger table -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                <h5 class="fw-bold mb-0">All Finance Activity</h5>
+                <span class="text-muted small">{{ ledger_items|length }} record(s)</span>
+            </div>
+
+            {% if ledger_items %}
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Source</th>
+                            <th>Title</th>
+                            <th>Party</th>
+                            <th>Method</th>
+                            <th>Account</th>
+                            <th>Status</th>
+                            <th>Direction</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in ledger_items %}
+                        <tr>
+                            <td>
+                                {% if item.entry_date %}
+                                <div class="fw-semibold">{{ item.entry_date.strftime('%Y-%m-%d') }}</div>
+                                {% else %}
+                                <div class="text-muted">—</div>
+                                {% endif %}
+
+                                {% if item.created_at %}
+                                <div class="text-muted small">
+                                    {{ item.created_at.strftime('%H:%M') }}
+                                </div>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if item.source_type == "expense" %}
+                                <span class="badge text-bg-secondary">Expense</span>
+                                {% elif item.source_type == "payable_payment" %}
+                                <span class="badge text-bg-warning">Payable Payment</span>
+                                {% else %}
+                                <span class="badge text-bg-info">Envelope Tx</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                <div class="fw-semibold">{{ item.title }}</div>
+                                {% if item.subtitle %}
+                                <div class="text-muted small">{{ item.subtitle }}</div>
+                                {% endif %}
+                                {% if item.reference_text %}
+                                <div class="text-muted small">{{ item.reference_text }}</div>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if item.party %}
+                                {{ item.party }}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if item.payment_method %}
+                                {{ item.payment_method }}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if item.account_name %}
+                                {{ item.account_name }}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if item.status == "paid" %}
+                                <span class="badge text-bg-success">Paid</span>
+                                {% elif item.status == "partial" %}
+                                <span class="badge text-bg-warning">Partial</span>
+                                {% elif item.status == "overdue" %}
+                                <span class="badge text-bg-danger">Overdue</span>
+                                {% elif item.status == "pending" %}
+                                <span class="badge text-bg-secondary">Pending</span>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if item.direction == "in" %}
+                                <span class="badge text-bg-success">In</span>
+                                {% else %}
+                                <span class="badge text-bg-danger">Out</span>
+                                {% endif %}
+                            </td>
+
+                            <td class="fw-bold">
+                                ${{ '%.2f'|format(item.amount_cents / 100) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <h6 class="fw-bold mb-2">No finance activity yet</h6>
+                <p class="text-muted mb-0">
+                    Expenses, payable payments, and envelope movements will appear here.
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

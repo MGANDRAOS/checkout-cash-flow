@@ -109,3 +109,151 @@ class Expense(db.Model):
     envelope = db.relationship("Envelope", lazy=True)
     bill = db.relationship("FixedBill", lazy=True)
 # =========================================================================
+
+
+# === [ADD new mini accounting models below Expense] =======================
+class Supplier(db.Model):
+    """
+    Supplier / vendor master record.
+    Used by payables so we do not keep repeating supplier names everywhere.
+    """
+    __tablename__ = "suppliers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False, unique=True)
+    phone = db.Column(db.String(32))
+    notes = db.Column(db.String(255))
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Supplier {self.name}>"
+
+
+class Payable(db.Model):
+    """
+    Supplier bill / amount owed.
+    This does NOT move cash by itself.
+    Cash only moves later when an actual payment is recorded.
+    """
+    __tablename__ = "payables"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Core supplier/bill info
+    supplier_id = db.Column(db.Integer, db.ForeignKey("suppliers.id"), nullable=False)
+    bill_date = db.Column(db.Date, nullable=False)
+    due_date = db.Column(db.Date)
+    reference = db.Column(db.String(64))                # invoice number / bill reference
+    description = db.Column(db.String(255), nullable=False)
+
+    # Money fields
+    total_amount_cents = db.Column(db.Integer, nullable=False)
+    paid_amount_cents = db.Column(db.Integer, nullable=False, default=0)
+    remaining_amount_cents = db.Column(db.Integer, nullable=False)
+
+    # Status: pending | partial | paid | overdue
+    status = db.Column(db.String(20), nullable=False, default="pending")
+
+    # Optional notes
+    notes = db.Column(db.String(255))
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    supplier = db.relationship("Supplier", backref=db.backref("payables", lazy=True))
+
+    def __repr__(self):
+        return f"<Payable {self.id} - {self.description}>"
+
+    def refresh_status(self):
+        """
+        Recalculate remaining amount and status after any payment change.
+        Keep this logic inside the model so later routes stay cleaner.
+        """
+        paid = self.paid_amount_cents or 0
+        total = self.total_amount_cents or 0
+
+        self.remaining_amount_cents = max(total - paid, 0)
+
+        if self.remaining_amount_cents <= 0:
+            self.status = "paid"
+        elif paid > 0:
+            self.status = "partial"
+        else:
+            # Only mark overdue if due_date exists and is already passed
+            if self.due_date and self.due_date < datetime.utcnow().date():
+                self.status = "overdue"
+            else:
+                self.status = "pending"
+
+
+class PayablePayment(db.Model):
+    """
+    Each real payment made against a payable.
+    This is the payment history table.
+    In the next step, page logic will also use this to create cash movement.
+    """
+    __tablename__ = "payable_payments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    payable_id = db.Column(db.Integer, db.ForeignKey("payables.id"), nullable=False)
+
+    payment_date = db.Column(db.Date, nullable=False)
+    amount_cents = db.Column(db.Integer, nullable=False)
+
+    # Optional operational fields
+    payment_method = db.Column(db.String(32))           # Cash / Transfer / Other
+    envelope_id = db.Column(db.Integer, db.ForeignKey("envelopes.id"))  # optional for later linkage
+    notes = db.Column(db.String(255))
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    payable = db.relationship("Payable", backref=db.backref("payments", lazy=True, cascade="all, delete-orphan"))
+    envelope = db.relationship("Envelope", lazy=True)
+
+    def __repr__(self):
+        return f"<PayablePayment {self.id} - {self.amount_cents}>"
+# =========================================================================
+
+
+
+# === [UPDATE simple cash-summary model] ===================================
+class DailyPaidItem(db.Model):
+    """
+    Manual spending entry used for the Sales vs Spending page.
+
+    Important business logic:
+    - paid_date   = when you actually paid
+    - source_date = which business day's cash was used
+    - payment_type must come from a fixed controlled list
+    """
+    __tablename__ = "daily_paid_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # IMPORTANT:
+    # paid_date = actual calendar/business date when payment happened
+    paid_date = db.Column(db.Date, nullable=False, index=True)
+
+    # IMPORTANT:
+    # source_date = which business day cash batch was used
+    # Example:
+    #   sales of Apr 7 are used on Apr 8 morning
+    source_date = db.Column(db.Date, nullable=False, index=True)
+
+    # Basic spending info
+    title = db.Column(db.String(255), nullable=False)
+    amount_cents = db.Column(db.Integer, nullable=False)
+
+    # IMPORTANT:
+    # keep this controlled in the UI as a dropdown only
+    payment_type = db.Column(db.String(32), nullable=False)
+
+    notes = db.Column(db.String(255))
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<DailyPaidItem paid={self.paid_date} source={self.source_date} title={self.title}>"
+# =========================================================================
