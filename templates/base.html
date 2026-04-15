@@ -106,16 +106,11 @@
         class="sidebar-link {% if request.path.startswith('/sales') and not request.path.startswith('/sales-snapshot') %}active{% endif %}">
         <i class="bi bi-graph-up-arrow"></i><span>Sales</span>
       </a>
-      <a href="/invoices"
-        class="sidebar-link {% if request.path.startswith('/invoices') %}active{% endif %}">
-        <i class="bi bi-receipt"></i><span>Invoices</span>
-      </a>
 
-      <!-- Finance -->
-      <div class="sidebar-section-label">Finance</div>
+      <!-- Sales vs Spending -->
       <a href="/finance/summary"
         class="sidebar-link {% if request.path.startswith('/finance') %}active{% endif %}">
-        <i class="bi bi-journal-bookmark"></i><span>Accounting</span>
+        <i class="bi bi-journal-bookmark"></i><span>Sales vs Spending</span>
       </a>
 
       <!-- System -->
