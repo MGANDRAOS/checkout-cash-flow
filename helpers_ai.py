@@ -11,7 +11,8 @@ import traceback
 import pandas as pd
 
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+import config
+client = OpenAI(api_key=config.OPENAI_API_KEY)
 
 _cache = {}
 CACHE_TTL_MINUTES = 30

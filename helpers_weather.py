@@ -7,7 +7,8 @@ import json
 # ==========================================================
 # CONFIG
 # ==========================================================
-VC_API_KEY = os.getenv("VISUAL_CROSSING_KEY")  # store in .env or environment
+import config
+VC_API_KEY = config.VISUAL_CROSSING_KEY
 VC_BASE_URL = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
 CACHE_FILE = "weather_cache.db"  # local SQLite cache
 CACHE_TTL_HOURS = 24             # re-fetch daily
