@@ -1,191 +1,211 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
 
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Checkout — Cash Flow Control</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Checkout — Cash Flow Control</title>
 
-    <!-- Bootstrap 5 -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Premium Typefaces -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,700;0,900;1,400;1,700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
 
-    <!-- Google Font for clarity -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
-    <!-- Custom Styles -->
-    <link href="{{ url_for('static', filename='main.css') }}" rel="stylesheet">
+  <!-- Custom Styles -->
+  <link href="{{ url_for('static', filename='main.css') }}" rel="stylesheet">
 
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 
-    <!-- AG Grid CSS (legacy theming needs BOTH of these) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@34.3.0/styles/ag-grid.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@34.3.0/styles/ag-theme-quartz.css">
+  <!-- AG Grid CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@34.3.0/styles/ag-grid.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@34.3.0/styles/ag-theme-quartz.css">
 
-    <!-- DataTables CSS -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
 </head>
 
 <body>
-    <!-- Sidebar -->
-    <nav class="navbar navbar-dark bg-dark fixed-top">
-        <div class="container-fluid">
-            <button class="btn btn-outline-light me-2" type="button" data-bs-toggle="offcanvas"
-                data-bs-target="#sidebar" aria-controls="sidebar">
-                <i class="bi bi-list"></i>
-            </button>
-            <!-- NOTE: leaving your logo path as-is (works for you today) -->
-            <a class="navbar-brand" href="/"><img src="static/assets/logo.png"></a>
-        </div>
-    </nav>
 
-    <!-- Sidebar Offcanvas -->
-    <div class="offcanvas offcanvas-start text-bg-dark" tabindex="-1" id="sidebar" aria-labelledby="sidebarLabel">
-        <div class="offcanvas-header border-bottom border-secondary">
-            <h5 class="offcanvas-title fw-semibold" id="sidebarLabel">Navigation</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
-                aria-label="Close"></button>
-        </div>
+  <!-- Grain texture overlay for premium material feel -->
+  <div aria-hidden="true" class="grain-overlay"></div>
 
-        <div class="offcanvas-body d-flex flex-column px-0">
+  <!-- ══════════════════════════════════════════════════════
+       TOP NAVBAR — visible on mobile only, hidden on desktop
+  ══════════════════════════════════════════════════════ -->
+  <nav class="navbar navbar-dark fixed-top">
+    <div class="container-fluid">
+      <button class="btn btn-outline-light me-2" type="button" data-bs-toggle="offcanvas"
+        data-bs-target="#sidebar" aria-controls="sidebar">
+        <i class="bi bi-list"></i>
+      </button>
+      <a class="navbar-brand" href="/"><img src="static/assets/logo.png" alt="Checkout"></a>
+    </div>
+  </nav>
 
-            <hr class="border-secondary my-3">
+  <!-- ══════════════════════════════════════════════════════
+       SIDEBAR — offcanvas on mobile, fixed panel on desktop
+  ══════════════════════════════════════════════════════ -->
+  <div class="offcanvas offcanvas-start" tabindex="-1" id="sidebar" aria-labelledby="sidebarLabel">
 
-            <!-- POS Section -->
-            <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">POS</div>
-
-            <a href="/" class="sidebar-link {% if request.path.startswith('/') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-bar-chart"></i> Dashboard
-            </a>
-
-            <!-- Items Section -->
-            <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">Items</div>
-
-            <a href="{{ url_for('items.items_home') }}"
-                class="sidebar-link {% if request.path == url_for('items.items_home') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-basket"></i> Items
-            </a>
-
-            <a href="/items/explorer"
-                class="sidebar-link {% if request.path.startswith('/items/explorer') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-search"></i> Items Explorer
-            </a>
-
-            <a href="/reports/item-trends"
-                class="sidebar-link {% if request.path.startswith('/reports/item-trends') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-graph-up"></i> Item Trends
-            </a>
-
-            <a href="/reports/dead-items"
-                class="sidebar-link {% if request.path.startswith('/reports/dead-items') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-graph-down"></i> Dead Items
-            </a>
-
-            <!-- IMPORTANT: Fix active condition for Reorder Radar (was mistakenly checking dead-items) -->
-            <a href="{{ url_for('reorder_radar.reorder_radar_page') }}"
-                class="sidebar-link {% if request.path.startswith('/reorder-radar') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-basket"></i>
-                Reorder Radar
-            </a>
-
-            <!-- Sales Section -->
-            <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">Sales</div>
-
-            <a href="/sales-snapshot"
-                class="sidebar-link {% if request.path.startswith('/sales-snapshot') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-graph-up"></i> Sales Snapshot
-            </a>
-            <a href="/sales"
-                class="sidebar-link {% if request.path.startswith('/sales') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-cash-stack"></i> Sales
-            </a>
-
-
-            <a href="/invoices"
-                class="sidebar-link {% if request.path.startswith('/invoices') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-receipt"></i> Invoices
-            </a>
-
-            <hr class="border-secondary my-3">
-
-            <!-- Finance module entry -->
-            <!-- Finance module entry -->
-            <!-- Simple sales vs spending summary -->
-            <a href="/finance/summary"
-                class="sidebar-link {% if request.path.startswith('/finance') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-cash-stack"></i> Acounting
-            </a>
-
-            <!-- Settings -->
-            <div class="px-3 mb-2 text-uppercase text-secondary small fw-semibold">System</div>
-
-            <a href="/settings"
-                class="sidebar-link {% if request.path.startswith('/settings') %}bg-primary text-white{% endif %}">
-                <i class="bi bi-gear"></i> Settings
-            </a>
-
-            <!-- Logout -->
-            <a href="/logout" class="sidebar-link">
-                <i class="bi bi-box-arrow-right"></i> Logout
-            </a>
-        </div>
+    <!-- Brand Header -->
+    <div class="sidebar-brand-wrap">
+      <div class="sidebar-brand-mark">
+        <i class="bi bi-grid-3x3-gap-fill"></i>
+      </div>
+      <div class="sidebar-brand-text">
+        <div class="sidebar-brand-name">Checkout</div>
+        <div class="sidebar-brand-sub">POS Intelligence</div>
+      </div>
+      <button type="button" class="btn-close btn-close-white ms-auto d-lg-none"
+        data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
 
-    <main class="container px-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="position-sticky top-0 z-3" style="max-width: 800px; margin: 0 auto;">
-            {% for category, message in messages %}
-            <div class="alert alert-{{ category }} alert-dismissible fade show mt-3 shadow-sm" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
+    <!-- Scrollable nav body -->
+    <div class="offcanvas-body sidebar-body d-flex flex-column px-0">
 
-        {% block content %}{% endblock %}
-    </main>
+      <!-- POS -->
+      <div class="sidebar-section-label">POS</div>
+      <a href="/" class="sidebar-link {% if request.path == '/' %}active{% endif %}">
+        <i class="bi bi-house"></i><span>Dashboard</span>
+      </a>
 
-    <!-- Toast container -->
-    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
-        <div id="toastSuccess" class="toast align-items-center text-bg-success border-0" role="alert"
-            aria-live="assertive" aria-atomic="true">
-            <div class="d-flex">
-                <div class="toast-body fw-semibold">
-                    ✅ Daily close completed successfully!
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
-                    aria-label="Close"></button>
-            </div>
-        </div>
+      <!-- Items -->
+      <div class="sidebar-section-label">Items</div>
+      <a href="{{ url_for('items.items_home') }}"
+        class="sidebar-link {% if request.path == url_for('items.items_home') %}active{% endif %}">
+        <i class="bi bi-box-seam"></i><span>Items</span>
+      </a>
+      <a href="/items/explorer"
+        class="sidebar-link {% if request.path.startswith('/items/explorer') %}active{% endif %}">
+        <i class="bi bi-search"></i><span>Explorer</span>
+      </a>
+      <a href="/reports/item-trends"
+        class="sidebar-link {% if request.path.startswith('/reports/item-trends') %}active{% endif %}">
+        <i class="bi bi-activity"></i><span>Item Trends</span>
+      </a>
+      <a href="/reports/dead-items"
+        class="sidebar-link {% if request.path.startswith('/reports/dead-items') %}active{% endif %}">
+        <i class="bi bi-archive"></i><span>Dead Items</span>
+      </a>
+      <a href="{{ url_for('reorder_radar.reorder_radar_page') }}"
+        class="sidebar-link {% if request.path.startswith('/reorder-radar') %}active{% endif %}">
+        <i class="bi bi-radar"></i><span>Reorder Radar</span>
+      </a>
+
+      <!-- Sales -->
+      <div class="sidebar-section-label">Sales</div>
+      <a href="/sales-snapshot"
+        class="sidebar-link {% if request.path.startswith('/sales-snapshot') %}active{% endif %}">
+        <i class="bi bi-tv"></i><span>Snapshot</span>
+      </a>
+      <a href="/sales"
+        class="sidebar-link {% if request.path.startswith('/sales') and not request.path.startswith('/sales-snapshot') %}active{% endif %}">
+        <i class="bi bi-graph-up-arrow"></i><span>Sales</span>
+      </a>
+      <a href="/invoices"
+        class="sidebar-link {% if request.path.startswith('/invoices') %}active{% endif %}">
+        <i class="bi bi-receipt"></i><span>Invoices</span>
+      </a>
+
+      <!-- Finance -->
+      <div class="sidebar-section-label">Finance</div>
+      <a href="/finance/summary"
+        class="sidebar-link {% if request.path.startswith('/finance') %}active{% endif %}">
+        <i class="bi bi-journal-bookmark"></i><span>Accounting</span>
+      </a>
+
+      <!-- System -->
+      <div class="sidebar-section-label">System</div>
+      <a href="/settings"
+        class="sidebar-link {% if request.path.startswith('/settings') %}active{% endif %}">
+        <i class="bi bi-gear"></i><span>Settings</span>
+      </a>
+      <a href="/logout" class="sidebar-link sidebar-link-danger">
+        <i class="bi bi-box-arrow-right"></i><span>Logout</span>
+      </a>
+
     </div>
+  </div>
 
-    <!-- Core JS libs -->
-    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- ══════════════════════════════════════════════════════
+       MAIN CONTENT
+  ══════════════════════════════════════════════════════ -->
+  <main class="container px-4">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="position-sticky top-0 z-3" style="max-width: 800px; margin: 0 auto;">
+      {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show mt-3" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
 
-    <!-- DataTables + Bootstrap5 JS -->
-    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+    {% block content %}{% endblock %}
+  </main>
 
-    <!-- Items grid module -->
-    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.noStyle.js" defer></script>
-    <script src="{{ url_for('static', filename='js/items_grid.js') }}"></script>
+  <!-- Toast -->
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="toastSuccess" class="toast align-items-center border-0" role="alert"
+      aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body fw-semibold">
+          <i class="bi bi-check-circle me-2 text-success"></i>Daily close completed successfully!
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto"
+          data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
 
-    <!-- Global modules -->
-    <script src="{{ url_for('static', filename='js/intelligence.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/realtime.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/item_trends.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/items_explorer.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <!-- ══════════════════════════════════════════════════════
+       SCRIPTS
+  ══════════════════════════════════════════════════════ -->
+  <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.noStyle.js" defer></script>
+  <script src="{{ url_for('static', filename='js/items_grid.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/intelligence.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/realtime.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/item_trends.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/items_explorer.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
-    <!-- IMPORTANT:
-         This block is REQUIRED so child templates can inject page-specific JS.
-         Example: reorder_radar.html injects /static/js/reorder_radar.js and init code here. -->
-    {% block scripts %}{% endblock %}
+  <script>
+    // ── Global Chart.js dark defaults ──────────────────────────────
+    if (typeof Chart !== 'undefined') {
+      Chart.defaults.color = '#8B97AC';
+      Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+      Chart.defaults.font.family = "'DM Sans', sans-serif";
+      Chart.defaults.font.size = 12;
+
+      const tp = Chart.defaults.plugins.tooltip;
+      tp.backgroundColor = '#141D2B';
+      tp.borderColor = 'rgba(255,255,255,0.12)';
+      tp.borderWidth = 1;
+      tp.titleColor = '#E8EDF5';
+      tp.bodyColor = '#8B97AC';
+      tp.padding = 12;
+      tp.cornerRadius = 8;
+
+      const lg = Chart.defaults.plugins.legend.labels;
+      lg.color = '#8B97AC';
+      lg.boxWidth = 10;
+      lg.padding = 16;
+    }
+  </script>
+
+  {% block scripts %}{% endblock %}
 
 </body>
 
