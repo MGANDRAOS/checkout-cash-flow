@@ -1,7 +1,7 @@
 # helpers_sales.py
 from datetime import datetime, timedelta
 from helpers_intelligence import _connect
-from pos_dates import biz_date_range_8h
+from pos_dates import biz_date_range_8h, cutoff_dt_8h
 
 BUSINESS_OPEN_HOUR = 8  # 08:00
 # Business date expression reused in SELECT/GROUP BY expressions (NOT in WHERE):
