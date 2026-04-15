@@ -4,112 +4,100 @@
 {% block content %}
 <div id="salesSnapshotPage" class="py-4">
 
-    <!-- Page Title -->
-    <div class="d-flex align-items-center justify-content-between mb-3">
-        <div>
-            <h1 class="display-6 fw-bold mb-0">Sales Snapshot</h1>
-            <div class="text-muted">Pick a range. Choose daily or monthly. Get the answer fast.</div>
-        </div>
+  <!-- ── Page Header ──────────────────────────────────────────── -->
+  <div class="snap-header">
+    <div class="snap-title-block">
+      <h1>Sales Snapshot</h1>
+      <p>Pick a range · choose daily or monthly · get the answer fast</p>
+    </div>
+    <div class="snap-quick-chips">
+      <button class="snap-chip active" data-quick="today">Today</button>
+      <button class="snap-chip" data-quick="yesterday">Yesterday</button>
+      <button class="snap-chip" data-quick="last7">Last 7 Days</button>
+      <button class="snap-chip" data-quick="thisMonth">This Month</button>
+      <button class="snap-chip" data-quick="lastMonth">Last Month</button>
+    </div>
+  </div>
+
+  <!-- ── Filter Strip ─────────────────────────────────────────── -->
+  <div class="snap-filter-strip">
+
+    <div class="snap-filter-group">
+      <label for="fromDate">From</label>
+      <input id="fromDate" type="date" />
     </div>
 
-    <!-- Filters Card -->
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-body p-4 p-lg-5">
+    <span class="snap-filter-arrow">→</span>
 
-            <div class="row g-4 align-items-end">
-
-                <!-- From -->
-                <div class="col-12 col-lg-4">
-                    <label class="form-label fs-5 fw-semibold">From</label>
-                    <input id="fromDate" type="date" class="form-control form-control-lg" />
-                </div>
-
-                <!-- To -->
-                <div class="col-12 col-lg-4">
-                    <label class="form-label fs-5 fw-semibold">To</label>
-                    <input id="toDate" type="date" class="form-control form-control-lg" />
-                </div>
-
-                <!-- Mode: Daily / Monthly -->
-                <div class="col-12 col-lg-4">
-                    <label class="form-label fs-5 fw-semibold">View</label>
-
-                    <!-- IMPORTANT: big segmented control, no extra filters -->
-                    <div class="btn-group w-100" role="group" aria-label="Mode">
-                        <input type="radio" class="btn-check" name="mode" id="modeDaily" value="daily"
-                            autocomplete="off" checked>
-                        <label class="btn btn-outline-dark btn-lg" for="modeDaily">Daily</label>
-
-                        <input type="radio" class="btn-check" name="mode" id="modeMonthly" value="monthly"
-                            autocomplete="off">
-                        <label class="btn btn-outline-dark btn-lg" for="modeMonthly">Monthly</label>
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- Helper row -->
-            <div class="d-flex flex-wrap gap-2 mt-4">
-                <button type="button" class="btn btn-light btn-lg" data-quick="today">Today</button>
-                <button type="button" class="btn btn-light btn-lg" data-quick="yesterday">Yesterday</button>
-                <button type="button" class="btn btn-light btn-lg" data-quick="last7">Last 7 Days</button>
-                <button type="button" class="btn btn-light btn-lg" data-quick="thisMonth">This Month</button>
-                <button type="button" class="btn btn-light btn-lg" data-quick="lastMonth">Last Month</button>
-            </div>
-
-            <!-- Export -->
-            <div class="d-flex justify-content-end mt-3">
-                <button id="exportCsvBtn" type="button" class="btn btn-dark btn-lg">
-                    Export CSV
-                </button>
-            </div>
-
-        </div>
+    <div class="snap-filter-group">
+      <label for="toDate">To</label>
+      <input id="toDate" type="date" />
     </div>
 
-    <!-- Result KPI -->
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-body p-4 p-lg-5">
-            <div class="text-muted fw-semibold">TOTAL SALES</div>
-
-            <!-- IMPORTANT: huge number -->
-            <div id="totalSales" class="snapshot-total-number mt-2">—</div><span clas>LBP</span>
-            <div id="totalSalesUSD" class="snapshot-total-number mt-2">—</div><span clas>USD</span>
-
-            <div id="kpiSubline" class="text-muted fs-4 mt-2">—</div>
-        </div>
+    <div class="snap-mode-toggle" role="group" aria-label="View mode">
+      <input type="radio" name="mode" id="modeDaily" value="daily" autocomplete="off" checked>
+      <label for="modeDaily">Daily</label>
+      <input type="radio" name="mode" id="modeMonthly" value="monthly" autocomplete="off">
+      <label for="modeMonthly">Monthly</label>
     </div>
 
-    <!-- Breakdown Table -->
-    <div class="card shadow-sm border-0">
-        <div class="card-body p-0">
+  </div>
 
-            <div class="d-flex align-items-center justify-content-between px-4 px-lg-5 py-4 border-bottom">
-                <div class="fw-bold fs-4 mb-0">Breakdown</div>
-                <div id="breakdownHint" class="text-muted">—</div>
-            </div>
+  <!-- ── KPI Hero ─────────────────────────────────────────────── -->
+  <div class="snap-kpi-hero">
+    <div class="snap-kpi-section-label">Total Sales</div>
 
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light position-sticky top-0" style="z-index: 1;">
-                        <tr>
-                            <th class="px-4 px-lg-5 py-3 fs-5">Label</th>
-                            <th class="px-4 px-lg-5 py-3 fs-5 text-end">Sales</th>
-                        </tr>
-                    </thead>
-                    <tbody id="breakdownBody">
-                        <tr>
-                            <td class="px-4 px-lg-5 py-4 text-muted fs-5" colspan="2">Pick dates to load sales.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-        </div>
+    <div class="snap-kpi-row">
+      <!-- LBP primary -->
+      <div class="snap-kpi-block">
+        <span id="totalSales" class="snap-kpi-number">—</span>
+        <span class="snap-kpi-currency">LBP</span>
+      </div>
+      <!-- USD secondary -->
+      <div class="snap-kpi-block">
+        <span id="totalSalesUSD" class="snap-kpi-number secondary">—</span>
+        <span class="snap-kpi-currency secondary">USD</span>
+      </div>
     </div>
+
+    <div id="kpiSubline" class="snap-kpi-subline">—</div>
+  </div>
+
+  <!-- ── Breakdown Card ───────────────────────────────────────── -->
+  <div class="snap-breakdown-card">
+
+    <div class="snap-breakdown-header">
+      <div>
+        <span class="snap-breakdown-title">Breakdown</span>
+        <span id="breakdownHint" class="snap-breakdown-hint">—</span>
+      </div>
+      <button id="exportCsvBtn" class="snap-export-btn">
+        <i class="bi bi-download"></i> Export CSV
+      </button>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover snap-table align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th class="text-end">Sales</th>
+          </tr>
+        </thead>
+        <tbody id="breakdownBody">
+          <tr>
+            <td colspan="2" class="snap-empty-state">Pick dates above to load sales.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
 
 </div>
 
-<!-- Page JS -->
 <script src="{{ url_for('static', filename='js/sales_snapshot.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => SalesSnapshotModule.init());
+</script>
 {% endblock %}
