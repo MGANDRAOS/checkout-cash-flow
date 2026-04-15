@@ -1,19 +1,8 @@
 # helpers_sales.py
 from datetime import datetime, timedelta
+from collections import defaultdict
 from helpers_intelligence import _connect
 from pos_dates import biz_date_range_8h, cutoff_dt_8h
-
-BUSINESS_OPEN_HOUR = 8  # 08:00
-# Business date expression reused in SELECT/GROUP BY expressions (NOT in WHERE):
-# Anything before 08:00 counts to the PREVIOUS business date.
-BUSINESS_DATE_SQL = """
-CASE
-  WHEN DATEPART(HOUR, r.RCPT_DATE) < 8 THEN DATEADD(DAY, -1, CAST(r.RCPT_DATE AS date))
-  ELSE CAST(r.RCPT_DATE AS date)
-END
-"""
-# Rotate real clock hour to "business hour" bucket where 0==08:00, 23==07:00
-BIZ_HOUR_SQL = "((DATEPART(HOUR, r.RCPT_DATE) + 24 - 8) % 24)"
 
 
 # ----------------------------------------------------------
@@ -35,13 +24,12 @@ def get_sales_summary_range(from_str: str, to_str: str, mode: str = "daily"):
         "meta": {"count": int, "avg": float}
       }
     """
-    from datetime import datetime as _dt
     mode = (mode or "daily").strip().lower()
     if mode not in ("daily", "monthly"):
         mode = "daily"
 
-    from_date = _dt.strptime(from_str, "%Y-%m-%d").date()
-    to_date   = _dt.strptime(to_str,   "%Y-%m-%d").date()
+    from_date = datetime.strptime(from_str, "%Y-%m-%d").date()
+    to_date   = datetime.strptime(to_str,   "%Y-%m-%d").date()
     if from_date > to_date:
         return {"total_sales": 0.0, "rows": [], "meta": {"count": 0, "avg": 0.0}}
 
@@ -259,7 +247,6 @@ def get_sales_by_hour_last4weeks(date_str: str):
         """, params)
         rows = cur.fetchall()
 
-    from collections import defaultdict
     by_idx: dict[int, dict[int, float]] = defaultdict(dict)
     for r in rows:
         by_idx[int(r.idx)][int(r.biz_hour)] = float(r.total_sales or 0)
@@ -326,7 +313,6 @@ def get_sales_cumulative_by_hour(date_str: str):
         """, params)
         rows = cur.fetchall()
 
-    from collections import defaultdict
     by_idx: dict[int, dict[int, float]] = defaultdict(dict)
     for r in rows:
         by_idx[int(r.idx)][int(r.biz_hour)] = float(r.total_sales or 0)
