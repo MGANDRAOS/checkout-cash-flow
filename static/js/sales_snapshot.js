@@ -19,10 +19,8 @@
       const modeMonthly     = document.getElementById("modeMonthly");
       const quickChips      = pageRoot.querySelectorAll(".snap-chip[data-quick]");
 
-      // ── Default dates (today) ─────────────────────────────────────
-      const todayISO = new Date().toISOString().slice(0, 10);
-      fromDateInput.value = todayISO;
-      toDateInput.value   = todayISO;
+      // ── Default dates (yesterday) ────────────────────────────────
+      applyQuickRange("yesterday");
 
       // ── Wire events ───────────────────────────────────────────────
       fromDateInput.addEventListener("change", refresh);

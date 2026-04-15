@@ -172,7 +172,8 @@ const FixedCoverageReport = (() => {
                     labels: ["Funded", "Remaining"],
                     datasets: [{
                         data: [kpis.funded_pct, 100 - kpis.funded_pct],
-                        backgroundColor: ["#198754", "#dee2e6"]
+                        backgroundColor: ["#059669", "#E2E8F0"],
+                        borderWidth: 0
                     }]
                 },
                 options: { cutout: "75%", plugins: { legend: { display: false } } }
@@ -210,7 +211,8 @@ const FixedWidget = (() => {
                     labels: ["Funded", "Remaining"],
                     datasets: [{
                         data: [kpis.funded_pct, 100 - kpis.funded_pct],
-                        backgroundColor: ["#198754", "#e9ecef"]
+                        backgroundColor: ["#059669", "#E2E8F0"],
+                        borderWidth: 0
                     }]
                 },
                 options: { cutout: "70%", plugins: { legend: { display: false } } }

@@ -182,9 +182,24 @@ const IntelligencePOS = (() => {
     // Convert to percentage share (keep 1 decimal place)
     const perc = amounts.map(v => (v / total) * 100);
 
+    // Distinct multi-color palette — last slot (slate) reserved for "Other"
+    const PIE_COLORS = [
+      "#2563EB", // azure
+      "#059669", // emerald
+      "#D97706", // gold
+      "#7C3AED", // violet
+      "#0891B2", // cyan
+      "#DB2777", // pink
+      "#F97316", // orange
+      "#64748B", // slate (Other)
+    ];
+    const bgColors = labels.map((_, i) =>
+      labels[i] === "Other" ? "#64748B" : PIE_COLORS[i % (PIE_COLORS.length - 1)]
+    );
+
     charts.subgroupShare = new Chart(el, {
       type: "doughnut",
-      data: { labels, datasets: [{ data: perc }] },
+      data: { labels, datasets: [{ data: perc, backgroundColor: bgColors, borderWidth: 2, borderColor: "#fff" }] },
       options: {
         responsive: true, maintainAspectRatio: false, cutout: "70%",
         plugins: {
