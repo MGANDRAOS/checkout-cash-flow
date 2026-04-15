@@ -1111,7 +1111,7 @@ def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: 
             UNION ALL
             SELECT 'quiet' AS kind, start_bh, win_avg_rcpts, win_avg_amt FROM QuietWins
             ORDER BY kind, start_bh;
-        """, (cutoff, cutoff, days, window_hours, top, quiet))
+        """, (cutoff, days, cutoff, window_hours, top, quiet))
 
         rows = cur.fetchall()
         top_rows, quiet_rows = [], []
