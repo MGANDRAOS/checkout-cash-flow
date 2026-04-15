@@ -2,7 +2,6 @@
 # Receipt-centric analytics for the Intelligence dashboard
 # Business day window: starts 07:00, ends next day 05:00 (safe for late EOD)
 
-import os
 import pyodbc
 from contextlib import contextmanager
 from datetime import datetime, timedelta, date
@@ -14,33 +13,20 @@ from cache_utils import ttl_cache
 
 
 # ---------- Connection ----------
+import config
+
+
 def _conn_str() -> str:
-     driver   = os.getenv("MSSQL_DRIVER", "ODBC Driver 17 for SQL Server")
-     server   = os.getenv("MSSQL_SERVER", "155.117.44.163,65431\\SQLEXPRESS")
-     database = os.getenv("MSSQL_DATABASE", "SBCDB")
-     username = os.getenv("MSSQL_USERNAME", "mgandraos")
-     password = os.getenv("MSSQL_PASSWORD", "Andr@o$00")
+    return (
+        f"Driver={{{config.MSSQL_DRIVER}}};"
+        f"Server={config.MSSQL_SERVER};"
+        f"Database={config.MSSQL_DATABASE};"
+        f"Uid={config.MSSQL_USERNAME};"
+        f"Pwd={config.MSSQL_PASSWORD};"
+        f"Encrypt=yes;"
+        f"TrustServerCertificate=yes;"
+    )
 
-
-     return (
-           f"Driver={{{driver}}};"
-           f"Server={server};"
-           f"Database={database};"
-           f"Uid={username};"
-           f"Pwd={password};"
-           f"Encrypt=yes;"
-           f"TrustServerCertificate=yes;"
-     )  
-    
-    
-    # ---------- Connection ----------
-#def _conn_str() -> str:
- #   driver   = os.getenv("MSSQL_DRIVER", "ODBC Driver 17 for SQL Server")
-  #  server   = os.getenv("MSSQL_SERVER", "localhost,1433")
-   # database = os.getenv("MSSQL_DATABASE", "SBCDB")
-
-
- #   return f"Driver={{{driver}}};Server={server};Database={database};Trusted_Connection=yes;"
 
 @contextmanager
 def _connect():
