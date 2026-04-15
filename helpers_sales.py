@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from collections import defaultdict
 from helpers_intelligence import _connect
-from pos_dates import biz_date_range_8h, cutoff_dt_8h
+from pos_dates import biz_date_range_8h
 
 
 # ----------------------------------------------------------
@@ -97,7 +97,7 @@ def get_sales_summary_range(from_str: str, to_str: str, mode: str = "daily"):
 def get_sales_summary(date_str: str):
     """
     Daily KPI summary: today + yesterday + 4-week same-weekday comparison.
-    Was 7 separate queries. Now 2: one multi-date aggregation + one peak hour.
+    Was 7 separate queries. Now 1: a single CTE combining Ranges, Aggregated, and PeakHour.
     All WHERE clauses use datetime ranges (sargable — index on RCPT_DATE usable).
     """
     d = datetime.strptime(date_str, "%Y-%m-%d").date()
