@@ -1,288 +1,466 @@
 {% extends "base.html" %}
 {% block content %}
 
+<style>
+  /* ── Design tokens ─────────────────────────────────────── */
+  :root {
+    --bg-surface:   #FFFFFF;
+    --bg-elevated:  #F1F5F9;
+    --text:         #0F172A;
+    --text-2:       #475569;
+    --text-3:       #94A3B8;
+    --border:       #E2E8F0;
+    --azure:        #2563EB;
+    --azure-dim:    #EFF6FF;
+    --emerald:      #059669;
+    --emerald-dim:  #ECFDF5;
+    --crimson:      #DC2626;
+    --crimson-dim:  #FEF2F2;
+    --gold:         #D97706;
+    --gold-dim:     #FFFBEB;
+    --font-heading: 'Clash Display', 'DM Sans', sans-serif;
+    --font-mono:    'JetBrains Mono', monospace;
+    --r-sm:         6px;
+    --r-md:         10px;
+  }
+
+  /* ── Page header ───────────────────────────────────────── */
+  .it-page-header {
+    margin-bottom: 1.5rem;
+  }
+  .it-page-header h1 {
+    font-family: var(--font-heading);
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 .2rem;
+    letter-spacing: -.02em;
+  }
+  .it-page-header .subtitle {
+    font-size: .85rem;
+    color: var(--text-2);
+  }
+
+  /* ── Card base ─────────────────────────────────────────── */
+  .it-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    margin-bottom: 1rem;
+  }
+  .it-card-body {
+    padding: 1.25rem;
+  }
+  .it-card-title {
+    font-family: var(--font-heading);
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 1rem;
+  }
+
+  /* ── Filter card ────────────────────────────────────────── */
+  .it-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-bottom: .75rem;
+  }
+  .it-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    flex: 1 1 140px;
+  }
+  .it-filter-group.wide  { flex: 2 1 280px; }
+  .it-filter-group.wider { flex: 3 1 360px; }
+
+  .it-label {
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  /* native inputs / selects inherit Bootstrap but get token overrides */
+  .it-card .form-control,
+  .it-card .form-select {
+    border-color: var(--border);
+    border-radius: var(--r-sm);
+    font-size: .875rem;
+    color: var(--text);
+    background-color: var(--bg-surface);
+  }
+  .it-card .form-control:focus,
+  .it-card .form-select:focus {
+    border-color: var(--azure);
+    box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+  }
+
+  /* ── Forecast section ───────────────────────────────────── */
+  .it-forecast-section {
+    background: var(--bg-elevated);
+    border-radius: var(--r-md);
+    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    align-items: flex-start;
+  }
+  .it-forecast-toggle {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex: 1 1 200px;
+  }
+  .it-forecast-toggle .it-label { margin: 0; }
+  .it-forecast-hint {
+    font-size: .75rem;
+    color: var(--text-3);
+    margin-top: .2rem;
+  }
+
+  /* ── Action row ─────────────────────────────────────────── */
+  .it-action-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    padding-top: .25rem;
+  }
+  .it-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    background: var(--azure);
+    color: #fff;
+    border: none;
+    border-radius: var(--r-sm);
+    padding: .45rem 1rem;
+    font-size: .875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .it-btn-primary:hover { background: #1d4ed8; color: #fff; }
+
+  .it-btn-outline {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    background: transparent;
+    color: var(--text-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: .45rem .875rem;
+    font-size: .875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .it-btn-outline:hover { border-color: var(--azure); color: var(--azure); }
+
+  .it-status-area {
+    margin-left: auto;
+    text-align: right;
+    font-size: .78rem;
+    color: var(--text-3);
+  }
+  #it-status { color: var(--text-2); font-weight: 500; }
+
+  /* ── KPI momentum cards ─────────────────────────────────── */
+  .it-kpi-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    border-left-width: 4px;
+    padding: 1rem 1.1rem;
+    height: 100%;
+  }
+  .it-kpi-card.risers    { border-left-color: var(--azure);   }
+  .it-kpi-card.fallers   { border-left-color: var(--crimson); }
+  .it-kpi-card.fastmovers{ border-left-color: var(--gold);    }
+
+  .it-kpi-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .35rem;
+  }
+  .it-kpi-title {
+    font-size: .85rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+  }
+  .it-badge {
+    display: inline-block;
+    font-size: .7rem;
+    font-weight: 700;
+    padding: .15rem .5rem;
+    border-radius: 999px;
+    line-height: 1.4;
+  }
+  .it-badge.up      { background: var(--emerald-dim); color: var(--emerald); }
+  .it-badge.down    { background: var(--crimson-dim);  color: var(--crimson); }
+  .it-badge.trend   { background: var(--gold-dim);     color: var(--gold); }
+
+  .it-kpi-hint {
+    font-size: .73rem;
+    color: var(--text-3);
+    margin-bottom: .6rem;
+  }
+  .it-kpi-body { font-size: .82rem; color: var(--text-2); }
+
+  /* ── Tables ─────────────────────────────────────────────── */
+  .it-table-wrap table {
+    font-size: .83rem;
+  }
+  .it-table-wrap thead th {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-3);
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+    padding: .5rem .75rem;
+  }
+  .it-table-wrap tbody td {
+    padding: .45rem .75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .it-table-wrap tbody tr:last-child td { border-bottom: none; }
+  .it-table-wrap tbody tr:hover td { background: var(--bg-elevated); }
+
+  .it-table-note {
+    font-size: .75rem;
+    color: var(--text-3);
+    margin-top: .6rem;
+  }
+
+  /* ── Forecast table note span ───────────────────────────── */
+  #it-forecast-table-note {
+    font-size: .78rem;
+    color: var(--text-3);
+  }
+</style>
+
 <div class="mt-4" id="item-trends-page">
-    <div class="d-flex align-items-center justify-content-between mb-3">
-        <div>
-            <h3 class="mb-0">Item Trends</h3>
-            <div class="text-secondary small">Dynamic trends by date range + bucket + Top N</div>
+
+  <!-- ── Page header ──────────────────────────────────────── -->
+  <div class="it-page-header">
+    <h1>Item Trends</h1>
+    <span class="subtitle">Dynamic trends by date range &middot; bucket &middot; Top N</span>
+  </div>
+
+  <!-- ── Filter card ──────────────────────────────────────── -->
+  <div class="it-card mb-4">
+    <div class="it-card-body">
+
+      <!-- Row 1: core date / bucket / ranking filters -->
+      <div class="it-filter-row">
+        <div class="it-filter-group">
+          <label class="it-label" for="it-start-date">Start date</label>
+          <input type="date" class="form-control form-control-sm" id="it-start-date">
         </div>
-    </div>
+        <div class="it-filter-group">
+          <label class="it-label" for="it-end-date">End date</label>
+          <input type="date" class="form-control form-control-sm" id="it-end-date">
+        </div>
+        <div class="it-filter-group">
+          <label class="it-label" for="it-bucket">Bucket</label>
+          <select class="form-select form-select-sm" id="it-bucket">
+            <option value="daily">Daily</option>
+            <option value="weekly" selected>Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <div class="it-filter-group">
+          <label class="it-label" for="it-top-n">Top N items</label>
+          <input type="number" class="form-control form-control-sm" id="it-top-n" value="20" min="1" max="200">
+        </div>
+        <div class="it-filter-group">
+          <label class="it-label" for="it-rank-by">Rank by</label>
+          <select class="form-select form-select-sm" id="it-rank-by">
+            <option value="total" selected>Total in range</option>
+            <option value="last_bucket">Last bucket only</option>
+          </select>
+        </div>
+      </div>
 
-    <!-- Filters -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <div class="row g-3 align-items-end">
+      <!-- Row 2: subgroup + item codes -->
+      <div class="it-filter-row">
+        <div class="it-filter-group wide">
+          <label class="it-label" for="it-subgroup">Subgroup</label>
+          <select class="form-select form-select-sm" id="it-subgroup">
+            <option value="">All subgroups</option>
+          </select>
+        </div>
+        <div class="it-filter-group wider">
+          <label class="it-label" for="it-item-codes">Item codes (optional, CSV)</label>
+          <input type="text" class="form-control form-control-sm" id="it-item-codes" placeholder="e.g. 123,456,789">
+        </div>
+      </div>
 
-                <div class="col-12 col-md-3">
-                    <label class="form-label">Start date</label>
-                    <input type="date" class="form-control" id="it-start-date">
-                </div>
+      <!-- Row 3: forecast section -->
+      <div class="it-forecast-section mb-3">
 
-                <div class="col-12 col-md-3">
-                    <label class="form-label">End date</label>
-                    <input type="date" class="form-control" id="it-end-date">
-                </div>
-
-                <div class="col-12 col-md-2">
-                    <label class="form-label">Bucket</label>
-                    <select class="form-select" id="it-bucket">
-                        <option value="daily">Daily</option>
-                        <option value="weekly" selected>Weekly</option>
-                        <option value="monthly">Monthly</option>
-                    </select>
-                </div>
-
-                <div class="col-12 col-md-2">
-                    <label class="form-label">Top N items</label>
-                    <input type="number" class="form-control" id="it-top-n" value="20" min="1" max="200">
-                </div>
-
-                <div class="col-12 col-md-2">
-                    <label class="form-label">Rank by</label>
-                    <select class="form-select" id="it-rank-by">
-                        <option value="total" selected>Total in range</option>
-                        <option value="last_bucket">Last bucket only</option>
-                    </select>
-                </div>
-
-                <div class="col-12 col-md-6">
-                    <label class="form-label">Subgroup (optional)</label>
-                    <select class="form-select" id="it-subgroup">
-                        <option value="">All subgroups</option>
-                    </select>
-                </div>
-
-                <!-- Forecast Controls -->
-                <div class="col-12 col-md-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <label class="form-label mb-1">
-                            Forecast overlay
-                            <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Adds a simple forecast after your selected end date.
-It uses the average of the last N buckets (moving average), then extends the line forward.
-Good for planning orders (summer stock) without heavy ML."></i>
-                        </label>
-
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="it-forecast-enabled">
-                        </div>
-                    </div>
-
-                    <div class="form-text">
-                        When enabled, the chart will extend each item’s line beyond the end date using a moving average.
-                    </div>
-                </div>
-
-                <div class="col-12 col-md-4">
-                    <label class="form-label">
-                        Forecast horizon
-                        <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="How far ahead to forecast (in buckets).
-If bucket=weekly and horizon=8, you’ll get 8 future weeks.
-Use 4–8 for best signal; 12+ is usually noisier."></i>
-                    </label>
-                    <select class="form-select" id="it-forecast-horizon">
-                        <option value="4">4 buckets</option>
-                        <option value="8" selected>8 buckets</option>
-                        <option value="12">12 buckets</option>
-                    </select>
-                    <div class="form-text">
-                        More buckets = further forecast, but confidence drops. Start with 4–8.
-                    </div>
-                </div>
-
-                <div class="col-12 col-md-4">
-                    <label class="form-label">
-                        Moving average window
-                        <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="How many recent buckets we average to produce the forecast value.
-Example: window=6 means the forecast is based on the last 6 buckets only.
-Smaller window reacts faster; larger window is smoother."></i>
-                    </label>
-                    <select class="form-select" id="it-forecast-window">
-                        <option value="4">4 buckets</option>
-                        <option value="6" selected>6 buckets</option>
-                        <option value="8">8 buckets</option>
-                    </select>
-                    <div class="form-text">
-                        Use 6 as default. Use 4 for fast-changing items, 8 for stable items.
-                    </div>
-                </div>
-
-
-                <div class="col-12 col-md-6">
-                    <label class="form-label">Item codes (optional, CSV)</label>
-                    <input type="text" class="form-control" id="it-item-codes" placeholder="Example: 123,456,789">
-                </div>
-
-                <div class="col-12 d-flex gap-2">
-                    <button class="btn btn-primary" id="it-generate">
-                        <i class="bi bi-play-circle"></i> Generate
-                    </button>
-                    <button class="btn btn-outline-secondary" id="it-reset">
-                        <i class="bi bi-arrow-counterclockwise"></i> Reset
-                    </button>
-                    <div class="ms-auto text-end">
-                        <div class="small text-secondary" id="it-status"></div>
-                        <div class="small text-secondary">
-                            <i class="bi bi-info-circle"></i>
-                            Forecast is visual guidance only; always confirm with stock on hand + supplier lead time.
-                        </div>
-                    </div>
-                </div>
-
+        <div class="it-filter-group" style="flex:2 1 260px;">
+          <div class="it-forecast-toggle">
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="it-forecast-enabled">
             </div>
-        </div>
-    </div>
-    <!-- Momentum KPIs -->
-    <div class="row g-3 mb-4" id="it-momentum-row">
-
-        <div class="col-12 col-lg-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <h6 class="mb-0">
-                            Top Risers (1 bucket)
-                            <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Compares the latest bucket vs the one right before it.
-Percent change is based on quantities (not revenue).
-Best for spotting sudden demand spikes early."></i>
-                        </h6>
-                        <span class="badge text-bg-success">Up</span>
-                    </div>
-                    <div class="form-text mb-2">
-                        Shows the strongest % increases from the last bucket to the previous bucket.
-                    </div>
-                    <div id="it-kpi-risers" class="small"></div>
-                </div>
-            </div>
+            <label class="it-label" for="it-forecast-enabled">
+              Forecast overlay
+              <i class="bi bi-info-circle ms-1 text-secondary"
+                 data-bs-toggle="tooltip"
+                 data-bs-title="Adds a simple forecast after your selected end date. Uses the average of the last N buckets (moving average), then extends the line forward. Good for planning orders without heavy ML."></i>
+            </label>
+          </div>
+          <div class="it-forecast-hint">
+            When enabled, each item's line is extended beyond the end date using a moving average.
+          </div>
         </div>
 
-        <div class="col-12 col-lg-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <h6 class="mb-0">
-                            Top Fallers (1 bucket)
-                            <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Compares the latest bucket vs the one right before it.
-Helps detect items that suddenly slowed down or went out of stock.
-Use it to investigate before it becomes a weekly problem."></i>
-                        </h6>
-                        <span class="badge text-bg-danger">Down</span>
-                    </div>
-                    <div class="form-text mb-2">
-                        Shows the strongest % drops from the last bucket to the previous bucket.
-                    </div>
-                    <div id="it-kpi-fallers" class="small"></div>
-                </div>
-            </div>
+        <div class="it-filter-group">
+          <label class="it-label" for="it-forecast-horizon">Forecast horizon</label>
+          <select class="form-select form-select-sm" id="it-forecast-horizon">
+            <option value="4">4 buckets</option>
+            <option value="8" selected>8 buckets</option>
+            <option value="12">12 buckets</option>
+          </select>
+          <div class="it-forecast-hint">More buckets = further forecast, but lower confidence.</div>
         </div>
 
-        <div class="col-12 col-lg-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <h6 class="mb-0">
-                            Fast Movers (4 vs 4)
-                            <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Compares total quantity in the last 4 buckets vs the previous 4 buckets.
-This is smoother than 1-bucket change and reduces noise.
-Great for seasonal shifts (summer ramp-up)."></i>
-                        </h6>
-                        <span class="badge text-bg-primary">Trend</span>
-                    </div>
-                    <div class="form-text mb-2">
-                        More stable signal: last 4 buckets vs previous 4 buckets (totals).
-                    </div>
-                    <div id="it-kpi-fastmovers" class="small"></div>
-                </div>
-            </div>
+        <div class="it-filter-group">
+          <label class="it-label" for="it-forecast-window">Moving avg window</label>
+          <select class="form-select form-select-sm" id="it-forecast-window">
+            <option value="4">4 buckets</option>
+            <option value="6" selected>6 buckets</option>
+            <option value="8">8 buckets</option>
+          </select>
+          <div class="it-forecast-hint">Default 6. Use 4 for fast-moving, 8 for stable items.</div>
         </div>
+
+      </div>
+
+      <!-- Action row -->
+      <div class="it-action-row">
+        <button class="it-btn-primary" id="it-generate">
+          <i class="bi bi-play-circle"></i> Generate
+        </button>
+        <button class="it-btn-outline" id="it-reset">
+          <i class="bi bi-arrow-counterclockwise"></i> Reset
+        </button>
+        <div class="it-status-area">
+          <div id="it-status"></div>
+          <div>
+            <i class="bi bi-info-circle"></i>
+            Forecast is visual guidance only — always confirm with stock on hand.
+          </div>
+        </div>
+      </div>
 
     </div>
+  </div>
 
-    <!-- Chart -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <h6 class="mb-3">Trend Chart</h6>
-            <canvas id="it-chart" height="90"></canvas>
+  <!-- ── Momentum KPI row ──────────────────────────────────── -->
+  <div class="row g-3 mb-4" id="it-momentum-row">
+
+    <div class="col-12 col-lg-4">
+      <div class="it-kpi-card risers">
+        <div class="it-kpi-header">
+          <p class="it-kpi-title">Top Risers <span style="font-weight:400;color:var(--text-3);">(1 bucket)</span></p>
+          <span class="it-badge up">Up</span>
         </div>
+        <div class="it-kpi-hint">Strongest % increases from the last bucket to the previous one.</div>
+        <div id="it-kpi-risers" class="it-kpi-body"></div>
+      </div>
     </div>
 
-    <!-- Forecast Table -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-                <h6 class="mb-0">
-                    Forecast Table (Action View)
-                    <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="This table turns trends into action.
-It summarizes each top item with average, last bucket, and a simple forecast.
-Use it to plan summer ordering and detect rising demand early."></i>
-                </h6>
-                <span class="small text-secondary" id="it-forecast-table-note"></span>
-            </div>
-
-            <div class="table-responsive">
-                <table class="table table-sm table-striped align-middle" id="it-forecast-table" style="width:100%">
-                    <thead>
-                        <tr>
-                            <th>
-                                Item
-                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Item name from your POS items table.
-If the title is missing, we fallback to item code."></i>
-                            </th>
-                            <th class="text-end">
-                                Avg / bucket
-                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Average quantity per bucket across your selected date range.
-Useful as a baseline for normal demand."></i>
-                            </th>
-                            <th class="text-end">
-                                Last bucket
-                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Quantity in the latest bucket inside your selected date range.
-This reflects the most recent real demand."></i>
-                            </th>
-                            <th class="text-end">
-                                Forecast (next H)
-                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="Forecast value is the moving average of the last N buckets.
-We multiply it by the horizon (H) to estimate next period total.
-Use it as guidance, not a guarantee."></i>
-                            </th>
-                            <th>
-                                Direction
-                                <i class="bi bi-info-circle ms-1 text-secondary" data-bs-toggle="tooltip" data-bs-title="A simple direction indicator based on the last few buckets.
-Up means demand is increasing recently, Down means decreasing.
-Flat means stable/sideways."></i>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-
-            <div class="form-text">
-                Forecast uses the same settings above (horizon + moving average window). Direction is based on recent
-                slope.
-            </div>
+    <div class="col-12 col-lg-4">
+      <div class="it-kpi-card fallers">
+        <div class="it-kpi-header">
+          <p class="it-kpi-title">Top Fallers <span style="font-weight:400;color:var(--text-3);">(1 bucket)</span></p>
+          <span class="it-badge down">Down</span>
         </div>
+        <div class="it-kpi-hint">Strongest % drops — detect sudden slowdowns before they compound.</div>
+        <div id="it-kpi-fallers" class="it-kpi-body"></div>
+      </div>
     </div>
 
-
-    <!-- Table -->
-    <div class="card shadow-sm mb-5">
-        <div class="card-body">
-            <h6 class="mb-3">Data (Long Format)</h6>
-            <div class="table-responsive">
-                <table class="table table-striped table-sm" id="it-table" style="width:100%">
-                    <thead>
-                        <tr>
-                            <th>Bucket Start</th>
-                            <th>Item Code</th>
-                            <th>Item</th>
-                            <th>Subgroup</th>
-                            <th class="text-end">Qty</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
+    <div class="col-12 col-lg-4">
+      <div class="it-kpi-card fastmovers">
+        <div class="it-kpi-header">
+          <p class="it-kpi-title">Fast Movers <span style="font-weight:400;color:var(--text-3);">(4 vs 4)</span></p>
+          <span class="it-badge trend">Trend</span>
         </div>
+        <div class="it-kpi-hint">Last 4 buckets vs previous 4 — a smoother signal for seasonal shifts.</div>
+        <div id="it-kpi-fastmovers" class="it-kpi-body"></div>
+      </div>
     </div>
+
+  </div>
+
+  <!-- ── Trend Chart ───────────────────────────────────────── -->
+  <div class="it-card mb-4">
+    <div class="it-card-body">
+      <p class="it-card-title">Trend Chart</p>
+      <canvas id="it-chart" height="90"></canvas>
+    </div>
+  </div>
+
+  <!-- ── Forecast Table ───────────────────────────────────── -->
+  <div class="it-card mb-4">
+    <div class="it-card-body">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <p class="it-card-title mb-0">Forecast Table <span style="font-weight:400;color:var(--text-3);font-size:.85rem;">(Action View)</span></p>
+        <span id="it-forecast-table-note"></span>
+      </div>
+      <div class="table-responsive it-table-wrap">
+        <table class="table align-middle mb-0" id="it-forecast-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th class="text-end">Avg / bucket</th>
+              <th class="text-end">Last bucket</th>
+              <th class="text-end">Forecast (next H)</th>
+              <th>Direction</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="it-table-note">
+        Forecast uses the horizon + moving average window set above. Direction is based on recent slope.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Data Table ────────────────────────────────────────── -->
+  <div class="it-card mb-4">
+    <div class="it-card-body">
+      <p class="it-card-title">Data (Long Format)</p>
+      <div class="table-responsive it-table-wrap">
+        <table class="table align-middle mb-0" id="it-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>Bucket Start</th>
+              <th>Item Code</th>
+              <th>Item</th>
+              <th>Subgroup</th>
+              <th class="text-end">Qty</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
 </div>
 

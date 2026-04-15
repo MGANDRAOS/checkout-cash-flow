@@ -1,87 +1,117 @@
 {% extends "base.html" %}
 {% block content %}
-<div id="intelligence-root" class="container-fluid mt-4">
+<div id="intelligence-root" class="py-4 px-3 px-md-4">
+
+  <!-- Page Header -->
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold">POS Dashboard</h2>
+    <h2 style="font-family:var(--font-heading);font-weight:700;color:var(--text);letter-spacing:-0.02em;">POS Dashboard</h2>
   </div>
 
   <!-- Top Tabs -->
-  <ul class="nav nav-tabs" id="analyticsTabs" role="tablist">
-
-    <li class="nav-item" role="presentation">
-      <button class="nav-link active" id="realtime-tab" data-bs-toggle="tab" data-bs-target="#tab-realtime" type="button"
-        role="tab" aria-controls="tab-realtime" aria-selected="false">Realtime</button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link " id="intelligence-tab" data-bs-toggle="tab" data-bs-target="#tab-intelligence"
-        type="button" role="tab" aria-controls="tab-intelligence" aria-selected="true">Intelligence</button>
-    </li>
-  </ul>
+  <div style="border-bottom:2px solid var(--border);" class="mb-4">
+    <ul class="nav" id="analyticsTabs" role="tablist" style="gap:0.25rem;">
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link active px-4 py-2"
+          id="realtime-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#tab-realtime"
+          type="button"
+          role="tab"
+          aria-controls="tab-realtime"
+          aria-selected="true"
+          style="border:none;border-radius:0;border-bottom:2px solid var(--azure);margin-bottom:-2px;font-weight:600;color:var(--azure);background:transparent;">
+          Realtime
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link px-4 py-2"
+          id="intelligence-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#tab-intelligence"
+          type="button"
+          role="tab"
+          aria-controls="tab-intelligence"
+          aria-selected="false"
+          style="border:none;border-radius:0;border-bottom:2px solid transparent;margin-bottom:-2px;font-weight:500;color:var(--text-2);background:transparent;">
+          Intelligence
+        </button>
+      </li>
+    </ul>
+  </div>
 
   <div class="tab-content" id="analyticsTabsContent">
 
-
-
     <!-- ================= Realtime (Open Business Day) ================= -->
     <div class="tab-pane fade show active" id="tab-realtime" role="tabpanel" aria-labelledby="realtime-tab">
+
       <!-- KPI Row -->
       <div class="row g-3 mb-4" id="rtKPI">
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Total Sales</div>
-              <div class="fw-bold fs-6" id="rtKpiTotalSales">–</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Receipts</div>
-              <div class="fw-bold fs-6" id="rtKpiReceipts">–</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Avg Ticket</div>
-              <div class="fw-bold fs-6" id="rtKpiAvgTicket">–</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Items Sold</div>
-              <div class="fw-bold fs-6" id="rtKpiItemsSold">–</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Peak Hour</div>
-              <div class="fw-bold fs-6" id="rtKpiPeakHour">–</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <div class="card text-center shadow-sm">
-            <div class="card-body py-3">
-              <div class="text-muted small">Growth vs Yesterday</div>
-              <div class="fw-bold fs-6" id="rtKpiGrowthYesterday">–</div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Charts: Hourly, Cumulative, Category -->
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <div class="card-body py-3">
+              <div class="mb-1" style="font-size:0.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Total Sales</div>
+              <div class="fw-bold" id="rtKpiTotalSales" style="font-family:var(--font-mono);font-size:1rem;">–</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <div class="card-body py-3">
+              <div class="mb-1" style="font-size:0.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Receipts</div>
+              <div class="fw-bold" id="rtKpiReceipts" style="font-family:var(--font-mono);font-size:1rem;">–</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <div class="card-body py-3">
+              <div class="mb-1" style="font-size:0.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Avg Ticket</div>
+              <div class="fw-bold" id="rtKpiAvgTicket" style="font-family:var(--font-mono);font-size:1rem;">–</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <div class="card-body py-3">
+              <div class="mb-1" style="font-size:0.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Items Sold</div>
+              <div class="fw-bold" id="rtKpiItemsSold" style="font-family:var(--font-mono);font-size:1rem;">–</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <div class="card-body py-3">
+              <div class="mb-1" style="font-size:0.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Peak Hour</div>
+              <div class="fw-bold" id="rtKpiPeakHour" style="font-family:var(--font-mono);font-size:1rem;">–</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="card text-center" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <div class="card-body py-3">
+              <div class="mb-1" style="font-size:0.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Growth vs Yesterday</div>
+              <div class="fw-bold" id="rtKpiGrowthYesterday" style="font-family:var(--font-mono);font-size:1rem;">–</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <!-- /KPI Row -->
+
+      <!-- Charts: Hourly, Cumulative -->
       <div class="row g-3 mb-4">
         <div class="col-lg-6">
-          <div class="card shadow-sm">
-            <div class="card-header fw-semibold">
-              <i class="bi bi-graph-up me-1"></i>Hourly Sales Trend (Live)
+          <div class="card" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <div class="card-header fw-semibold" style="background:var(--bg-elevated);border-bottom:1px solid var(--border);border-radius:var(--r-md) var(--r-md) 0 0;font-size:0.875rem;color:var(--text);">
+              <i class="bi bi-graph-up me-1" style="color:var(--azure);"></i>Hourly Sales Trend (Live)
             </div>
             <div class="card-body">
               <canvas id="rtChartHourly" height="120"></canvas>
@@ -89,9 +119,9 @@
           </div>
         </div>
         <div class="col-lg-6">
-          <div class="card shadow-sm">
-            <div class="card-header fw-semibold">
-              <i class="bi bi-graph-up-arrow me-1"></i>Cumulative Sales (Live)
+          <div class="card" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <div class="card-header fw-semibold" style="background:var(--bg-elevated);border-bottom:1px solid var(--border);border-radius:var(--r-md) var(--r-md) 0 0;font-size:0.875rem;color:var(--text);">
+              <i class="bi bi-graph-up-arrow me-1" style="color:var(--emerald);"></i>Cumulative Sales (Live)
             </div>
             <div class="card-body">
               <canvas id="rtChartCumulative" height="120"></canvas>
@@ -100,9 +130,10 @@
         </div>
       </div>
 
-      <div class="card shadow-sm mb-4">
-        <div class="card-header fw-semibold">
-          <i class="bi bi-diagram-3 me-1"></i>Sales by Category (Live)
+      <!-- Chart: Category -->
+      <div class="card mb-4" style="border:1px solid var(--border);border-radius:var(--r-md);">
+        <div class="card-header fw-semibold" style="background:var(--bg-elevated);border-bottom:1px solid var(--border);border-radius:var(--r-md) var(--r-md) 0 0;font-size:0.875rem;color:var(--text);">
+          <i class="bi bi-diagram-3 me-1" style="color:var(--gold);"></i>Sales by Category (Live)
         </div>
         <div class="card-body">
           <canvas id="rtChartCategory" height="140"></canvas>
@@ -112,26 +143,25 @@
       <!-- Tables: Items Sold + Receipts -->
       <div class="row g-3">
         <div class="col-lg-8">
-          <div class="card shadow-sm h-100">
-            <div class="card-header fw-semibold">
-              <i class="bi bi-box-seam me-1"></i>Items Sold (Live)
+          <div class="card h-100" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <div class="card-header fw-semibold" style="background:var(--bg-elevated);border-bottom:1px solid var(--border);border-radius:var(--r-md) var(--r-md) 0 0;font-size:0.875rem;color:var(--text);">
+              <i class="bi bi-box-seam me-1" style="color:var(--azure);"></i>Items Sold (Live)
             </div>
             <div class="card-body p-0">
               <div class="table-responsive">
-                <table id="rtTblItemsSold" class="table table-striped table-hover align-middle mb-0 w-100"></table>
+                <table id="rtTblItemsSold" class="table table-hover table-sm align-middle mb-0 w-100"></table>
               </div>
             </div>
           </div>
         </div>
-
         <div class="col-lg-4">
-          <div class="card shadow-sm h-100">
-            <div class="card-header fw-semibold">
-              <i class="bi bi-receipt me-1"></i>Receipts (Today)
+          <div class="card h-100" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <div class="card-header fw-semibold" style="background:var(--bg-elevated);border-bottom:1px solid var(--border);border-radius:var(--r-md) var(--r-md) 0 0;font-size:0.875rem;color:var(--text);">
+              <i class="bi bi-receipt me-1" style="color:var(--emerald);"></i>Receipts (Today)
             </div>
             <div class="card-body p-0">
               <div class="table-responsive">
-                <table id="rtTblReceipts" class="table table-sm mb-0 align-middle"></table>
+                <table id="rtTblReceipts" class="table table-hover table-sm align-middle mb-0"></table>
               </div>
             </div>
           </div>
@@ -141,251 +171,244 @@
     </div>
     <!-- ================= END Realtime Tab ================= -->
 
-        <!-- =============== Intelligence Historical Tab =============== -->
-    <div class="tab-pane fade " id="tab-intelligence" role="tabpanel" aria-labelledby="intelligence-tab">
-      <!-- KPI Row -->
-      <div class="row g-3">
-        <div class="col-md-3">
-          <div class="card text-center shadow-sm p-3">
-            <div class="text-secondary small">Total Receipts (last day)</div>
-            <div id="kpiTotalReceipts" class="display-6 fw-bold text-primary">—</div>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="card text-center shadow-sm p-3">
-            <div class="text-secondary small">Avg Receipt Value</div>
-            <div id="kpiAvgReceipt" class="display-6 fw-bold text-success">—</div>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="card text-center shadow-sm p-3">
-            <div class="text-secondary small">Items per Receipt</div>
-            <div id="kpiItemsPerReceipt" class="display-6 fw-bold text-info">—</div>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="card text-center shadow-sm p-3">
-            <div class="text-secondary small">Unique Items Sold</div>
-            <div id="kpiUniqueItems" class="display-6 fw-bold text-warning">—</div>
-          </div>
-        </div>
-      </div>
+    <!-- =============== Intelligence Historical Tab =============== -->
+    <div class="tab-pane fade" id="tab-intelligence" role="tabpanel" aria-labelledby="intelligence-tab">
 
-      <!-- Charts -->
-      <div class="row g-3 mt-4">
+      <!-- KPI Row -->
+      <div class="row g-3 mb-4">
+
+        <div class="col-md-3">
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);border-left:4px solid var(--azure);">
+            <div class="mb-1" style="font-size:0.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Total Receipts (last day)</div>
+            <div id="kpiTotalReceipts" class="fw-bold" style="font-family:var(--font-mono);font-size:2rem;color:var(--azure);">—</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);border-left:4px solid var(--emerald);">
+            <div class="mb-1" style="font-size:0.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Avg Receipt Value</div>
+            <div id="kpiAvgReceipt" class="fw-bold" style="font-family:var(--font-mono);font-size:2rem;color:var(--emerald);">—</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);border-left:4px solid var(--gold);">
+            <div class="mb-1" style="font-size:0.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Items per Receipt</div>
+            <div id="kpiItemsPerReceipt" class="fw-bold" style="font-family:var(--font-mono);font-size:2rem;color:var(--gold);">—</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);border-left:4px solid var(--crimson);">
+            <div class="mb-1" style="font-size:0.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Unique Items Sold</div>
+            <div id="kpiUniqueItems" class="fw-bold" style="font-family:var(--font-mono);font-size:2rem;color:var(--crimson);">—</div>
+          </div>
+        </div>
+
+      </div>
+      <!-- /KPI Row -->
+
+      <!-- Charts: Receipts by Day + Subgroup Share -->
+      <div class="row g-3 mb-4">
         <div class="col-md-8">
-          <div class="card p-3 shadow-sm">
-            <h6 class="mb-2 text-secondary">Receipts per Day (last 7 days)</h6>
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Receipts per Day (last 7 days)</h6>
             <div class="chart-wrap"><canvas id="chartReceiptsByDay"></canvas></div>
           </div>
         </div>
         <div class="col-md-4">
-          <div class="card p-3 shadow-sm">
-            <h6 class="mb-2 text-secondary">Top Subgroups Share (last 7 days)</h6>
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Top Subgroups Share (last 7 days)</h6>
             <div class="chart-wrap"><canvas id="chartSubgroupShare"></canvas></div>
           </div>
         </div>
+      </div>
 
-        <div class="row g-3 mt-4">
-          <div class="col-md-12">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Subgroup Contribution (last 7 days)</h6>
-              <div class="chart-wrap"><canvas id="chartSubgroup"></canvas></div>
-            </div>
+      <!-- Chart: Subgroup Contribution -->
+      <div class="card p-3 mb-4" style="border:1px solid var(--border);border-radius:var(--r-md);">
+        <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Subgroup Contribution (last 7 days)</h6>
+        <div class="chart-wrap"><canvas id="chartSubgroup"></canvas></div>
+      </div>
+
+      <!-- Chart: Top Items in Subgroup -->
+      <div class="card p-3 mb-4" style="border:1px solid var(--border);border-radius:var(--r-md);">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="mb-0" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">
+            Top Items in Subgroup: <span id="selSubgroupName" style="color:var(--azure);font-style:normal;">—</span> (last 7 days)
+          </h6>
+          <button id="clearSubgroup" type="button" class="btn btn-sm btn-outline-secondary">Clear</button>
+        </div>
+        <div class="chart-wrap"><canvas id="chartSubgroupItems"></canvas></div>
+      </div>
+
+      <!-- Charts: Top Items + Hourly Receipts -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-6">
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Top 10 Items (by quantity)</h6>
+            <div class="chart-wrap"><canvas id="chartTopItems"></canvas></div>
           </div>
         </div>
-
-        <div class="row g-3 mt-4">
-          <div class="col-md-12">
-            <div class="card p-3 shadow-sm">
-              <div class="d-flex justify-content-between align-items-center">
-                <h6 class="mb-2 text-secondary">
-                  Top Items in Subgroup: <span id="selSubgroupName">—</span> (last 7 days)
-                </h6>
-                <button id="clearSubgroup" type="button" class="btn btn-sm btn-outline-secondary">Clear</button>
-              </div>
-              <div class="chart-wrap"><canvas id="chartSubgroupItems"></canvas></div>
-            </div>
+        <div class="col-md-6">
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Receipts by Hour (last business day)</h6>
+            <div class="chart-wrap"><canvas id="chartHourlyReceipts"></canvas></div>
           </div>
         </div>
-        <div class="row g-3 mt-4">
+      </div>
+
+      <!-- Distributions -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-6">
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Items per Receipt (last 7 days)</h6>
+            <div class="chart-wrap"><canvas id="chartItemsPerReceipt"></canvas></div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Receipt Amounts (LBP, last 7 days)</h6>
+            <div class="chart-wrap"><canvas id="chartReceiptAmounts"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Momentum -->
+      <div class="card p-3 mb-4" style="border:1px solid var(--border);border-radius:var(--r-md);">
+        <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Subgroup Velocity (last 7d vs prior 7d)</h6>
+        <div class="chart-wrap"><canvas id="chartSubgroupVelocity"></canvas></div>
+      </div>
+
+      <!-- Affinity Table -->
+      <div class="card p-3 mb-4" style="border:1px solid var(--border);border-radius:var(--r-md);">
+        <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Frequently Bought Together (last 30 days)</h6>
+        <div class="table-responsive">
+          <table class="table table-hover table-sm align-middle mb-0">
+            <thead>
+              <tr style="color:var(--text-3);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;">
+                <th style="width:35%;">Item A</th>
+                <th style="width:35%;">Item B</th>
+                <th class="text-end" style="width:10%;"
+                  data-bs-toggle="tooltip" data-bs-placement="top"
+                  title="How many receipts contained BOTH items at least once (de-duplicated per receipt).">
+                  Co-occurrence
+                </th>
+                <th class="text-end" style="width:10%;"
+                  data-bs-toggle="tooltip" data-bs-placement="top"
+                  title="Share of all receipts in the last 30 business days that contained this pair.">
+                  Coverage
+                </th>
+                <th class="text-end" style="width:10%;"
+                  data-bs-toggle="tooltip" data-bs-placement="top"
+                  title="Association strength vs chance. lift = (co_count × total_receipts) ÷ (count(A) × count(B)). Values &gt; 1 indicate a positive association.">
+                  Lift
+                </th>
+              </tr>
+            </thead>
+            <tbody id="affinityBody">
+              <tr><td colspan="5" style="color:var(--text-3);">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Timings: Hourly Profile + DOW Profile -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-8">
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Average Hourly Receipts (last 30 business days)</h6>
+            <div class="chart-wrap"><canvas id="chartHourlyProfile"></canvas></div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card p-3" style="border:1px solid var(--border);border-radius:var(--r-md);">
+            <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Day-of-Week Receipts (avg per day)</h6>
+            <div class="chart-wrap"><canvas id="chartDowProfile"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Peak Hours Table -->
+      <div class="card p-3 mb-4" style="border:1px solid var(--border);border-radius:var(--r-md);">
+        <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Peak vs Quiet Hours (derived from 30-day hourly profile)</h6>
+        <div class="table-responsive">
+          <table class="table table-hover table-sm align-middle mb-0">
+            <thead>
+              <tr style="color:var(--text-3);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;">
+                <th>Rank</th>
+                <th>Hour</th>
+                <th class="text-end">Avg Receipts</th>
+              </tr>
+            </thead>
+            <tbody id="peakHoursBody">
+              <tr><td colspan="3" style="color:var(--text-3);">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Best 3-Hour Windows -->
+      <div class="card p-3 mb-4" style="border:1px solid var(--border);border-radius:var(--r-md);">
+        <h6 class="mb-3" style="font-size:0.8rem;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Best 3-Hour Windows (operational hours, last 30 business days)</h6>
+        <div class="row g-3">
           <div class="col-md-6">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Top 10 Items (by quantity)</h6>
-              <div class="chart-wrap"><canvas id="chartTopItems"></canvas></div>
+            <div class="mb-2" style="font-size:0.75rem;font-weight:600;color:var(--emerald);text-transform:uppercase;letter-spacing:0.04em;">Top</div>
+            <div class="table-responsive">
+              <table class="table table-hover table-sm align-middle mb-0">
+                <thead>
+                  <tr style="color:var(--text-3);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;">
+                    <th style="width:40%;">Window</th>
+                    <th class="text-end" style="width:30%;">Avg Receipts</th>
+                    <th class="text-end" style="width:30%;">Avg LBP</th>
+                  </tr>
+                </thead>
+                <tbody id="topWindowsBody">
+                  <tr><td colspan="3" style="color:var(--text-3);">Loading…</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
           <div class="col-md-6">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Receipts by Hour (last business day)</h6>
-              <div class="chart-wrap"><canvas id="chartHourlyReceipts"></canvas></div>
+            <div class="mb-2" style="font-size:0.75rem;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.04em;">Quiet</div>
+            <div class="table-responsive">
+              <table class="table table-hover table-sm align-middle mb-0">
+                <thead>
+                  <tr style="color:var(--text-3);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;">
+                    <th style="width:40%;">Window</th>
+                    <th class="text-end" style="width:30%;">Avg Receipts</th>
+                    <th class="text-end" style="width:30%;">Avg LBP</th>
+                  </tr>
+                </thead>
+                <tbody id="quietWindowsBody">
+                  <tr><td colspan="3" style="color:var(--text-3);">Loading…</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-
-        <!-- Distributions -->
-        <div class="row g-3 mt-4">
-          <div class="col-md-6">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Items per Receipt (last 7 days)</h6>
-              <div class="chart-wrap"><canvas id="chartItemsPerReceipt"></canvas></div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Receipt Amounts (LBP, last 7 days)</h6>
-              <div class="chart-wrap"><canvas id="chartReceiptAmounts"></canvas></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Momentum -->
-        <div class="row g-3 mt-4">
-          <div class="col-md-12">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Subgroup Velocity (last 7d vs prior 7d)</h6>
-              <div class="chart-wrap"><canvas id="chartSubgroupVelocity"></canvas></div>
-            </div>
-          </div>
-        </div>
-
-
-        <div class="row g-3 mt-4">
-          <div class="col-md-12">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Frequently Bought Together (last 30 days)</h6>
-              <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle mb-0">
-                  <thead class="table-light">
-                    <tr>
-                      <th style="width:35%;">Item A</th>
-                      <th style="width:35%;">Item B</th>
-
-                      <th class="text-end" style="width:10%;" data-bs-toggle="tooltip" data-bs-placement="top"
-                        title="How many receipts contained BOTH items at least once (de-duplicated per receipt).">
-                        Co-occurrence
-                      </th>
-
-                      <th class="text-end" style="width:10%;" data-bs-toggle="tooltip" data-bs-placement="top"
-                        title="Share of all receipts in the last 30 business days that contained this pair.">
-                        Coverage
-                      </th>
-
-                      <th class="text-end" style="width:10%;" data-bs-toggle="tooltip" data-bs-placement="top"
-                        title="Association strength vs chance. lift = (co_count × total_receipts) ÷ (count(A) × count(B)). Values &gt; 1 indicate a positive association.">
-                        Lift
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody id="affinityBody">
-                    <tr>
-                      <td colspan="5" class="text-muted">Loading…</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Timings -->
-        <div class="row g-3 mt-4">
-          <div class="col-md-8">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Average Hourly Receipts (last 30 business days)</h6>
-              <div class="chart-wrap"><canvas id="chartHourlyProfile"></canvas></div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Day-of-Week Receipts (avg per day)</h6>
-              <div class="chart-wrap"><canvas id="chartDowProfile"></canvas></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="row g-3 mt-4">
-          <div class="col-md-12">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Peak vs Quiet Hours (derived from 30-day hourly profile)</h6>
-              <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
-                  <thead class="table-light">
-                    <tr>
-                      <th>Rank</th>
-                      <th>Hour</th>
-                      <th class="text-end">Avg Receipts</th>
-                    </tr>
-                  </thead>
-                  <tbody id="peakHoursBody">
-                    <tr>
-                      <td colspan="3" class="text-muted">Loading…</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="row g-3 mt-4">
-          <div class="col-md-12">
-            <div class="card p-3 shadow-sm">
-              <h6 class="mb-2 text-secondary">Best 3-Hour Windows (operational hours, last 30 business days)</h6>
-              <div class="row">
-                <div class="col-md-6">
-                  <h6 class="small text-success">Top</h6>
-                  <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                      <thead class="table-light">
-                        <tr>
-                          <th style="width:40%;">Window</th>
-                          <th class="text-end" style="width:30%;">Avg Receipts</th>
-                          <th class="text-end" style="width:30%;">Avg LBP</th>
-                        </tr>
-                      </thead>
-                      <tbody id="topWindowsBody">
-                        <tr>
-                          <td colspan="3" class="text-muted">Loading…</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <h6 class="small text-muted">Quiet</h6>
-                  <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                      <thead class="table-light">
-                        <tr>
-                          <th style="width:40%;">Window</th>
-                          <th class="text-end" style="width:30%;">Avg Receipts</th>
-                          <th class="text-end" style="width:30%;">Avg LBP</th>
-                        </tr>
-                      </thead>
-                      <tbody id="quietWindowsBody">
-                        <tr>
-                          <td colspan="3" class="text-muted">Loading…</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
       </div>
 
     </div>
-    <!-- ================= END Historical Tab ================= -->
+    <!-- ================= END Intelligence Tab ================= -->
 
   </div>
 </div>
 
-
-
-
+<style>
+  /* Active tab indicator — handles BS tab toggle */
+  #analyticsTabs .nav-link.active {
+    border-bottom-color: var(--azure) !important;
+    color: var(--azure) !important;
+    font-weight: 600;
+  }
+  #analyticsTabs .nav-link:not(.active) {
+    border-bottom-color: transparent !important;
+    color: var(--text-2) !important;
+  }
+  #analyticsTabs .nav-link:hover:not(.active) {
+    color: var(--text) !important;
+    border-bottom-color: var(--border) !important;
+  }
+</style>
 
 {% endblock %}

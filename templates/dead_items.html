@@ -1,62 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="container-fluid py-3">
-  <div class="d-flex align-items-center justify-content-between mb-2">
+<div class="pt-4">
+
+  <!-- Page Header -->
+  <div class="d-flex align-items-start justify-content-between mb-3 flex-wrap gap-2">
     <div>
-      <h5 class="mb-0">Dead Items Report</h5>
-      <div class="text-secondary small">
-        Shows items that were active in the last <span class="fw-semibold">Lookback</span> window,
-        but have not sold in the last <span class="fw-semibold">Dead</span> window.
-        <span class="ms-1">(BizDate = RCPT_DATE - 7h)</span>
-      </div>
+      <h3 class="mb-0" style="font-family:var(--font-heading);font-weight:700;">Dead Items</h3>
+      <div class="text-muted small mt-1">Items with no sales in the selected window</div>
     </div>
   </div>
 
-  <!-- Filters -->
+  <!-- Filter Strip -->
   <div class="card mb-3">
-    <div class="card-body">
+    <div class="card-body py-3 px-3">
       <div class="row g-2 align-items-end">
+
         <div class="col-md-4">
-          <label class="form-label mb-1">
-            Search
-            <i class="bi bi-info-circle ms-1"
-               data-bs-toggle="tooltip"
-               title="Search by item code or title.
-Paged results so the browser doesn’t choke."></i>
-          </label>
+          <label class="form-label mb-1 small fw-semibold" style="color:var(--text-2);">Search</label>
           <input id="di-q" class="form-control" placeholder="e.g. 490 or Tannourine" />
         </div>
 
         <div class="col-md-2">
-          <label class="form-label mb-1">
-            Subgroup
-            <i class="bi bi-info-circle ms-1"
-               data-bs-toggle="tooltip"
-               title="Exact match vs ITEMS.ITM_SUBGROUP (numeric or text)."></i>
-          </label>
+          <label class="form-label mb-1 small fw-semibold" style="color:var(--text-2);">Subgroup</label>
           <input id="di-subgroup" class="form-control" placeholder="e.g. 6" />
         </div>
 
         <div class="col-md-2">
-          <label class="form-label mb-1">
-            Lookback (BizDays)
-            <i class="bi bi-info-circle ms-1"
-               data-bs-toggle="tooltip"
-               title="Only consider items that sold at least once within this window.
-This removes old inactive POS junk."></i>
-          </label>
+          <label class="form-label mb-1 small fw-semibold" style="color:var(--text-2);">Lookback (BizDays)</label>
           <input id="di-lookback-days" class="form-control" type="number" min="7" max="3650" value="90" />
         </div>
 
         <div class="col-md-2">
-          <label class="form-label mb-1">
-            Dead (BizDays)
-            <i class="bi bi-info-circle ms-1"
-               data-bs-toggle="tooltip"
-               title="Dead = not sold for at least N BizDays.
-Lower = more sensitive, higher = stricter."></i>
-          </label>
+          <label class="form-label mb-1 small fw-semibold" style="color:var(--text-2);">Dead (BizDays)</label>
           <input id="di-dead-days" class="form-control" type="number" min="1" max="3650" value="30" />
         </div>
 
@@ -68,49 +44,56 @@ Lower = more sensitive, higher = stricter."></i>
             Reset
           </button>
         </div>
-      </div>
 
-      <div id="di-status" class="small text-secondary mt-2"></div>
+      </div>
+      <div id="di-status" class="small mt-2" style="color:var(--text-3);"></div>
     </div>
   </div>
 
-  <!-- Table -->
+  <!-- Results Table -->
   <div class="card">
     <div class="card-body">
-      <div class="d-flex align-items-center justify-content-between mb-2">
-        <div class="small text-secondary" id="di-count">—</div>
+
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="small" style="color:var(--text-3);" id="di-count">—</div>
         <div class="d-flex align-items-center gap-2">
-          <button class="btn btn-sm btn-outline-secondary" id="di-prev">Prev</button>
-          <div class="small text-secondary" id="di-page">Page 1</div>
-          <button class="btn btn-sm btn-outline-secondary" id="di-next">Next</button>
+          <button class="btn btn-sm btn-outline-secondary" id="di-prev">
+            <i class="bi bi-chevron-left"></i> Prev
+          </button>
+          <div class="small" style="color:var(--text-2);" id="di-page">Page 1</div>
+          <button class="btn btn-sm btn-outline-secondary" id="di-next">
+            Next <i class="bi bi-chevron-right"></i>
+          </button>
         </div>
       </div>
 
       <div class="table-responsive">
-        <table class="table table-sm align-middle" id="di-table">
+        <table class="table table-hover align-middle mb-0" id="di-table">
           <thead>
-            <tr>
+            <tr style="color:var(--text-3);font-size:0.75rem;text-transform:uppercase;letter-spacing:.05em;">
               <th>Item</th>
               <th>Subgroup</th>
-              <th>Last sold</th>
-              <th class="text-end">Days since sold</th>
-              <th class="text-end">Qty (lookback)</th>
-              <th class="text-end">Receipts (lookback)</th>
+              <th>Last Sold</th>
+              <th class="text-end">Days Since Sold</th>
+              <th class="text-end">Qty (Lookback)</th>
+              <th class="text-end">Receipts (Lookback)</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
 
-      <div class="small text-secondary mt-2">
-        <i class="bi bi-info-circle"></i>
-        “Days since sold” is based on the last BizDate the item appeared in any receipt, compared to your dataset’s Max BizDate.
+      <div class="small mt-3" style="color:var(--text-3);">
+        <i class="bi bi-info-circle me-1"></i>
+        "Days since sold" is based on the last BizDate the item appeared in any receipt, compared to your dataset's Max BizDate.
+        BizDate = RCPT_DATE &minus; 7h.
       </div>
+
     </div>
   </div>
+
 </div>
 
-<!-- IMPORTANT: your module is under /static/js/modules/ ... -->
 <script src="/static/js/dead_items.js"></script>
 <script>
   window.DeadItemsModule?.init();

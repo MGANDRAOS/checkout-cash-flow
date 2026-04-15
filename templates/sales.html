@@ -2,83 +2,81 @@
 {% block content %}
 <link href="https://cdn.jsdelivr.net/npm/simple-chat-ui@0.1.2-beta.2/index.css" rel="stylesheet">
 
-<div class="container-fluid py-3">
+<div class="py-4">
 
-  <!-- Header Row -->
+  <!-- Page Header -->
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <h5 class="mb-0 fw-semibold">
-      <i class="bi bi-cash-stack me-2"></i>POS Sales Dashboard
-    </h5>
-    <div class="d-flex gap-2">
+    <h1 style="font-family:var(--font-heading);font-size:1.5rem;font-weight:700;color:var(--text);margin:0;letter-spacing:-0.02em;">
+      <i class="bi bi-cash-stack me-2" style="color:var(--azure);"></i>POS Sales Dashboard
+    </h1>
+    <div class="d-flex align-items-center gap-2">
       <input id="salesDate" type="date" class="form-control form-control-sm" value="{{ today }}"
-        title="Data for today is finalized tomorrow morning.">
-      <div id="weatherBadge" class="small text-muted d-flex align-items-center gap-1"></div>
-      <button id="salesRefresh" class="btn btn-sm btn-outline-secondary">
+        title="Data for today is finalized tomorrow morning."
+        style="font-family:var(--font-mono);font-size:0.8rem;border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text);background:var(--bg-surface);">
+      <div id="weatherBadge" class="small d-flex align-items-center gap-1" style="color:var(--text-2);"></div>
+      <button id="salesRefresh" class="btn btn-sm d-flex align-items-center gap-1"
+        style="border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg-surface);color:var(--text-2);">
         <i class="bi bi-arrow-repeat"></i>
       </button>
     </div>
-
   </div>
 
-  <!-- KPIs Row -->
+  <!-- KPI Cards -->
   <div class="row g-3 mb-4" id="salesKPI">
+
     <div class="col-6 col-md-4 col-lg-2">
-      <div class="card text-center shadow-sm">
-        <div class="card-body py-3">
-          <div class="text-muted small">Total Sales</div>
-          <div class="fw-bold fs-6" id="kpiTotalSales">–</div>
-          <div class="fw-bold fs-6" id="kpiTotalSalesUSD">–</div>
-        </div>
+      <div class="text-center p-3 h-100" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-md);">
+        <div class="mb-1" style="font-size:0.65rem;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;">Total Sales</div>
+        <div class="fw-bold" id="kpiTotalSales" style="font-family:var(--font-mono);color:var(--text);font-size:1rem;">–</div>
+        <div style="font-family:var(--font-mono);color:var(--text-2);font-size:0.82rem;" id="kpiTotalSalesUSD">–</div>
       </div>
     </div>
+
     <div class="col-6 col-md-4 col-lg-2">
-      <div class="card text-center shadow-sm">
-        <div class="card-body py-3">
-          <div class="text-muted small">Receipts</div>
-          <div class="fw-bold fs-6" id="kpiReceipts">–</div>
-        </div>
+      <div class="text-center p-3 h-100" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-md);">
+        <div class="mb-1" style="font-size:0.65rem;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;">Receipts</div>
+        <div class="fw-bold" id="kpiReceipts" style="font-family:var(--font-mono);color:var(--text);font-size:1rem;">–</div>
       </div>
     </div>
+
     <div class="col-6 col-md-4 col-lg-2">
-      <div class="card text-center shadow-sm">
-        <div class="card-body py-3">
-          <div class="text-muted small">Avg Ticket</div>
-          <div class="fw-bold fs-6" id="kpiAvgTicket">–</div>
-        </div>
+      <div class="text-center p-3 h-100" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-md);">
+        <div class="mb-1" style="font-size:0.65rem;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;">Avg Ticket</div>
+        <div class="fw-bold" id="kpiAvgTicket" style="font-family:var(--font-mono);color:var(--text);font-size:1rem;">–</div>
       </div>
     </div>
+
     <div class="col-6 col-md-4 col-lg-2">
-      <div class="card text-center shadow-sm">
-        <div class="card-body py-3">
-          <div class="text-muted small">Vs Yesterday</div>
-          <div class="fw-bold fs-6" id="kpiGrowthYesterday">–</div>
-        </div>
+      <div class="text-center p-3 h-100" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-md);">
+        <div class="mb-1" style="font-size:0.65rem;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;">Vs Yesterday</div>
+        <div class="fw-bold" id="kpiGrowthYesterday" style="font-family:var(--font-mono);color:var(--text);font-size:1rem;">–</div>
       </div>
     </div>
+
     <div class="col-6 col-md-4 col-lg-2">
-      <div class="card text-center shadow-sm">
-        <div class="card-body py-3">
-          <div class="text-muted small">Vs 4-Week Avg</div>
-          <div class="fw-bold fs-6" id="kpiGrowth4W">–</div>
-        </div>
+      <div class="text-center p-3 h-100" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-md);">
+        <div class="mb-1" style="font-size:0.65rem;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;">Vs 4-Week Avg</div>
+        <div class="fw-bold" id="kpiGrowth4W" style="font-family:var(--font-mono);color:var(--text);font-size:1rem;">–</div>
       </div>
     </div>
+
     <div class="col-6 col-md-4 col-lg-2">
-      <div class="card text-center shadow-sm">
-        <div class="card-body py-3">
-          <div class="text-muted small">Peak Hour</div>
-          <div class="fw-bold fs-6" id="kpiPeakHour">–</div>
-        </div>
+      <div class="text-center p-3 h-100" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-md);">
+        <div class="mb-1" style="font-size:0.65rem;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;">Peak Hour</div>
+        <div class="fw-bold" id="kpiPeakHour" style="font-family:var(--font-mono);color:var(--text);font-size:1rem;">–</div>
       </div>
     </div>
+
   </div>
 
   <!-- Last 14 Days Sales Trend -->
-  <div class="card mb-4 shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span class="fw-semibold"><i class="bi bi-calendar3 me-1"></i>Last 14 Days Sales Trend</span>
+  <div class="card mb-4" style="border:1px solid var(--border);border-radius:var(--r-lg);">
+    <div class="card-header d-flex justify-content-between align-items-center" style="border-bottom:1px solid var(--border);background:var(--bg-surface);border-radius:var(--r-lg) var(--r-lg) 0 0;">
+      <span style="font-family:var(--font-heading);font-weight:600;color:var(--text);font-size:0.9rem;">
+        <i class="bi bi-calendar3 me-2" style="color:var(--azure);"></i>Last 14 Days Sales Trend
+      </span>
     </div>
-    <div class="card-body">
+    <div class="card-body" style="background:var(--bg-surface);border-radius:0 0 var(--r-lg) var(--r-lg);">
       <canvas id="chartDaily14Days" height="100"></canvas>
       <div id="summaryDaily14Days" class="ai-summary small text-muted mt-2 fst-italic">
         <i class="bi bi-stars me-1 text-primary"></i>
@@ -87,33 +85,32 @@
     </div>
   </div>
 
-
-  <!-- Sales Trends Chart -->
-  <div class="card mb-4 shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span class="fw-semibold"><i class="bi bi-graph-up me-1"></i>Hourly Sales Trend</span>
-      <span class="small text-muted">Today vs same weekday past 4 weeks</span>
+  <!-- Hourly Sales Trend -->
+  <div class="card mb-4" style="border:1px solid var(--border);border-radius:var(--r-lg);">
+    <div class="card-header d-flex justify-content-between align-items-center" style="border-bottom:1px solid var(--border);background:var(--bg-surface);border-radius:var(--r-lg) var(--r-lg) 0 0;">
+      <span style="font-family:var(--font-heading);font-weight:600;color:var(--text);font-size:0.9rem;">
+        <i class="bi bi-graph-up me-2" style="color:var(--azure);"></i>Hourly Sales Trend
+      </span>
+      <span style="font-size:0.75rem;color:var(--text-3);">Today vs same weekday past 4 weeks</span>
     </div>
-    <div class="card-body">
+    <div class="card-body" style="background:var(--bg-surface);border-radius:0 0 var(--r-lg) var(--r-lg);">
       <canvas id="chartHourlySales" height="100"></canvas>
-
       <div id="summaryHourly" class="ai-summary small text-muted mt-2 fst-italic">
         <i class="bi bi-stars me-1 text-primary"></i>
         <span class="ai-text">AI-generated summary will appear here.</span>
       </div>
-
     </div>
   </div>
 
-  <!-- Hourly Total Sales Trend -->
-  <div class="card mb-4 shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span class="fw-semibold">
-        <i class="bi bi-graph-up-arrow me-1"></i>Hourly Total Sales Trend
+  <!-- Hourly Cumulative Sales Trend -->
+  <div class="card mb-4" style="border:1px solid var(--border);border-radius:var(--r-lg);">
+    <div class="card-header d-flex justify-content-between align-items-center" style="border-bottom:1px solid var(--border);background:var(--bg-surface);border-radius:var(--r-lg) var(--r-lg) 0 0;">
+      <span style="font-family:var(--font-heading);font-weight:600;color:var(--text);font-size:0.9rem;">
+        <i class="bi bi-graph-up-arrow me-2" style="color:var(--azure);"></i>Hourly Total Sales Trend
       </span>
-      <span class="small text-muted">Cumulative sales across business hours</span>
+      <span style="font-size:0.75rem;color:var(--text-3);">Cumulative sales across business hours</span>
     </div>
-    <div class="card-body">
+    <div class="card-body" style="background:var(--bg-surface);border-radius:0 0 var(--r-lg) var(--r-lg);">
       <canvas id="chartHourlyCumulative" height="100"></canvas>
       <div id="summaryHourlyCumulative" class="ai-summary small text-muted mt-2 fst-italic">
         <i class="bi bi-stars me-1 text-primary"></i>
@@ -122,89 +119,87 @@
     </div>
   </div>
 
-
   <!-- Category Breakdown -->
-  <div class="card mb-4 shadow-sm">
-    <div class="card-header fw-semibold">
-      <i class="bi bi-diagram-3 me-1"></i>Sales by Category / Subgroup
+  <div class="card mb-4" style="border:1px solid var(--border);border-radius:var(--r-lg);">
+    <div class="card-header" style="border-bottom:1px solid var(--border);background:var(--bg-surface);border-radius:var(--r-lg) var(--r-lg) 0 0;">
+      <span style="font-family:var(--font-heading);font-weight:600;color:var(--text);font-size:0.9rem;">
+        <i class="bi bi-diagram-3 me-2" style="color:var(--azure);"></i>Sales by Category / Subgroup
+      </span>
     </div>
-    <div class="card-body">
+    <div class="card-body" style="background:var(--bg-surface);border-radius:0 0 var(--r-lg) var(--r-lg);">
       <canvas id="chartCategorySales" height="120"></canvas>
-
       <div id="summaryCategory" class="ai-summary small text-muted mt-2 fst-italic">
         <i class="bi bi-stars me-1 text-primary"></i>
         <span class="ai-text">AI-generated summary will appear here.</span>
       </div>
-
     </div>
   </div>
 
   <!-- ===================== ITEMS SOLD SECTION ===================== -->
-  <section id="items-sold" class="mt-5">
+  <section id="items-sold" class="mt-5 mb-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="fw-bold">
-      </h5>
-      <div>
-        <button class="btn btn-sm btn-outline-secondary" id="exportCsvBtn">
-          <i class="bi bi-download"></i> Export CSV
-        </button>
-      </div>
+      <h2 style="font-family:var(--font-heading);font-size:1.1rem;font-weight:700;color:var(--text);margin:0;letter-spacing:-0.01em;">
+        <i class="bi bi-bag-check me-2" style="color:var(--emerald);"></i>Items Sold
+      </h2>
+      <button class="btn btn-sm d-flex align-items-center gap-1" id="exportCsvBtn"
+        style="border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg-surface);color:var(--text-2);font-size:0.8rem;">
+        <i class="bi bi-download"></i> Export CSV
+      </button>
     </div>
 
     <!-- Table container -->
-    <div id="items-table-wrapper" class="table-responsive shadow-sm rounded">
-      <table id="tblItemsSold" class="table table-striped table-hover align-middle w-100"></table>
-      <thead class="table-dark">
-        <tr>
-          <th>#</th>
-          <th>Item</th>
-          <th>Category</th>
-          <th class="text-end">Units</th>
-          <th class="text-end">Avg. Price</th>
-          <th class="text-end">Revenue</th>
-          <th class="text-end">Share</th>
-        </tr>
-      </thead>
-      <tbody id="items-tbody">
-        <tr>
-          <td colspan="7" class="text-center py-4 text-muted">
-            
-          </td>
-        </tr>
-      </tbody>
-      <tfoot class="table-light fw-semibold">
-        <tr>
-          <td colspan="5">Total</td>
-          <td class="text-end" id="total-revenue">$0.00</td>
-          <td class="text-end">100%</td>
-        </tr>
-      </tfoot>
+    <div id="items-table-wrapper" class="table-responsive rounded" style="border:1px solid var(--border);border-radius:var(--r-md);">
+      <table id="tblItemsSold" class="table table-striped table-hover align-middle w-100 mb-0">
+        <thead>
+          <tr style="color:var(--text-3);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border);">
+            <th style="font-weight:600;">#</th>
+            <th style="font-weight:600;">Item</th>
+            <th style="font-weight:600;">Category</th>
+            <th class="text-end" style="font-weight:600;">Units</th>
+            <th class="text-end" style="font-weight:600;">Avg. Price</th>
+            <th class="text-end" style="font-weight:600;">Revenue</th>
+            <th class="text-end" style="font-weight:600;">Share</th>
+          </tr>
+        </thead>
+        <tbody id="items-tbody">
+          <tr>
+            <td colspan="7" class="text-center py-4" style="color:var(--text-3);"></td>
+          </tr>
+        </tbody>
+        <tfoot style="border-top:1px solid var(--border);">
+          <tr style="font-weight:600;color:var(--text);">
+            <td colspan="5">Total</td>
+            <td class="text-end" id="total-revenue">$0.00</td>
+            <td class="text-end">100%</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   </section>
   <!-- =================== END ITEMS SOLD SECTION =================== -->
 
-
   <!-- Top and Slow Movers -->
   <div class="row g-3 mb-4">
     <div class="col-lg-6">
-      <div class="card shadow-sm h-100">
-        <div class="card-header fw-semibold">
-          <i class="bi bi-trophy me-1"></i>Top 20 Products
+      <div class="card h-100" style="border:1px solid var(--border);border-radius:var(--r-lg);">
+        <div class="card-header" style="border-bottom:1px solid var(--border);background:var(--bg-surface);border-radius:var(--r-lg) var(--r-lg) 0 0;">
+          <span style="font-family:var(--font-heading);font-weight:600;color:var(--text);font-size:0.9rem;">
+            <i class="bi bi-trophy me-2" style="color:var(--gold);"></i>Top 20 Products
+          </span>
         </div>
-        <div class="card-body p-0">
+        <div class="card-body p-0" style="background:var(--bg-surface);border-radius:0 0 var(--r-lg) var(--r-lg);">
           <div class="table-responsive">
             <table id="tblTopProducts" class="table table-sm mb-0 align-middle">
-              <thead class="table-light">
-                <tr>
-                  <th>Item</th>
-                  <th class="text-end">Qty</th>
-                  <th class="text-end">Sales (LBP)</th>
+              <thead>
+                <tr style="color:var(--text-3);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border);">
+                  <th style="font-weight:600;">Item</th>
+                  <th class="text-end" style="font-weight:600;">Qty</th>
+                  <th class="text-end" style="font-weight:600;">Sales (LBP)</th>
                 </tr>
               </thead>
               <tbody id="tblTopProducts">
                 <tr>
-                  <td colspan="3" class="text-center text-muted small py-3">Loading…</td>
+                  <td colspan="3" class="text-center py-3" style="color:var(--text-3);font-size:0.82rem;">Loading…</td>
                 </tr>
               </tbody>
             </table>
@@ -214,27 +209,28 @@
     </div>
 
     <div class="col-lg-6">
-      <div class="card shadow-sm h-100">
-        <div class="card-header fw-semibold">
-          <i class="bi bi-hourglass-split me-1"></i>Slow / Zero Movers (7 days)
+      <div class="card h-100" style="border:1px solid var(--border);border-radius:var(--r-lg);">
+        <div class="card-header" style="border-bottom:1px solid var(--border);background:var(--bg-surface);border-radius:var(--r-lg) var(--r-lg) 0 0;">
+          <span style="font-family:var(--font-heading);font-weight:600;color:var(--text);font-size:0.9rem;">
+            <i class="bi bi-hourglass-split me-2" style="color:var(--crimson);"></i>Slow / Zero Movers (7 days)
+          </span>
         </div>
-        <div class="card-body p-0">
+        <div class="card-body p-0" style="background:var(--bg-surface);border-radius:0 0 var(--r-lg) var(--r-lg);">
           <div class="table-responsive">
             <table id="tblSlowProducts" class="table table-sm mb-0 align-middle">
-              <thead class="table-light">
-                <tr>
-                  <th>Item</th>
-                  <th>Subgroup</th>
-                  <th>Last Sold</th>
+              <thead>
+                <tr style="color:var(--text-3);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border);">
+                  <th style="font-weight:600;">Item</th>
+                  <th style="font-weight:600;">Subgroup</th>
+                  <th style="font-weight:600;">Last Sold</th>
                 </tr>
               </thead>
               <tbody id="tblSlowProducts">
                 <tr>
-                  <td colspan="3" class="text-center text-muted small py-3">Loading…</td>
+                  <td colspan="3" class="text-center py-3" style="color:var(--text-3);font-size:0.82rem;">Loading…</td>
                 </tr>
               </tbody>
             </table>
-
             <div id="summarySlow" class="ai-summary small text-muted mt-2 fst-italic">
               <i class="bi bi-stars me-1 text-primary"></i>
               <span class="ai-text">AI-generated summary will appear here.</span>
@@ -246,24 +242,26 @@
   </div>
 
   <!-- Receipts Table -->
-  <div class="card shadow-sm">
-    <div class="card-header fw-semibold">
-      <i class="bi bi-receipt-cutoff me-1"></i>Receipts (Detailed)
+  <div class="card mb-4" style="border:1px solid var(--border);border-radius:var(--r-lg);">
+    <div class="card-header" style="border-bottom:1px solid var(--border);background:var(--bg-surface);border-radius:var(--r-lg) var(--r-lg) 0 0;">
+      <span style="font-family:var(--font-heading);font-weight:600;color:var(--text);font-size:0.9rem;">
+        <i class="bi bi-receipt-cutoff me-2" style="color:var(--azure);"></i>Receipts (Detailed)
+      </span>
     </div>
-    <div class="card-body p-0">
+    <div class="card-body p-0" style="background:var(--bg-surface);border-radius:0 0 var(--r-lg) var(--r-lg);">
       <div class="table-responsive">
         <table id="tblReceipts" class="table table-sm mb-0 align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>Receipt ID</th>
-              <th>Time</th>
-              <th class="text-end">Items</th>
-              <th class="text-end">Total (LBP)</th>
+          <thead>
+            <tr style="color:var(--text-3);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border);">
+              <th style="font-weight:600;">Receipt ID</th>
+              <th style="font-weight:600;">Time</th>
+              <th class="text-end" style="font-weight:600;">Items</th>
+              <th class="text-end" style="font-weight:600;">Total (LBP)</th>
             </tr>
           </thead>
           <tbody id="tblReceipts">
             <tr>
-              <td colspan="4" class="text-center text-muted small py-3">Loading…</td>
+              <td colspan="4" class="text-center py-3" style="color:var(--text-3);font-size:0.82rem;">Loading…</td>
             </tr>
           </tbody>
         </table>
@@ -274,6 +272,7 @@
       </div>
     </div>
   </div>
+
 </div>
 
 

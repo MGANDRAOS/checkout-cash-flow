@@ -1,116 +1,160 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container-fluid py-3">
+<div class="pt-4">
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0">Items</h5>
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h4 class="mb-1" style="font-family: var(--font-heading); font-weight: 700; color: var(--text);">Items</h4>
+            <p class="mb-0 small" style="color: var(--text-2);">Browse &middot; search &middot; edit items from POS catalog</p>
+        </div>
         <div class="d-flex gap-2">
-            <input id="itemsQ" type="search" class="form-control form-control-sm"
-                placeholder="Search title, code, subgroup">
-            <select id="itemsPageSize" class="form-select form-select-sm" style="width:auto;">
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-                <option value="200">200</option>
-            </select>
-            <select id="itemsSubgroup" class="form-select form-select-sm" style="width:auto;">
-                <option value="">All subgroups</option>
-            </select>
-            <select id="itemsInactive" class="form-select form-select-sm" style="width:auto;">
-                <option value="">All items</option>
-                <option value="30">Inactive ≥ 30d</option>
-                <option value="60">Inactive ≥ 60d</option>
-                <option value="90">Inactive ≥ 90d</option>
-                <option value="180">Inactive ≥ 180d</option>
-                <option value="never">Never sold only</option>
-            </select>
-
+            <button id="itemsExport" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-download me-1"></i> Export CSV
+            </button>
             <div class="btn-group btn-group-sm">
-                <button id="itemsExport" class="btn btn-outline-secondary">Export CSV</button>
-                <button id="itemsCols" class="btn btn-outline-secondary" data-bs-toggle="dropdown"
-                    aria-expanded="false">
-                    Columns ▾
+                <button id="itemsCols" class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-layout-three-columns me-1"></i> Columns <i class="bi bi-chevron-down ms-1" style="font-size: .65rem;"></i>
                 </button>
                 <ul id="itemsColsMenu" class="dropdown-menu dropdown-menu-end p-2" style="min-width: 240px;"></ul>
             </div>
         </div>
     </div>
 
-    <!-- ONE grid element only: theme + height belong here -->
-    <div id="itemsGrid" class="ag-theme-quartz" style="height: calc(100vh - 270px); width: 100%;"></div>
+    <!-- Filter Bar -->
+    <div class="card mb-3" style="border: 1px solid var(--border); border-radius: var(--r-md);">
+        <div class="card-body py-2 px-3">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div style="flex: 1; min-width: 200px;">
+                    <input id="itemsQ" type="search" class="form-control form-control-sm"
+                        placeholder="Search title, code, subgroup…"
+                        style="border-color: var(--border); background: var(--bg-elevated); color: var(--text);">
+                </div>
+                <select id="itemsPageSize" class="form-select form-select-sm" style="width: auto; border-color: var(--border); background: var(--bg-elevated); color: var(--text);">
+                    <option value="25" selected>25 rows</option>
+                    <option value="50">50 rows</option>
+                    <option value="100">100 rows</option>
+                    <option value="200">200 rows</option>
+                </select>
+                <select id="itemsSubgroup" class="form-select form-select-sm" style="width: auto; border-color: var(--border); background: var(--bg-elevated); color: var(--text);">
+                    <option value="">All subgroups</option>
+                </select>
+                <select id="itemsInactive" class="form-select form-select-sm" style="width: auto; border-color: var(--border); background: var(--bg-elevated); color: var(--text);">
+                    <option value="">All items</option>
+                    <option value="30">Inactive &ge; 30d</option>
+                    <option value="60">Inactive &ge; 60d</option>
+                    <option value="90">Inactive &ge; 90d</option>
+                    <option value="180">Inactive &ge; 180d</option>
+                    <option value="never">Never sold only</option>
+                </select>
+            </div>
+        </div>
+    </div>
 
+    <!-- AG Grid -->
+    <div class="card" style="border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden;">
+        <div class="card-body p-0">
+            <div id="itemsGrid" class="ag-theme-quartz" style="height: calc(100vh - 270px); width: 100%;"></div>
+        </div>
+    </div>
 
 </div>
 
 
-<!-- Row details modal (confirm IDs: itemModal + itemDetails) -->
+<!-- Item Drawer (Offcanvas) -->
 <div class="offcanvas offcanvas-end" tabindex="-1" id="itemDrawer" data-bs-scroll="true"
     style="--drawer-w: min(1110px, 92vw); width: var(--drawer-w);">
-    <div class="offcanvas-header">
+    <div class="offcanvas-header flex-column align-items-start gap-2 pb-2"
+        style="border-bottom: 1px solid var(--border); background: var(--bg-elevated);">
+        <div class="d-flex justify-content-between align-items-center w-100">
+            <div>
+                <h6 class="offcanvas-title mb-0 fw-700" id="itemDrawerTitle"
+                    style="font-family: var(--font-heading); font-weight: 700; color: var(--text);">Item details</h6>
+                <p class="mb-0" style="font-size: .72rem; color: var(--text-3);">Sales &amp; performance breakdown</p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
         <!-- Date Range Filter -->
-        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <div class="d-flex flex-wrap align-items-center gap-2 pt-1">
             <div class="d-flex align-items-center gap-1">
-                <label for="itmStart" class="form-label mb-0 small text-muted">Start</label>
-                <input type="date" id="itmStart" class="form-control form-control-sm" style="width: 150px;">
+                <label for="itmStart" class="mb-0" style="font-size: .75rem; color: var(--text-2); font-weight: 500;">From</label>
+                <input type="date" id="itmStart" class="form-control form-control-sm" style="width: 150px; border-color: var(--border);">
             </div>
             <div class="d-flex align-items-center gap-1">
-                <label for="itmEnd" class="form-label mb-0 small text-muted">End</label>
-                <input type="date" id="itmEnd" class="form-control form-control-sm" style="width: 150px;">
+                <label for="itmEnd" class="mb-0" style="font-size: .75rem; color: var(--text-2); font-weight: 500;">To</label>
+                <input type="date" id="itmEnd" class="form-control form-control-sm" style="width: 150px; border-color: var(--border);">
             </div>
-            <button id="itmFilter" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-filter"></i> Filter
+            <button id="itmFilter" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-funnel me-1"></i> Filter
             </button>
         </div>
-
-        <h6 class="offcanvas-title mb-0" id="itemDrawerTitle">Item details</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body" id="itemDrawerBody">
-        <div class="text-center text-muted small py-4">Select an item…</div>
+        <div class="text-center py-5" style="color: var(--text-3);">
+            <i class="bi bi-box-seam" style="font-size: 2rem; display: block; margin-bottom: .5rem;"></i>
+            <span class="small">Select an item to view details</span>
+        </div>
     </div>
 </div>
+
 
 <!-- Edit Item Modal -->
 <div class="modal fade" id="editItemModal" tabindex="-1" aria-labelledby="editItemLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h6 class="modal-title" id="editItemLabel">Edit Item</h6>
+        <div class="modal-content" style="border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden;">
+            <div class="modal-header" style="background: var(--bg-elevated); border-bottom: 1px solid var(--border);">
+                <div>
+                    <h6 class="modal-title mb-0" id="editItemLabel"
+                        style="font-family: var(--font-heading); font-weight: 700; color: var(--text);">Edit Item</h6>
+                    <p class="mb-0" style="font-size: .72rem; color: var(--text-3);">Update item details in POS catalog</p>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
 
-            <div class="modal-body">
+            <div class="modal-body" style="background: var(--bg-surface);">
                 <form id="editItemForm" class="vstack gap-3">
                     <input type="hidden" id="editItemCode">
 
                     <div>
-                        <label class="form-label small text-muted mb-1">Code</label>
-                        <div id="editItemCodeView" class="form-control-plaintext text-monospace small">—</div>
+                        <label class="mb-1" style="font-size: .75rem; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em;">Code</label>
+                        <div id="editItemCodeView"
+                            class="form-control-plaintext"
+                            style="font-family: var(--font-mono); font-size: .82rem; color: var(--text); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--r-sm); padding: .375rem .75rem;">
+                            &mdash;
+                        </div>
                     </div>
 
                     <div>
-                        <label for="editItemTitle" class="form-label">Title</label>
-                        <input id="editItemTitle" type="text" class="form-control" placeholder="Item title">
+                        <label for="editItemTitle" class="form-label mb-1"
+                            style="font-size: .75rem; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em;">Title</label>
+                        <input id="editItemTitle" type="text" class="form-control"
+                            placeholder="Item title"
+                            style="border-color: var(--border); color: var(--text);">
                     </div>
 
                     <div>
-                        <label for="editItemSubgroup" class="form-label">Subgroup</label>
-                        <select id="editItemSubgroup" class="form-select">
-                            <option value="">Select subgroup…</option>
+                        <label for="editItemSubgroup" class="form-label mb-1"
+                            style="font-size: .75rem; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em;">Subgroup</label>
+                        <select id="editItemSubgroup" class="form-select" style="border-color: var(--border); color: var(--text);">
+                            <option value="">Select subgroup&hellip;</option>
                         </select>
                     </div>
+
                     <div>
-                        <label for="editItemPrice" class="form-label">Price (LBP)</label>
-                        <input id="editItemPrice" type="number" class="form-control" step="1" min="0">
+                        <label for="editItemPrice" class="form-label mb-1"
+                            style="font-size: .75rem; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em;">Price (LBP)</label>
+                        <input id="editItemPrice" type="number" class="form-control"
+                            step="1" min="0"
+                            style="font-family: var(--font-mono); border-color: var(--border); color: var(--text);">
                     </div>
                 </form>
-                <div id="editItemError" class="text-danger small mt-2" style="display:none;"></div>
+                <div id="editItemError" class="small mt-2" style="display:none; color: #DC2626;"></div>
             </div>
 
-            <div class="modal-footer">
-                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button id="editItemSaveBtn" class="btn btn-primary">
-                    <i class="bi bi-check2-circle me-1"></i> Save
+            <div class="modal-footer" style="background: var(--bg-elevated); border-top: 1px solid var(--border);">
+                <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button id="editItemSaveBtn" class="btn btn-primary btn-sm">
+                    <i class="bi bi-check2-circle me-1"></i> Save changes
                 </button>
             </div>
         </div>
