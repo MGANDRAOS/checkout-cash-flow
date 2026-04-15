@@ -22,6 +22,13 @@ def ttl_cache(seconds: int = 60):
     Decorator: cache function return value for <seconds>.
     Cache key = function identity + all positional/keyword arguments.
 
+    Thread-safety: the _store dict is protected by a lock. Under concurrent
+    access, two threads that both miss the cache may both call fn() before
+    either writes. The double-check on write prevents stale overwrites, but
+    duplicate executions during the same miss window are possible (best-effort
+    at-most-once-per-TTL, not strict). This is acceptable for the single-worker
+    Flask dev server deployment.
+
     Usage:
         @ttl_cache(seconds=60)
         def get_kpis() -> dict: ...
@@ -40,8 +47,12 @@ def ttl_cache(seconds: int = 60):
                     if now - ts < seconds:
                         return val
             result = fn(*args, **kwargs)
+            stored_at = time.monotonic()
             with _lock:
-                _store[key] = (now, result)
+                # Double-check: another thread may have already populated the key
+                if key in _store and (stored_at - _store[key][0] < seconds):
+                    return _store[key][1]
+                _store[key] = (stored_at, result)
             return result
         return wrapper
     return decorator
