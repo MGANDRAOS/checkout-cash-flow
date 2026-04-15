@@ -122,6 +122,7 @@ def _last_business_window(cur) -> Optional[Tuple[datetime, datetime, datetime]]:
     return (row.WinStart, row.WinEnd, row.BizDate)
 
 # ---------- Public API (used by routes) ----------
+@ttl_cache(seconds=60)
 def get_kpis() -> Dict:
     """
     KPIs for the last business window:
@@ -174,6 +175,7 @@ def get_kpis() -> Dict:
         }
 
 
+@ttl_cache(seconds=60)
 def get_receipts_by_day(days:int=7) -> List[Dict]:
     """
     Last N business days (grouped by business date using 07:00 boundary).
@@ -209,6 +211,7 @@ def get_receipts_by_day(days:int=7) -> List[Dict]:
         return [{"date": r.date, "receipts": int(r.receipts or 0), "amount": float(r.amount or 0.0)} for r in rows]
 
 
+@ttl_cache(seconds=60)
 def get_hourly_last_business_day() -> List[Dict]:
     """
     Receipts count by *clock hour* within the last business window
@@ -233,6 +236,7 @@ def get_hourly_last_business_day() -> List[Dict]:
         return [{"hour": int(r.hour), "receipts": int(r.receipts or 0)} for r in cur.fetchall()]
 
 
+@ttl_cache(seconds=60)
 def get_top_items(limit:int=10, days:int=1) -> List[Dict]:
     """
     Top items by quantity over the last <days> business days (default: last day).
@@ -289,6 +293,7 @@ def get_top_items(limit:int=10, days:int=1) -> List[Dict]:
         ]
 
 
+@ttl_cache(seconds=60)
 def get_subgroup_contribution(days: int = 7, limit: int = 12):
     """
     Top subgroups over the last <days> business days (default 7).
@@ -370,6 +375,7 @@ def get_subgroup_contribution(days: int = 7, limit: int = 12):
         ]
 
 
+@ttl_cache(seconds=60)
 def get_top_items_in_subgroup(subgroup_name: str, days: int = 7, limit: int = 10):
     """
     Top items (qty + amount) for a given subgroup label over the last <days> business days.
@@ -460,6 +466,7 @@ def get_top_items_in_subgroup(subgroup_name: str, days: int = 7, limit: int = 10
         ]
 
 
+@ttl_cache(seconds=60)
 def get_items_per_receipt_histogram(days: int = 7):
     """
     Buckets number of items per receipt over the last <days> business days.
@@ -543,6 +550,7 @@ def get_items_per_receipt_histogram(days: int = 7):
         return [{"bin": r.bin, "count": int(r.cnt or 0)} for r in rows]
 
 
+@ttl_cache(seconds=60)
 def get_receipt_amount_histogram(days: int = 7):
     """
     Buckets RCPT_AMOUNT over last <days> business days (LBP).
@@ -616,6 +624,7 @@ def get_receipt_amount_histogram(days: int = 7):
         return [{"bin": r.bin, "count": int(r.cnt or 0)} for r in rows]
 
 
+@ttl_cache(seconds=120)
 def get_subgroup_velocity(days: int = 14, top: int = 8):
     """
     Change in subgroup amount: last 7d vs prior 7d (business days).
@@ -714,6 +723,7 @@ def get_subgroup_velocity(days: int = 14, top: int = 8):
         ]
 
 
+@ttl_cache(seconds=300)
 def get_affinity_pairs(days: int = 30, top: int = 15):
     """
     Top co-occurring item pairs over the last <days> business days (default 30).
@@ -807,6 +817,7 @@ def get_affinity_pairs(days: int = 30, top: int = 15):
         ]
 
 
+@ttl_cache(seconds=300)
 def get_hourly_profile(days: int = 30):
     """
     Average receipts per business hour over the last <days> DISTINCT business days with receipts.
@@ -884,6 +895,7 @@ def get_hourly_profile(days: int = 30):
         return out
 
 
+@ttl_cache(seconds=300)
 def get_dow_profile(days: int = 56):
     """
     Average receipts per business day-of-week over the last <days> business days.
@@ -933,6 +945,7 @@ def get_dow_profile(days: int = 56):
         ]
 
 
+@ttl_cache(seconds=300)
 def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: int = 3):
     """
     Top and quiet rolling <window_hours>-hour windows within operational hours (08:00..23:59 and 00:00..03:59),
