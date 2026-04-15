@@ -45,11 +45,11 @@ def rt_get_kpis(date_str: str):
             FROM Sales s;
         """, (start, end))
         row = cur.fetchone()
+        total_sales = float(row.total_sales or 0)
+        receipts    = int(row.receipts or 0)
+        items_sold  = float(row.items_sold or 0)
+        peak_biz    = row.peak_biz_hour
 
-    total_sales = float(row.total_sales or 0)
-    receipts    = int(row.receipts or 0)
-    items_sold  = float(row.items_sold or 0)
-    peak_biz    = row.peak_biz_hour
     peak_hour   = f"{((int(peak_biz) + 8) % 24):02d}:00" if peak_biz is not None else None
 
     return {
