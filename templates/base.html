@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en">
 
 <head>
   <meta charset="utf-8">
@@ -182,24 +182,24 @@
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
   <script>
-    // ── Global Chart.js dark defaults ──────────────────────────────
+    // ── Global Chart.js light defaults ──────────────────────────────
     if (typeof Chart !== 'undefined') {
-      Chart.defaults.color = '#8B97AC';
-      Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+      Chart.defaults.color = '#475569';
+      Chart.defaults.borderColor = 'rgba(0,0,0,0.07)';
       Chart.defaults.font.family = "'DM Sans', sans-serif";
       Chart.defaults.font.size = 12;
 
       const tp = Chart.defaults.plugins.tooltip;
-      tp.backgroundColor = '#141D2B';
-      tp.borderColor = 'rgba(255,255,255,0.12)';
+      tp.backgroundColor = '#FFFFFF';
+      tp.borderColor = 'rgba(0,0,0,0.10)';
       tp.borderWidth = 1;
-      tp.titleColor = '#E8EDF5';
-      tp.bodyColor = '#8B97AC';
+      tp.titleColor = '#0F172A';
+      tp.bodyColor = '#475569';
       tp.padding = 12;
       tp.cornerRadius = 8;
 
       const lg = Chart.defaults.plugins.legend.labels;
-      lg.color = '#8B97AC';
+      lg.color = '#475569';
       lg.boxWidth = 10;
       lg.padding = 16;
     }
