@@ -4,6 +4,7 @@
 
 import os
 import pyodbc
+from contextlib import contextmanager
 from datetime import datetime, timedelta, date
 from typing import Any, Dict, List, Tuple, Optional
 from pos_dates import cutoff_dt_7h
@@ -41,8 +42,18 @@ def _conn_str() -> str:
 
  #   return f"Driver={{{driver}}};Server={server};Database={database};Trusted_Connection=yes;"
 
+@contextmanager
 def _connect():
-    return pyodbc.connect(_conn_str())
+    conn = pyodbc.connect(_conn_str())
+    try:
+        yield conn
+    except Exception:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def execute_sql_readonly(sql_query: str):
@@ -61,7 +72,6 @@ def execute_sql_readonly(sql_query: str):
         cursor.execute(sql_query)
         columns = [col[0] for col in cursor.description]
         rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-    conn.close()
     return rows
 
 
@@ -90,7 +100,6 @@ def mssql_readonly_query(sql_query: str, params: Optional[dict] = None):
             cursor.execute(sql_query)
         columns = [col[0] for col in cursor.description]
         rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-    conn.close()
     return rows
 
 # ---------- Time window helpers ----------
