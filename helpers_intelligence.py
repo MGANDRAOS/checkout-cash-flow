@@ -6,7 +6,6 @@ import os
 import pyodbc
 from datetime import datetime, timedelta, date
 from typing import Any, Dict, List, Tuple, Optional
-from datetime import date
 from pos_dates import cutoff_dt_7h
 from cache_utils import ttl_cache
 
@@ -1640,12 +1639,6 @@ def get_item_daily_series(item_code: str, days: int = 30, lookback: int = 14) ->
         rows = cur.fetchall()
 
     return [{"biz_date": r.biz_date, "qty": float(r.qty or 0)} for r in rows]
-
-
-# ✅ IMPORTANT FIX (if not already there):
-# Your previous errors showed timedelta missing.
-# Make sure timedelta is imported once at the top.
-from datetime import datetime, timedelta  # <-- add timedelta if missing
 
 
 def get_item_last_invoices(item_code: str, days: int = 30, limit: int = 10):
