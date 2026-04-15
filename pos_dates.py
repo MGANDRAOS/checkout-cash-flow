@@ -21,7 +21,7 @@ def biz_date_range_8h(d: date) -> tuple[datetime, datetime]:
     """
     Business date range with 08:00 boundary (sales/realtime helpers).
 
-    Business day [d] spans:  d @ 08:00:00  →  (d+1) @ 07:59:59
+    Business day [d] spans:  d @ 08:00:00  to  (d+1) @ 08:00:00 (exclusive)
     Returns (inclusive_start, exclusive_end).
 
     SQL usage:
@@ -36,7 +36,7 @@ def biz_date_range_7h(d: date) -> tuple[datetime, datetime]:
     """
     Business date range with 07:00 boundary (intelligence helpers).
 
-    Business day [d] spans:  d @ 07:00:00  →  (d+1) @ 06:59:59
+    Business day [d] spans:  d @ 07:00:00  to  (d+1) @ 07:00:00 (exclusive)
     Returns (inclusive_start, exclusive_end).
 
     SQL usage:
