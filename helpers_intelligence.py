@@ -6,7 +6,8 @@ import os
 import pyodbc
 from datetime import datetime, timedelta, date
 from typing import Any, Dict, List, Tuple, Optional
-from datetime import date
+from pos_dates import cutoff_dt_7h
+from cache_utils import ttl_cache
 
 # NOTE: assumes you already have _connect() defined in helpers_intelligence.py
 
@@ -55,21 +56,16 @@ def execute_sql_readonly(sql_query: str):
     if ";" in query[:-1]:
         raise ValueError("Multiple statements detected; query rejected.")
 
-    try:
-        conn = _connect()
+    with _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(sql_query)
         columns = [col[0] for col in cursor.description]
         rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        cursor.close()
-        conn.close()
-        return rows
-    except Exception as e:
-        print(f"[execute_sql_readonly] Error executing SQL: {e}")
-        raise
+    conn.close()
+    return rows
 
 
-def mssql_readonly_query(sql_query: str, params: dict | None = None):
+def mssql_readonly_query(sql_query: str, params: Optional[dict] = None):
     """
     Alias used by analytics pages (Reorder Radar, etc.).
 
@@ -78,35 +74,24 @@ def mssql_readonly_query(sql_query: str, params: dict | None = None):
     - Supports parameterized queries to prevent injection
     - Returns list[dict] like execute_sql_readonly
     """
-    normalized_query = sql_query.strip().lower()
+    normalized = sql_query.strip().lower()
 
-    # IMPORTANT: enforce read-only
-    if not normalized_query.startswith("select") and not normalized_query.startswith("with"):
+    if not normalized.startswith("select") and not normalized.startswith("with"):
         raise ValueError("Only SELECT/CTE (WITH...) statements are allowed.")
 
-    if ";" in normalized_query[:-1]:
+    if ";" in normalized[:-1]:
         raise ValueError("Multiple statements detected; query rejected.")
 
-    try:
-        conn = _connect()
+    with _connect() as conn:
         cursor = conn.cursor()
-
-        # IMPORTANT: pass params safely if provided
         if params:
             cursor.execute(sql_query, tuple(params))
         else:
             cursor.execute(sql_query)
-
         columns = [col[0] for col in cursor.description]
         rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-
-        cursor.close()
-        conn.close()
-        return rows
-
-    except Exception as e:
-        print(f"[mssql_readonly_query] Error executing SQL: {e}")
-        raise
+    conn.close()
+    return rows
 
 # ---------- Time window helpers ----------
 def _last_business_window(cur) -> Optional[Tuple[datetime, datetime, datetime]]:
@@ -137,6 +122,7 @@ def _last_business_window(cur) -> Optional[Tuple[datetime, datetime, datetime]]:
     return (row.WinStart, row.WinEnd, row.BizDate)
 
 # ---------- Public API (used by routes) ----------
+@ttl_cache(seconds=60)
 def get_kpis() -> Dict:
     """
     KPIs for the last business window:
@@ -171,12 +157,9 @@ def get_kpis() -> Dict:
             SELECT
               COALESCE(SUM(c.ITM_QUANTITY), 0) AS total_items,
               COUNT(DISTINCT c.ITM_CODE)       AS unique_items
-            FROM dbo.HISTORIC_RECEIPT_CONTENTS c
-            WHERE c.RCPT_ID IN (
-              SELECT r.RCPT_ID
-              FROM dbo.HISTORIC_RECEIPT r
-              WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
-            );
+            FROM dbo.HISTORIC_RECEIPT r
+            JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
+            WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?;
         """, (start, end))
         crow = cur.fetchone()
         total_items  = float(crow.total_items or 0.0)
@@ -192,6 +175,7 @@ def get_kpis() -> Dict:
         }
 
 
+@ttl_cache(seconds=60)
 def get_receipts_by_day(days:int=7) -> List[Dict]:
     """
     Last N business days (grouped by business date using 07:00 boundary).
@@ -199,6 +183,7 @@ def get_receipts_by_day(days:int=7) -> List[Dict]:
     days = max(1, min(int(days), 60))  # safety clamp
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
             WITH R AS (
@@ -206,6 +191,7 @@ def get_receipts_by_day(days:int=7) -> List[Dict]:
                 CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate,
                 r.RCPT_AMOUNT
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
             LAST AS (
               SELECT MAX(BizDate) AS MaxBiz FROM R
@@ -220,11 +206,12 @@ def get_receipts_by_day(days:int=7) -> List[Dict]:
               AND R.BizDate > DATEADD(DAY, -?+1, LAST.MaxBiz)
             GROUP BY R.BizDate
             ORDER BY R.BizDate DESC;
-        """, (days, days))
+        """, (cutoff, days, days))
         rows = cur.fetchall()
         return [{"date": r.date, "receipts": int(r.receipts or 0), "amount": float(r.amount or 0.0)} for r in rows]
 
 
+@ttl_cache(seconds=60)
 def get_hourly_last_business_day() -> List[Dict]:
     """
     Receipts count by *clock hour* within the last business window
@@ -249,6 +236,7 @@ def get_hourly_last_business_day() -> List[Dict]:
         return [{"hour": int(r.hour), "receipts": int(r.receipts or 0)} for r in cur.fetchall()]
 
 
+@ttl_cache(seconds=60)
 def get_top_items(limit:int=10, days:int=1) -> List[Dict]:
     """
     Top items by quantity over the last <days> business days (default: last day).
@@ -258,6 +246,7 @@ def get_top_items(limit:int=10, days:int=1) -> List[Dict]:
     days  = max(10, min(int(days), 30))
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
 
@@ -266,6 +255,7 @@ def get_top_items(limit:int=10, days:int=1) -> List[Dict]:
                 r.RCPT_ID,
                 CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
             LAST AS (
               SELECT MAX(BizDate) AS MaxBiz FROM R
@@ -296,13 +286,14 @@ def get_top_items(limit:int=10, days:int=1) -> List[Dict]:
                 END
               AS nvarchar(128))
             ORDER BY qty DESC, item ASC;
-        """, (days, limit))
+        """, (cutoff, days, limit))
         return [
             {"item": r.item, "qty": float(r.qty or 0.0), "amount": float(r.amount or 0.0)}
             for r in cur.fetchall()
         ]
 
 
+@ttl_cache(seconds=60)
 def get_subgroup_contribution(days: int = 7, limit: int = 12):
     """
     Top subgroups over the last <days> business days (default 7).
@@ -318,6 +309,7 @@ def get_subgroup_contribution(days: int = 7, limit: int = 12):
 
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
 
@@ -326,6 +318,7 @@ def get_subgroup_contribution(days: int = 7, limit: int = 12):
               SELECT r.RCPT_ID,
                      CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
             LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
             CUT AS (  -- RCPT_IDs inside the last <days> business dates
@@ -373,7 +366,7 @@ def get_subgroup_contribution(days: int = 7, limit: int = 12):
                       N'Unknown'
                      )
             ORDER BY amount DESC, subgroup ASC;
-        """, (days, limit))
+        """, (cutoff, days, limit))
 
         rows = cur.fetchall()
         return [
@@ -382,6 +375,8 @@ def get_subgroup_contribution(days: int = 7, limit: int = 12):
         ]
 
 
+@ttl_cache(seconds=60)
+# subgroup_name is from a bounded DB enum — one cache entry per subgroup name is acceptable
 def get_top_items_in_subgroup(subgroup_name: str, days: int = 7, limit: int = 10):
     """
     Top items (qty + amount) for a given subgroup label over the last <days> business days.
@@ -398,6 +393,7 @@ def get_top_items_in_subgroup(subgroup_name: str, days: int = 7, limit: int = 10
 
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
 
@@ -406,6 +402,7 @@ def get_top_items_in_subgroup(subgroup_name: str, days: int = 7, limit: int = 10
               SELECT r.RCPT_ID,
                      CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
             LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
             CUT AS (  -- RCPT_IDs inside the last <days> business dates
@@ -461,7 +458,7 @@ def get_top_items_in_subgroup(subgroup_name: str, days: int = 7, limit: int = 10
             WHERE UPPER(LTRIM(RTRIM(subgroup_label))) = UPPER(LTRIM(RTRIM(?)))
             GROUP BY item_label
             ORDER BY qty DESC, item ASC;
-        """, (days, limit, subgroup_name))
+        """, (cutoff, days, limit, subgroup_name))
 
         rows = cur.fetchall()
         return [
@@ -470,6 +467,7 @@ def get_top_items_in_subgroup(subgroup_name: str, days: int = 7, limit: int = 10
         ]
 
 
+@ttl_cache(seconds=60)
 def get_items_per_receipt_histogram(days: int = 7):
     """
     Buckets number of items per receipt over the last <days> business days.
@@ -478,12 +476,14 @@ def get_items_per_receipt_histogram(days: int = 7):
     days = max(1, min(int(days), 60))
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
 
             WITH R AS (
               SELECT r.RCPT_ID, CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
             LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
             CUT AS (
@@ -546,11 +546,12 @@ def get_items_per_receipt_histogram(days: int = 7):
                 ELSE 9
               END
             ORDER BY seq;
-        """, (days,))
+        """, (cutoff, days))
         rows = cur.fetchall()
         return [{"bin": r.bin, "count": int(r.cnt or 0)} for r in rows]
 
 
+@ttl_cache(seconds=60)
 def get_receipt_amount_histogram(days: int = 7):
     """
     Buckets RCPT_AMOUNT over last <days> business days (LBP).
@@ -559,12 +560,14 @@ def get_receipt_amount_histogram(days: int = 7):
     days = max(1, min(int(days), 60))
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
 
             WITH R AS (
               SELECT r.RCPT_ID, r.RCPT_AMOUNT, CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
             LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
             CUT AS (
@@ -617,11 +620,12 @@ def get_receipt_amount_histogram(days: int = 7):
                 ELSE 8
               END
             ORDER BY seq;
-        """, (days,))
+        """, (cutoff, days))
         rows = cur.fetchall()
         return [{"bin": r.bin, "count": int(r.cnt or 0)} for r in rows]
 
 
+@ttl_cache(seconds=120)
 def get_subgroup_velocity(days: int = 14, top: int = 8):
     """
     Change in subgroup amount: last 7d vs prior 7d (business days).
@@ -631,6 +635,7 @@ def get_subgroup_velocity(days: int = 14, top: int = 8):
     top  = max(1, min(int(top), 20))
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
 
@@ -638,6 +643,7 @@ def get_subgroup_velocity(days: int = 14, top: int = 8):
             WITH R AS (
               SELECT r.RCPT_ID, CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
             LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
             CUT AS (  -- last <days> business days
@@ -705,7 +711,7 @@ def get_subgroup_velocity(days: int = 14, top: int = 8):
             ORDER BY
               CASE WHEN s.delta_pct IS NULL THEN 0 ELSE ABS(s.delta_pct) END DESC,
               s.subgroup ASC;
-        """, (days, top))
+        """, (cutoff, days, top))
         rows = cur.fetchall()
         return [
             {
@@ -718,6 +724,7 @@ def get_subgroup_velocity(days: int = 14, top: int = 8):
         ]
 
 
+@ttl_cache(seconds=300)
 def get_affinity_pairs(days: int = 30, top: int = 15):
     """
     Top co-occurring item pairs over the last <days> business days (default 30).
@@ -732,6 +739,7 @@ def get_affinity_pairs(days: int = 30, top: int = 15):
 
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
 
@@ -739,6 +747,7 @@ def get_affinity_pairs(days: int = 30, top: int = 15):
             WITH R AS (
               SELECT r.RCPT_ID, CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
             LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
             CUT AS (  -- target window receipts
@@ -795,7 +804,7 @@ def get_affinity_pairs(days: int = 30, top: int = 15):
             JOIN ItemCnt ib ON ib.item_label = p.b_label
             WHERE p.co_count >= 2         -- tiny noise filter
             ORDER BY p.co_count DESC, a, b;
-        """, (days, top))
+        """, (cutoff, days, top))
 
         rows = cur.fetchall()
         return [
@@ -809,6 +818,7 @@ def get_affinity_pairs(days: int = 30, top: int = 15):
         ]
 
 
+@ttl_cache(seconds=300)
 def get_hourly_profile(days: int = 30):
     """
     Average receipts per business hour over the last <days> DISTINCT business days with receipts.
@@ -819,6 +829,7 @@ def get_hourly_profile(days: int = 30):
     days = max(1, min(int(days), 90))
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
 
@@ -828,6 +839,7 @@ def get_hourly_profile(days: int = 30):
                 CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date)   AS BizDate,
                 DATEPART(HOUR, DATEADD(HOUR,-7, r.RCPT_DATE)) AS BizHour
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
 
             -- Take the last N DISTINCT business days that actually have receipts
@@ -868,7 +880,7 @@ def get_hourly_profile(days: int = 30):
             CROSS JOIN DayCount DC
             LEFT JOIN Hourly ON Hourly.BizHour = H.h
             ORDER BY H.h;
-        """, (days,))
+        """, (cutoff, days))
         rows = cur.fetchall()
         out = []
         for r in rows:
@@ -884,6 +896,7 @@ def get_hourly_profile(days: int = 30):
         return out
 
 
+@ttl_cache(seconds=300)
 def get_dow_profile(days: int = 56):
     """
     Average receipts per business day-of-week over the last <days> business days.
@@ -893,11 +906,13 @@ def get_dow_profile(days: int = 56):
     days = max(7, min(int(days), 140))
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
             WITH R AS (
               SELECT CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date) AS BizDate
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
             LAST AS ( SELECT MAX(BizDate) AS MaxBiz FROM R ),
             CUT AS (
@@ -922,7 +937,7 @@ def get_dow_profile(days: int = 56):
             FROM DOW
             GROUP BY dow_idx
             ORDER BY dow_idx;
-        """, (days,))
+        """, (cutoff, days))
         idx_to_name = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
         rows = cur.fetchall()
         return [
@@ -931,6 +946,7 @@ def get_dow_profile(days: int = 56):
         ]
 
 
+@ttl_cache(seconds=300)
 def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: int = 3):
     """
     Top and quiet rolling <window_hours>-hour windows within operational hours (08:00..23:59 and 00:00..03:59),
@@ -945,6 +961,7 @@ def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: 
 
     with _connect() as cn:
         cur = cn.cursor()
+        cutoff = cutoff_dt_7h(days + 1)
         cur.execute("""
             SET NOCOUNT ON;
 
@@ -954,6 +971,7 @@ def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: 
                 CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date)   AS BizDate,
                 DATEPART(HOUR, DATEADD(HOUR,-7, r.RCPT_DATE)) AS BizHour
               FROM dbo.HISTORIC_RECEIPT r
+              WHERE r.RCPT_DATE >= ?
             ),
             DistinctDays AS ( SELECT DISTINCT BizDate FROM R ),
             Ranked AS (
@@ -1021,6 +1039,7 @@ def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: 
                 SUM(CAST(c.ITM_QUANTITY AS float) * CAST(c.ITM_PRICE AS float)) AS amt
               FROM dbo.HISTORIC_RECEIPT_CONTENTS c
               JOIN dbo.HISTORIC_RECEIPT r ON r.RCPT_ID = c.RCPT_ID
+              WHERE r.RCPT_DATE >= ?
               GROUP BY CAST(DATEADD(HOUR,-7, r.RCPT_DATE) AS date),
                        DATEPART(HOUR, DATEADD(HOUR,-7, r.RCPT_DATE))
             ),
@@ -1092,7 +1111,7 @@ def get_top_windows(window_hours: int = 3, days: int = 30, top: int = 5, quiet: 
             UNION ALL
             SELECT 'quiet' AS kind, start_bh, win_avg_rcpts, win_avg_amt FROM QuietWins
             ORDER BY kind, start_bh;
-        """, (days, window_hours, top, quiet))
+        """, (cutoff, cutoff, days, window_hours, top, quiet))
 
         rows = cur.fetchall()
         top_rows, quiet_rows = [], []
@@ -1502,8 +1521,6 @@ ORDER BY avg_per_day DESC, a.last_sold_dt DESC;
           int(days),
       ]
       
-      print("DEBUG search_items_explorer params:", params)
-
       cur.execute(sql, params)
       rows = cur.fetchall()
 
@@ -1615,12 +1632,6 @@ def get_item_daily_series(item_code: str, days: int = 30, lookback: int = 14) ->
         rows = cur.fetchall()
 
     return [{"biz_date": r.biz_date, "qty": float(r.qty or 0)} for r in rows]
-
-
-# ✅ IMPORTANT FIX (if not already there):
-# Your previous errors showed timedelta missing.
-# Make sure timedelta is imported once at the top.
-from datetime import datetime, timedelta  # <-- add timedelta if missing
 
 
 def get_item_last_invoices(item_code: str, days: int = 30, limit: int = 10):

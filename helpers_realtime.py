@@ -2,99 +2,82 @@
 # --------------------------------------------------------------
 # Realtime (open-day) analytics helpers
 # Reads from RECEIPT / RECEIPT_CONTENTS (+ ITEMS, SUBGROUPS)
-# Business day window: 08:00 → 02:59 next day
+# Business day window: 08:00 → 07:59 next day
 # --------------------------------------------------------------
 
 from datetime import datetime
 from helpers_intelligence import _connect  # <-- keep same connector used elsewhere
-
-BUSINESS_DATE_SQL_RT = """
-CASE 
-  WHEN DATEPART(HOUR, r.RCPT_DATE) < 8 THEN DATEADD(DAY, -1, CAST(r.RCPT_DATE AS date))
-  ELSE CAST(r.RCPT_DATE AS date)
-END
-"""
+from pos_dates import biz_date_range_8h
 
 # --------------------------- KPIs ----------------------------
 def rt_get_kpis(date_str: str):
-    """Core realtime KPIs for the business day (08:00–02:59)."""
+    """Live KPIs for the open business day. Was 3 queries, now 1 CTE."""
     date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    start, end = biz_date_range_8h(date)
+
     with _connect() as cn:
         cur = cn.cursor()
-        # total sales, receipts, avg ticket
-        cur.execute(f"""
-            SELECT 
-              SUM(CAST(r.RCPT_AMOUNT AS float)) AS total_sales,
-              COUNT(DISTINCT r.RCPT_ID) AS receipts
-            FROM dbo.RECEIPT r
-            WHERE {BUSINESS_DATE_SQL_RT} = ?
-        """, (date,))
-        row = cur.fetchone() or (0, 0)
-        total_sales = float(row.total_sales or 0)
-        receipts = int(row.receipts or 0)
-        avg_ticket = (total_sales / receipts) if receipts else 0.0
-
-        # items sold
-        cur.execute(f"""
-            SELECT SUM(CAST(c.ITM_QUANTITY AS float)) AS items_sold
-            FROM dbo.RECEIPT r
-            JOIN dbo.RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
-            WHERE {BUSINESS_DATE_SQL_RT} = ?
-        """, (date,))
-        items_row = cur.fetchone()
-        items_sold = float(getattr(items_row, "items_sold", 0) or 0)
-
-        # peak hour (live day)
-        cur.execute(f"""
-            WITH H AS (
-              SELECT 
-                ((DATEPART(HOUR, r.RCPT_DATE) + 24 - 8) % 24) AS biz_hour,
-                SUM(CAST(r.RCPT_AMOUNT AS float)) AS sales
-              FROM dbo.RECEIPT r
-              WHERE {BUSINESS_DATE_SQL_RT} = ?
-              GROUP BY ((DATEPART(HOUR, r.RCPT_DATE) + 24 - 8) % 24)
+        cur.execute("""
+            WITH Sales AS (
+                SELECT
+                    r.RCPT_ID,
+                    CAST(r.RCPT_AMOUNT AS float) AS amount,
+                    ((DATEPART(HOUR, r.RCPT_DATE) + 24 - 8) % 24) AS biz_hour
+                FROM dbo.RECEIPT r
+                WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
+            ),
+            Items AS (
+                SELECT SUM(CAST(c.ITM_QUANTITY AS float)) AS items_sold
+                FROM dbo.RECEIPT_CONTENTS c
+                WHERE c.RCPT_ID IN (SELECT RCPT_ID FROM Sales)
+            ),
+            PeakHour AS (
+                SELECT TOP 1 biz_hour, SUM(amount) AS hr_amt
+                FROM Sales
+                GROUP BY biz_hour
+                ORDER BY hr_amt DESC, biz_hour ASC
             )
-            SELECT TOP 1 biz_hour, sales
-            FROM H
-            ORDER BY sales DESC, biz_hour ASC
-        """, (date,))
-        hr = cur.fetchone()
-        peak_hour = None
-        if hr and getattr(hr, "biz_hour", None) is not None:
-            # convert shifted 0..23 (starting 08:00) back to clock
-            clock = (int(hr.biz_hour) + 8) % 24
-            peak_hour = f"{clock:02d}:00"
+            SELECT
+                COALESCE(SUM(s.amount), 0)            AS total_sales,
+                COUNT(DISTINCT s.RCPT_ID)              AS receipts,
+                (SELECT items_sold FROM Items)          AS items_sold,
+                (SELECT biz_hour FROM PeakHour)        AS peak_biz_hour
+            FROM Sales s;
+        """, (start, end))
+        row = cur.fetchone()
+        total_sales = float(row.total_sales or 0)
+        receipts    = int(row.receipts or 0)
+        items_sold  = float(row.items_sold or 0)
+        peak_biz    = row.peak_biz_hour
 
-        # growth vs yesterday / 4w average (optional, from historics)
-        # Keep zero for now; wire later if desired
-        growth_vs_y = 0.0
-        growth_vs_4w = 0.0
+    peak_hour   = f"{((int(peak_biz) + 8) % 24):02d}:00" if peak_biz is not None else None
 
     return {
         "total_sales": total_sales,
         "receipts": receipts,
-        "avg_ticket": avg_ticket,
+        "avg_ticket": (total_sales / receipts) if receipts else 0.0,
         "items_sold": items_sold,
         "peak_hour": peak_hour,
-        "growth_vs_yesterday": growth_vs_y,
-        "growth_vs_4week": growth_vs_4w,
+        "growth_vs_yesterday": 0.0,
+        "growth_vs_4week": 0.0,
     }
 
 # ----------------------- Hourly (live) -----------------------
 def rt_get_hourly(date_str: str):
     """Live hourly sales for the business day, shifted hour buckets."""
     date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    start, end = biz_date_range_8h(date)
     with _connect() as cn:
         cur = cn.cursor()
-        cur.execute(f"""
-            SELECT 
+        cur.execute("""
+            SELECT
               ((DATEPART(HOUR, r.RCPT_DATE) + 24 - 8) % 24) AS biz_hour,
               SUM(CAST(r.RCPT_AMOUNT AS float)) AS sales
             FROM dbo.RECEIPT r
-            WHERE {BUSINESS_DATE_SQL_RT} = ?
+            WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
             GROUP BY ((DATEPART(HOUR, r.RCPT_DATE) + 24 - 8) % 24)
-            ORDER BY biz_hour
-        """, (date,))
+            ORDER BY biz_hour;
+        """, (start, end))
         return [{"hour": int(r.biz_hour), "sales": float(r.sales or 0)} for r in cur.fetchall()]
 
 def rt_get_hourly_cumulative(date_str: str):
@@ -111,31 +94,33 @@ def rt_get_hourly_cumulative(date_str: str):
 def rt_get_category(date_str: str):
     """Revenue per subgroup from live lines."""
     date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    start, end = biz_date_range_8h(date)
     with _connect() as cn:
         cur = cn.cursor()
-        cur.execute(f"""
-            SELECT 
+        cur.execute("""
+            SELECT
               LTRIM(RTRIM(COALESCE(s.SubGrp_Name, 'Unknown'))) AS subgroup,
               SUM(CAST(c.ITM_QUANTITY * c.ITM_PRICE AS float)) AS sales
             FROM dbo.RECEIPT r
             JOIN dbo.RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
             LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
-            LEFT JOIN dbo.SUBGROUPS s 
+            LEFT JOIN dbo.SUBGROUPS s
               ON (TRY_CAST(i.ITM_SUBGROUP AS int) = s.SubGrp_ID
                OR LTRIM(RTRIM(i.ITM_SUBGROUP)) = LTRIM(RTRIM(s.SubGrp_Name)))
-            WHERE {BUSINESS_DATE_SQL_RT} = ?
+            WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
             GROUP BY LTRIM(RTRIM(COALESCE(s.SubGrp_Name, 'Unknown')))
-            ORDER BY sales DESC
-        """, (date,))
+            ORDER BY sales DESC;
+        """, (start, end))
         return [{"subgroup": r.subgroup, "sales": float(r.sales or 0)} for r in cur.fetchall()]
 
 # --------------------- Items Sold (live) ---------------------
 def rt_get_items_sold(date_str: str):
     """Aggregated items sold table for the live business day."""
     date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    start, end = biz_date_range_8h(date)
     with _connect() as cn:
         cur = cn.cursor()
-        cur.execute(f"""
+        cur.execute("""
             SELECT
               LTRIM(RTRIM(COALESCE(i.ITM_TITLE, '(Unknown)'))) AS item_name,
               LTRIM(RTRIM(COALESCE(s.SubGrp_Name, 'Unknown'))) AS category,
@@ -145,31 +130,28 @@ def rt_get_items_sold(date_str: str):
             FROM dbo.RECEIPT r
             JOIN dbo.RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
             LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
-            LEFT JOIN dbo.SUBGROUPS s 
+            LEFT JOIN dbo.SUBGROUPS s
               ON (TRY_CAST(i.ITM_SUBGROUP AS int) = s.SubGrp_ID
                OR LTRIM(RTRIM(i.ITM_SUBGROUP)) = LTRIM(RTRIM(s.SubGrp_Name)))
-            WHERE {BUSINESS_DATE_SQL_RT} = ?
+            WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
             GROUP BY
               LTRIM(RTRIM(COALESCE(i.ITM_TITLE, '(Unknown)'))),
               LTRIM(RTRIM(COALESCE(s.SubGrp_Name, 'Unknown')))
-            ORDER BY total_revenue DESC
-        """, (date,))
+            ORDER BY total_revenue DESC;
+        """, (start, end))
         rows = cur.fetchall()
-
     total_rev = sum(float(r.total_revenue or 0) for r in rows) or 1.0
-    out = []
-    for r in rows:
-        rev = float(r.total_revenue or 0)
-        share = round((rev / total_rev) * 100, 1)
-        out.append({
+    return [
+        {
             "item_name": r.item_name,
             "category": r.category,
             "total_qty": float(r.total_qty or 0),
             "avg_price": float(r.avg_price or 0),
-            "total_revenue": rev,
-            "share": share,
-        })
-    return out
+            "total_revenue": float(r.total_revenue or 0),
+            "share": round((float(r.total_revenue or 0) / total_rev) * 100, 1),
+        }
+        for r in rows
+    ]
 
 # --------------------- Receipts list (live) ------------------
 def rt_get_receipts(date_str: str):
@@ -178,27 +160,29 @@ def rt_get_receipts(date_str: str):
     Only header-level info here; lines are fetched via rt_get_receipt_detail.
     """
     date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    start, end = biz_date_range_8h(date)
     with _connect() as cn:
         cur = cn.cursor()
-        cur.execute(f"""
-            SELECT 
+        cur.execute("""
+            SELECT
               r.RCPT_ID AS id,
-              FORMAT(r.RCPT_DATE, 'HH:mm') AS time_str,
+              r.RCPT_DATE,
               SUM(CAST(c.ITM_QUANTITY AS float)) AS items_count,
               SUM(CAST(c.ITM_QUANTITY * c.ITM_PRICE AS float)) AS total
             FROM dbo.RECEIPT r
             LEFT JOIN dbo.RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
-            WHERE {BUSINESS_DATE_SQL_RT} = ?
-            GROUP BY r.RCPT_ID, FORMAT(r.RCPT_DATE, 'HH:mm')
-            ORDER BY r.RCPT_ID DESC
-        """, (date,))
+            WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
+            GROUP BY r.RCPT_ID, r.RCPT_DATE
+            ORDER BY r.RCPT_ID DESC;
+        """, (start, end))
         return [
             {
                 "id": int(r.id),
-                "datetime": r.time_str,
+                "datetime": r.RCPT_DATE.strftime("%H:%M") if r.RCPT_DATE else "",
                 "items_count": float(r.items_count or 0),
                 "total": float(r.total or 0),
-            } for r in cur.fetchall()
+            }
+            for r in cur.fetchall()
         ]
 
 # --------------- Receipt detail (click-to-open) ---------------
@@ -211,7 +195,7 @@ def rt_get_receipt_detail(rcpt_id: int):
         cur = cn.cursor()
         # Header
         cur.execute("""
-            SELECT 
+            SELECT
               r.RCPT_ID,
               r.RCPT_NO,
               r.RCPT_DATE,
@@ -234,7 +218,7 @@ def rt_get_receipt_detail(rcpt_id: int):
               CAST(c.ITM_QUANTITY * c.ITM_PRICE AS float) AS line_total
             FROM dbo.RECEIPT_CONTENTS c
             LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
-            LEFT JOIN dbo.SUBGROUPS s 
+            LEFT JOIN dbo.SUBGROUPS s
               ON (TRY_CAST(i.ITM_SUBGROUP AS int) = s.SubGrp_ID
                OR LTRIM(RTRIM(i.ITM_SUBGROUP)) = LTRIM(RTRIM(s.SubGrp_Name)))
             WHERE c.RCPT_ID = ?
