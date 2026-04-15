@@ -376,6 +376,7 @@ def get_subgroup_contribution(days: int = 7, limit: int = 12):
 
 
 @ttl_cache(seconds=60)
+# subgroup_name is from a bounded DB enum — one cache entry per subgroup name is acceptable
 def get_top_items_in_subgroup(subgroup_name: str, days: int = 7, limit: int = 10):
     """
     Top items (qty + amount) for a given subgroup label over the last <days> business days.
