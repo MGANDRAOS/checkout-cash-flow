@@ -56,21 +56,14 @@ def execute_sql_readonly(sql_query: str):
     if ";" in query[:-1]:
         raise ValueError("Multiple statements detected; query rejected.")
 
-    try:
-        conn = _connect()
+    with _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(sql_query)
         columns = [col[0] for col in cursor.description]
-        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        cursor.close()
-        conn.close()
-        return rows
-    except Exception as e:
-        print(f"[execute_sql_readonly] Error executing SQL: {e}")
-        raise
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
-def mssql_readonly_query(sql_query: str, params: dict | None = None):
+def mssql_readonly_query(sql_query: str, params: Optional[dict] = None):
     """
     Alias used by analytics pages (Reorder Radar, etc.).
 
@@ -79,35 +72,22 @@ def mssql_readonly_query(sql_query: str, params: dict | None = None):
     - Supports parameterized queries to prevent injection
     - Returns list[dict] like execute_sql_readonly
     """
-    normalized_query = sql_query.strip().lower()
+    normalized = sql_query.strip().lower()
 
-    # IMPORTANT: enforce read-only
-    if not normalized_query.startswith("select") and not normalized_query.startswith("with"):
+    if not normalized.startswith("select") and not normalized.startswith("with"):
         raise ValueError("Only SELECT/CTE (WITH...) statements are allowed.")
 
-    if ";" in normalized_query[:-1]:
+    if ";" in normalized[:-1]:
         raise ValueError("Multiple statements detected; query rejected.")
 
-    try:
-        conn = _connect()
+    with _connect() as conn:
         cursor = conn.cursor()
-
-        # IMPORTANT: pass params safely if provided
         if params:
             cursor.execute(sql_query, tuple(params))
         else:
             cursor.execute(sql_query)
-
         columns = [col[0] for col in cursor.description]
-        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-
-        cursor.close()
-        conn.close()
-        return rows
-
-    except Exception as e:
-        print(f"[mssql_readonly_query] Error executing SQL: {e}")
-        raise
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 # ---------- Time window helpers ----------
 def _last_business_window(cur) -> Optional[Tuple[datetime, datetime, datetime]]:
@@ -172,12 +152,9 @@ def get_kpis() -> Dict:
             SELECT
               COALESCE(SUM(c.ITM_QUANTITY), 0) AS total_items,
               COUNT(DISTINCT c.ITM_CODE)       AS unique_items
-            FROM dbo.HISTORIC_RECEIPT_CONTENTS c
-            WHERE c.RCPT_ID IN (
-              SELECT r.RCPT_ID
-              FROM dbo.HISTORIC_RECEIPT r
-              WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
-            );
+            FROM dbo.HISTORIC_RECEIPT r
+            JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
+            WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?;
         """, (start, end))
         crow = cur.fetchone()
         total_items  = float(crow.total_items or 0.0)
@@ -1526,8 +1503,6 @@ ORDER BY avg_per_day DESC, a.last_sold_dt DESC;
           int(days),
       ]
       
-      print("DEBUG search_items_explorer params:", params)
-
       cur.execute(sql, params)
       rows = cur.fetchall()
 
