@@ -60,11 +60,6 @@ html, body {
   font-size: 15px;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden; /* prevent any fixed/wide element from creating horizontal scroll */
-}
-
-html {
-  max-width: 100%;
 }
 
 body {
@@ -289,9 +284,17 @@ main.container {
 
   .offcanvas-backdrop { display: none !important; }
 
+  /* Push body content right by sidebar width so main.container's
+     width:100% naturally fills only the remaining space — no overflow */
+  body {
+    padding-left: var(--sidebar-w) !important;
+  }
+
   main.container {
-    margin-left: var(--sidebar-w) !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
     max-width: none !important;
+    width: 100% !important;
     padding-left: 2.25rem !important;
     padding-right: 2.25rem !important;
   }
