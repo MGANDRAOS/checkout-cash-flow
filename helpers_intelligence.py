@@ -60,7 +60,9 @@ def execute_sql_readonly(sql_query: str):
         cursor = conn.cursor()
         cursor.execute(sql_query)
         columns = [col[0] for col in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    conn.close()
+    return rows
 
 
 def mssql_readonly_query(sql_query: str, params: Optional[dict] = None):
@@ -87,7 +89,9 @@ def mssql_readonly_query(sql_query: str, params: Optional[dict] = None):
         else:
             cursor.execute(sql_query)
         columns = [col[0] for col in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    conn.close()
+    return rows
 
 # ---------- Time window helpers ----------
 def _last_business_window(cur) -> Optional[Tuple[datetime, datetime, datetime]]:
