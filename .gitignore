@@ -7,3 +7,5 @@ weather_cache.db
 docs/
 instance/
 *.db-journal
+license/license.dat
+license/test_private.key

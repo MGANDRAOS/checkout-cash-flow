@@ -28,6 +28,8 @@ _REQUIRED_KEYS: List[str] = [
     "USD_EXCHANGE_RATE",
     "CURRENCY",
     "MIN_TRACKING_DATE",
+    "LICENSE_SERVER_URL",
+    "SUPPORT_CONTACT",
 ]
 
 
@@ -80,3 +82,8 @@ PAID_ITEM_TYPES: List[str] = [
     "Salary",
     "Other",
 ]
+
+# ---- License ----
+LICENSE_SERVER_URL: str = os.environ["LICENSE_SERVER_URL"]
+SUPPORT_CONTACT: str = os.environ["SUPPORT_CONTACT"]
+ACTIVATION_KEY: str = os.getenv("ACTIVATION_KEY", "")  # blank until first activation

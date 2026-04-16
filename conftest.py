@@ -21,6 +21,9 @@ _DUMMY_ENV = {
     "USD_EXCHANGE_RATE": "89000",
     "CURRENCY": "LBP",
     "MIN_TRACKING_DATE": "2026-04-11",
+    "LICENSE_SERVER_URL": "http://localhost:5001",
+    "SUPPORT_CONTACT": "+961-00-000000",
+    "ACTIVATION_KEY": "",
 }
 
 for key, value in _DUMMY_ENV.items():

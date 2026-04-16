@@ -1,5 +1,6 @@
 """Tests for config.py — env validation and value exposure."""
 import importlib
+import importlib.util
 import os
 import sys
 from datetime import date
@@ -9,9 +10,20 @@ import pytest
 
 def _reload_config():
     """Force a fresh import of config so current env is re-read."""
+    # Clear both the root and server config modules to force fresh import
     if "config" in sys.modules:
         del sys.modules["config"]
-    return importlib.import_module("config")
+    if "server.config" in sys.modules:
+        del sys.modules["server.config"]
+
+    # Load the root config.py directly by full path
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_path = os.path.join(root_dir, "config.py")
+
+    spec = importlib.util.spec_from_file_location("config", config_path)
+    config = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(config)
+    return config
 
 
 def test_all_required_present_loads_successfully(monkeypatch):
@@ -25,6 +37,9 @@ def test_all_required_present_loads_successfully(monkeypatch):
     assert cfg.USD_EXCHANGE_RATE == 89000.0
     assert cfg.CURRENCY == "LBP"
     assert cfg.MIN_TRACKING_DATE == date(2026, 4, 11)
+    assert cfg.LICENSE_SERVER_URL == "http://localhost:5001"
+    assert cfg.SUPPORT_CONTACT == "+961-00-000000"
+    assert cfg.ACTIVATION_KEY == ""
 
 
 def test_missing_mssql_password_raises(monkeypatch):
@@ -72,3 +87,23 @@ def test_database_url_optional_has_default(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     cfg = _reload_config()
     assert cfg.DATABASE_URL.startswith("sqlite:")
+
+
+def test_missing_license_server_url_raises(monkeypatch):
+    monkeypatch.delenv("LICENSE_SERVER_URL", raising=False)
+    with pytest.raises(RuntimeError) as exc_info:
+        _reload_config()
+    assert "LICENSE_SERVER_URL" in str(exc_info.value)
+
+
+def test_missing_support_contact_raises(monkeypatch):
+    monkeypatch.delenv("SUPPORT_CONTACT", raising=False)
+    with pytest.raises(RuntimeError) as exc_info:
+        _reload_config()
+    assert "SUPPORT_CONTACT" in str(exc_info.value)
+
+
+def test_activation_key_optional_has_default(monkeypatch):
+    monkeypatch.delenv("ACTIVATION_KEY", raising=False)
+    cfg = _reload_config()
+    assert cfg.ACTIVATION_KEY == ""
