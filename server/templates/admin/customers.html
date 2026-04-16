@@ -1,0 +1,48 @@
+{% extends "admin/base.html" %}
+{% block title %}Customers — Agentico Admin{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>Customers</h3>
+    <a href="/admin/customers/new" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Create New Customer</a>
+</div>
+<form class="mb-3" method="GET">
+    <div class="input-group" style="max-width:400px;">
+        <input type="text" name="q" class="form-control" placeholder="Search by name..." value="{{ q }}">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+    </div>
+</form>
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th><a href="?sort=created" class="text-decoration-none">Name</a></th>
+                <th><a href="?sort=status" class="text-decoration-none">Status</a></th>
+                <th><a href="?sort=heartbeat" class="text-decoration-none">Last Heartbeat</a></th>
+                <th><a href="?sort=renewal" class="text-decoration-none">Maintenance Due</a></th>
+                <th>Key</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in customers %}
+            <tr>
+                <td><a href="/admin/customers/{{ c.id }}">{{ c.name }}</a></td>
+                <td>
+                    {% if c.status == 'active' %}<span class="badge bg-success">Active</span>
+                    {% elif c.status == 'pending' %}<span class="badge bg-secondary">Pending</span>
+                    {% elif c.status == 'suspended' %}<span class="badge bg-warning text-dark">Suspended</span>
+                    {% else %}<span class="badge bg-danger">Revoked</span>{% endif %}
+                </td>
+                <td>{{ c.last_heartbeat.strftime('%Y-%m-%d %H:%M') if c.last_heartbeat else '—' }}</td>
+                <td>{{ c.maintenance_renewal.strftime('%Y-%m-%d') if c.maintenance_renewal else '—' }}</td>
+                <td>
+                    <code class="small">{{ c.activation_key[:8] }}...</code>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText('{{ c.activation_key }}')"><i class="bi bi-clipboard"></i></button>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-muted">No customers yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
