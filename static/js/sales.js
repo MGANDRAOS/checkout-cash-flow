@@ -4,7 +4,7 @@
 
 // Hide all AI summary panels if summaries are disabled in settings
 if (!window.AI_SUMMARIES_ENABLED) {
-    document.querySelectorAll(".ai-summary-panel").forEach(el => el.style.display = "none");
+    document.querySelectorAll(".ai-summary").forEach(el => el.style.display = "none");
 }
 
 (function () {
