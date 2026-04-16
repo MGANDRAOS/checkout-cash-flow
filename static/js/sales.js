@@ -107,7 +107,7 @@
             // ------------------------------------------------------------
             const datasets = [
                 {
-                    label: "Today",
+                    label: date,
                     data: today.map((p) => p.sales),
                     borderColor: "#0d6efd",
                     backgroundColor: "rgba(13,110,253,0.15)",
@@ -242,7 +242,7 @@
             // build datasets for each date
             const datasets = data.map((entry, idx) => {
                 const label =
-                    idx === 0 ? "Today" : `Week -${idx}`;
+                    idx === 0 ? entry.date : `Week -${idx}`;
                 const color = [
                     "#20c997", // bright green for current
                     "#6c757d",
