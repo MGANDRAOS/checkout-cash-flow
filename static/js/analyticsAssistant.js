@@ -16,8 +16,11 @@ const AnalyticsAssistant = (() => {
 
         if (!widget || !toggleBtn || !chatContainer) return;
 
-        // Toggle open/close
-        toggleBtn.addEventListener("click", () => toggleWidget(widget));
+        // Toggle open/close — load chat on first open
+        toggleBtn.addEventListener("click", () => {
+            if (!isOpen) loadChatUILite();   // build UI before toggling visibility
+            toggleWidget(widget);
+        });
         if (closeBtn) closeBtn.addEventListener("click", () => toggleWidget(widget, false));
 
         /* ==========================================================================
@@ -108,10 +111,6 @@ const AnalyticsAssistant = (() => {
         }
 
 
-        // When the widget is opened for the first time
-        toggleBtn.addEventListener("click", () => {
-            if (!isOpen) loadChatUILite();
-        });
     };
 
     // Toggle visibility
