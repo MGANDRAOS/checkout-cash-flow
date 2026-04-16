@@ -1,5 +1,9 @@
 checkout-app.zip
 *.pyc
+__pycache__/
 weather_cache.db
 .env
-*.pyc
+.claude/
+docs/
+instance/
+*.db-journal
