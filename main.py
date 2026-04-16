@@ -24,7 +24,7 @@ load_dotenv()
 
 import config  # noqa: E402  (import-after-load_dotenv is intentional)
 
-from models import db, DailyPaidItem  # noqa: E402
+from models import db, DailyPaidItem, AppSetting  # noqa: E402
 
 from routes.intelligence import intelligence_bp  # noqa: E402
 from routes.items import items_bp
@@ -237,6 +237,41 @@ def finance_summary_add_paid_item():
     if from_str and to_str:
         return redirect(url_for("finance_summary", from_date=from_str, to_date=to_str))
     return redirect(url_for("finance_summary"))
+
+
+# ───────────────────────────────
+# Settings helpers (AppSetting key-value store)
+# ───────────────────────────────
+def get_setting(key: str, default: str = None) -> str:
+    setting = db.session.get(AppSetting, key)
+    return setting.value if setting else default
+
+
+def set_setting(key: str, value: str) -> None:
+    setting = db.session.get(AppSetting, key)
+    if setting:
+        setting.value = value
+    else:
+        db.session.add(AppSetting(key=key, value=value))
+    db.session.commit()
+
+
+# ───────────────────────────────
+# Settings page (AI features toggle)
+# ───────────────────────────────
+@app.route("/settings", methods=["GET", "POST"])
+def settings():
+    if request.method == "POST":
+        try:
+            ai_on = "true" if request.form.get("ai_summaries_enabled") == "1" else "false"
+            set_setting("ai_summaries_enabled", ai_on)
+            flash("Settings updated successfully!", "success")
+        except Exception as e:
+            flash(f"Error saving settings: {e}", "danger")
+        return redirect(url_for("settings"))
+
+    ai_enabled = get_setting("ai_summaries_enabled", "true").lower() in ("1", "true", "yes")
+    return render_template("settings.html", ai_summaries_enabled=ai_enabled)
 
 
 # ───────────────────────────────
