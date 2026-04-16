@@ -1144,6 +1144,9 @@ def settings():
             else:
                 set_setting("inventory_pct", str(inv_pct))
                 set_setting("ops_pct", str(ops_pct))
+                # Checkbox: present = true, absent = false
+                ai_on = "true" if request.form.get("ai_summaries_enabled") == "1" else "false"
+                set_setting("ai_summaries_enabled", ai_on)
                 flash("Settings updated successfully!", "success")
         except Exception as e:
             flash(f"Error saving settings: {e}", "danger")
@@ -1152,11 +1155,13 @@ def settings():
     # GET method
     inv_pct = float(get_setting("inventory_pct", "0.5"))
     ops_pct = float(get_setting("ops_pct", "0.03"))
+    ai_enabled = get_setting("ai_summaries_enabled", "true").lower() in ("1", "true", "yes")
 
     return render_template(
         "settings.html",
         inventory_pct=inv_pct,
-        ops_pct=ops_pct
+        ops_pct=ops_pct,
+        ai_summaries_enabled=ai_enabled,
     )
     
 

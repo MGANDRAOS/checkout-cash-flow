@@ -1,6 +1,7 @@
 # routes/sales.py
 from flask import Blueprint, render_template, request, jsonify, Response
 from datetime import datetime
+from helpers import get_setting
 from helpers_sales import (
     get_sales_summary,
     get_sales_by_hour,
@@ -28,7 +29,8 @@ def sales_home():
     Default view shows today's data.
     """
     today = datetime.now().date().strftime("%Y-%m-%d")
-    return render_template("sales.html", today=today)
+    ai_enabled = get_setting("ai_summaries_enabled", "true").lower() in ("1", "true", "yes")
+    return render_template("sales.html", today=today, ai_summaries_enabled=ai_enabled)
 
 
 # ----------------------------------------------------------

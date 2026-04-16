@@ -2,6 +2,11 @@
 // POS Sales Dashboard Logic
 // ------------------------------------------------------------
 
+// Hide all AI summary panels if summaries are disabled in settings
+if (!window.AI_SUMMARIES_ENABLED) {
+    document.querySelectorAll(".ai-summary-panel").forEach(el => el.style.display = "none");
+}
+
 (function () {
     // Cached DOM elements
     const dateInput = document.getElementById("salesDate");
@@ -176,7 +181,7 @@
             // ------------------------------------------------------------
             // Generate AI summary for today’s hourly data
             // ------------------------------------------------------------
-            await generateAISummary("sales_hourly", today, "#summaryHourly");
+            if (window.AI_SUMMARIES_ENABLED) await generateAISummary("sales_hourly", today, "#summaryHourly");
 
         } catch (err) {
             console.error("loadHourlyChart error:", err);
@@ -216,7 +221,7 @@
                     },
                 },
             });
-            await generateAISummary('sales_category', data, '#summaryCategory');
+            if (window.AI_SUMMARIES_ENABLED) await generateAISummary('sales_category', data, '#summaryCategory');
 
         } catch (err) {
             console.error(err);
@@ -293,7 +298,7 @@
             });
 
             // optional AI summary
-            await generateAISummary("sales_hourly_cumulative", data, "#summaryHourlyCumulative");
+            if (window.AI_SUMMARIES_ENABLED) await generateAISummary("sales_hourly_cumulative", data, "#summaryHourlyCumulative");
         } catch (err) {
             console.error("loadHourlyCumulativeChart error:", err);
         }
@@ -543,7 +548,7 @@
             });
 
             // optional AI summary
-            await generateAISummary("sales_last14days", data, "#summaryDaily14Days");
+            if (window.AI_SUMMARIES_ENABLED) await generateAISummary("sales_last14days", data, "#summaryDaily14Days");
         } catch (err) {
             console.error("loadDaily14DaysChart error:", err);
         }

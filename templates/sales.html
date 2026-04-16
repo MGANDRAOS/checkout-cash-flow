@@ -298,6 +298,7 @@
 
 
 <!-- JS for dynamic charts and data -->
+<script>window.AI_SUMMARIES_ENABLED = {{ ai_summaries_enabled | tojson }};</script>
 <script src="{{ url_for('static', filename='js/analyticsAssistant.js') }}"></script>
 <script src="{{ url_for('static', filename='js/sales.js') }}"></script>
 

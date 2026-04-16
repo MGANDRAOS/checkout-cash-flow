@@ -87,5 +87,57 @@
     </div>
   </div>
 
+  <!-- AI Features Card -->
+  <div class="card mt-4">
+    <div class="card-header" style="border-bottom:1px solid var(--border);background:var(--bg-surface);padding:16px 20px;">
+      <div class="fw-600" style="font-size:14px;color:var(--text);">
+        <i class="bi bi-stars me-2" style="color:var(--azure);"></i>AI Features
+      </div>
+      <div class="small mt-1" style="color:var(--text-2);">
+        Control AI-powered analysis across the dashboard.
+      </div>
+    </div>
+    <div class="card-body" style="padding:20px;">
+      <form method="POST" id="aiSettingsForm">
+        <!-- carry over the allocation values so they aren't wiped on submit -->
+        <input type="hidden" name="inventory_pct" value="{{ inventory_pct }}">
+        <input type="hidden" name="ops_pct" value="{{ ops_pct }}">
+
+        <div class="d-flex align-items-center justify-content-between gap-3">
+          <div>
+            <div class="fw-600 small" style="color:var(--text);">Sales Page AI Summaries</div>
+            <div class="small mt-1" style="color:var(--text-2);">
+              When enabled, each widget on the Sales page shows an AI-generated insight below the chart.
+              Disable to stop OpenAI calls and hide the summary panels.
+            </div>
+          </div>
+          <div class="form-check form-switch mb-0 flex-shrink-0">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              role="switch"
+              id="ai_summaries_toggle"
+              name="ai_summaries_enabled"
+              value="1"
+              style="width:2.6em;height:1.4em;cursor:pointer;"
+              {{ 'checked' if ai_summaries_enabled else '' }}
+              onchange="document.getElementById('aiSettingsForm').submit();"
+            >
+            <label class="form-check-label visually-hidden" for="ai_summaries_toggle">AI Summaries</label>
+          </div>
+        </div>
+
+        <div class="mt-3 pt-3" style="border-top:1px solid var(--border);">
+          <span id="ai_status_badge"
+                class="badge rounded-pill px-3 py-2"
+                style="font-size:0.75rem;background:{{ 'var(--emerald)' if ai_summaries_enabled else 'var(--bg-elevated)' }};color:{{ '#fff' if ai_summaries_enabled else 'var(--text-3)' }};">
+            <i class="bi bi-{{ 'check-circle' if ai_summaries_enabled else 'slash-circle' }} me-1"></i>
+            AI Summaries {{ 'Enabled' if ai_summaries_enabled else 'Disabled' }}
+          </span>
+        </div>
+      </form>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
