@@ -107,11 +107,16 @@
 
       function parseDayInfo(label) {
         // Only parse YYYY-MM-DD daily labels (not YYYY-MM monthly)
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(label)) return { dayName: null, isWeekend: false };
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(label)) return { dayName: null, isWeekend: false, display: label };
         const d = new Date(label + "T12:00:00"); // noon avoids DST edge cases
-        if (isNaN(d.getTime())) return { dayName: null, isWeekend: false };
+        if (isNaN(d.getTime())) return { dayName: null, isWeekend: false, display: label };
         const dow = d.getDay();
-        return { dayName: DAY_NAMES[dow], isWeekend: dow === 0 || dow === 6 };
+        const [y, m, dd] = label.split("-");
+        return {
+          dayName:   DAY_NAMES[dow],
+          isWeekend: dow === 0 || dow === 6,
+          display:   `${dd}-${m}-${y}`,   // DD-MM-YYYY
+        };
       }
 
       function renderRows(rows) {
@@ -122,7 +127,7 @@
           const total   = Number(row.total ?? 0);
           const pct     = ((total / maxTotal) * 100).toFixed(1);
           const fmtd    = formatNumber(total);
-          const { dayName, isWeekend } = parseDayInfo(label);
+          const { dayName, isWeekend, display } = parseDayInfo(label);
 
           const dayBadge = dayName
             ? `<span class="snap-day-badge${isWeekend ? " snap-day-weekend" : ""}">${dayName}</span>`
@@ -132,7 +137,7 @@
             <tr class="${isWeekend ? "snap-row-weekend" : ""}">
               <td class="snap-td-label">
                 <div class="snap-label-row">
-                  <span class="snap-row-label">${label}</span>
+                  <span class="snap-row-label">${display}</span>
                   ${dayBadge}
                 </div>
                 <div class="snap-bar-track">
