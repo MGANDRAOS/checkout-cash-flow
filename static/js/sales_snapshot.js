@@ -103,19 +103,38 @@
           `<tr><td colspan="2" class="snap-empty-state">${message || "No rows to show."}</td></tr>`;
       }
 
+      const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+      function parseDayInfo(label) {
+        // Only parse YYYY-MM-DD daily labels (not YYYY-MM monthly)
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(label)) return { dayName: null, isWeekend: false };
+        const d = new Date(label + "T12:00:00"); // noon avoids DST edge cases
+        if (isNaN(d.getTime())) return { dayName: null, isWeekend: false };
+        const dow = d.getDay();
+        return { dayName: DAY_NAMES[dow], isWeekend: dow === 0 || dow === 6 };
+      }
+
       function renderRows(rows) {
         const maxTotal = Math.max(...rows.map(r => Number(r.total || 0)), 1);
 
         breakdownBodyEl.innerHTML = rows.map((row) => {
-          const label  = row.label ?? "—";
-          const total  = Number(row.total ?? 0);
-          const pct    = ((total / maxTotal) * 100).toFixed(1);
-          const fmtd   = formatNumber(total);
+          const label   = row.label ?? "—";
+          const total   = Number(row.total ?? 0);
+          const pct     = ((total / maxTotal) * 100).toFixed(1);
+          const fmtd    = formatNumber(total);
+          const { dayName, isWeekend } = parseDayInfo(label);
+
+          const dayBadge = dayName
+            ? `<span class="snap-day-badge${isWeekend ? " snap-day-weekend" : ""}">${dayName}</span>`
+            : "";
 
           return `
-            <tr>
+            <tr class="${isWeekend ? "snap-row-weekend" : ""}">
               <td class="snap-td-label">
-                <span class="snap-row-label">${label}</span>
+                <div class="snap-label-row">
+                  <span class="snap-row-label">${label}</span>
+                  ${dayBadge}
+                </div>
                 <div class="snap-bar-track">
                   <div class="snap-bar-fill" style="width:${pct}%"></div>
                 </div>

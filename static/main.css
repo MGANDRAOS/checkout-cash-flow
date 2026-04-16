@@ -1491,12 +1491,40 @@ div.dataTables_wrapper div.dataTables_length select {
   width: 70%;
 }
 
+.snap-label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
 .snap-row-label {
-  display: block;
   font-size: 0.88rem;
   color: var(--text);
-  margin-bottom: 0.35rem;
   font-weight: 500;
+  font-family: var(--font-mono);
+}
+
+.snap-day-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: var(--bg-elevated);
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+.snap-day-weekend {
+  background: var(--gold-dim);
+  color: var(--gold);
+}
+
+.snap-row-weekend {
+  background: rgba(217, 119, 6, 0.04);
+}
+.snap-row-weekend:hover {
+  background: rgba(217, 119, 6, 0.08) !important;
 }
 
 .snap-bar-track {
