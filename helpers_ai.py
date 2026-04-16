@@ -93,7 +93,7 @@ def summarize_widget(widget: str, data: dict) -> str:
 
     try:
         response = client.responses.create(
-            model="gpt-5-mini",
+            model="gpt-4.1-mini",
             instructions=instructions,
             input=serialized,
             max_output_tokens=2000
@@ -143,7 +143,7 @@ def generate_sql_query(natural_question: str) -> str:
 
     try:
         response = client.responses.create(
-            model="gpt-5-mini",
+            model="gpt-4.1-mini",
             input=[{"role": "user", "content": prompt}],
         )
         sql_query = response.output_text.strip().strip("`")
@@ -158,7 +158,7 @@ def generate_sql_query(natural_question: str) -> str:
 def generate_streaming_response(prompt_text: str):
     """Stream GPT-5-mini output token by token using the modern Responses API."""
     stream = client.responses.create(
-        model="gpt-5-mini",
+        model="gpt-4.1-mini",
         input=[
             {
                 "role": "system",
@@ -282,7 +282,7 @@ def generate_narrative_from_sql(question: str, sql_query: str, rows: list, previ
 
         # --- Call GPT-5-mini with optional chaining ---
         response = client.responses.create(
-            model="gpt-5-mini",
+            model="gpt-4.1-mini",
             input=[{"role": "system", "content": "", "role": "user", "content": prompt}],
             previous_response_id=previous_response_id,
             max_output_tokens=3000            
