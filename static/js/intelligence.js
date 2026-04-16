@@ -186,7 +186,7 @@ const IntelligencePOS = (() => {
     const PIE_COLORS = [
       "#2563EB", // azure
       "#059669", // emerald
-      "#D97706", // gold
+      "#F59E0B", // amber
       "#7C3AED", // violet
       "#0891B2", // cyan
       "#DB2777", // pink

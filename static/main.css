@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   CHECKOUT — SPLIT THEME
+   AGENTICO — SPLIT THEME
    Dark sidebar · Light everything else
    ══════════════════════════════════════════════════════════════ */
 
@@ -13,10 +13,10 @@
   --bg-hover:    #EFF4F9;
 
   /* Accents */
-  --gold:         #B8882E;
-  --gold-bright:  #C99830;
-  --gold-dim:     rgba(184, 136, 46, 0.10);
-  --gold-glow:    rgba(184, 136, 46, 0.25);
+  --gold:         #F59E0B;
+  --gold-bright:  #FBBF24;
+  --gold-dim:     rgba(245, 158, 11, 0.12);
+  --gold-glow:    rgba(245, 158, 11, 0.28);
   --emerald:      #059669;
   --emerald-dim:  rgba(5, 150, 105, 0.10);
   --crimson:      #DC2626;
