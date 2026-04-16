@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify
 from models import db, Customer, HeartbeatLog
 from license import build_license_payload, sign_license, LICENSE_DURATION_DAYS
+from app import limiter
 
 api_bp = Blueprint("api", __name__)
 
@@ -16,6 +17,7 @@ def _json_error(message: str, status: int = 403):
 
 
 @api_bp.post("/api/license/activate")
+@limiter.limit("10/minute")
 def activate():
     data = request.get_json(silent=True) or {}
     activation_key = data.get("activation_key", "")
@@ -56,6 +58,7 @@ def activate():
 
 
 @api_bp.post("/api/license/heartbeat")
+@limiter.limit("10/minute")
 def heartbeat():
     data = request.get_json(silent=True) or {}
     activation_key = data.get("activation_key", "")
@@ -109,6 +112,7 @@ def heartbeat():
 
 
 @api_bp.post("/api/license/deactivate")
+@limiter.limit("10/minute")
 def deactivate():
     data = request.get_json(silent=True) or {}
     activation_key = data.get("activation_key", "")
