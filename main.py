@@ -24,7 +24,7 @@ load_dotenv()
 
 import config  # noqa: E402  (import-after-load_dotenv is intentional)
 
-from models import db, DailyPaidItem, AppSetting  # noqa: E402
+from models import db, DailyPaidItem, AppSetting, get_setting, set_setting  # noqa: E402
 
 from routes.intelligence import intelligence_bp  # noqa: E402
 from routes.items import items_bp
@@ -237,23 +237,6 @@ def finance_summary_add_paid_item():
     if from_str and to_str:
         return redirect(url_for("finance_summary", from_date=from_str, to_date=to_str))
     return redirect(url_for("finance_summary"))
-
-
-# ───────────────────────────────
-# Settings helpers (AppSetting key-value store)
-# ───────────────────────────────
-def get_setting(key: str, default: str = None) -> str:
-    setting = db.session.get(AppSetting, key)
-    return setting.value if setting else default
-
-
-def set_setting(key: str, value: str) -> None:
-    setting = db.session.get(AppSetting, key)
-    if setting:
-        setting.value = value
-    else:
-        db.session.add(AppSetting(key=key, value=value))
-    db.session.commit()
 
 
 # ───────────────────────────────

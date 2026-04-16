@@ -16,6 +16,20 @@ class AppSetting(db.Model):
         return f"<AppSetting {self.key}={self.value}>"
 
 
+def get_setting(key: str, default: str = None) -> str:
+    setting = db.session.get(AppSetting, key)
+    return setting.value if setting else default
+
+
+def set_setting(key: str, value: str) -> None:
+    setting = db.session.get(AppSetting, key)
+    if setting:
+        setting.value = value
+    else:
+        db.session.add(AppSetting(key=key, value=value))
+    db.session.commit()
+
+
 class DailyPaidItem(db.Model):
     """
     Manual spending entry used for the Sales vs Spending page.

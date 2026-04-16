@@ -1,7 +1,7 @@
 # routes/sales.py
 from flask import Blueprint, render_template, request, jsonify, Response
 from datetime import datetime
-from helpers import get_setting
+from models import get_setting
 from helpers_sales import (
     get_sales_summary,
     get_sales_by_hour,
