@@ -75,28 +75,91 @@ def _cache_key(widget: str, data: dict):
     return hashlib.md5(f"{widget}:{raw}".encode()).hexdigest()
 
 
+STORE_CONTEXT = """
+You are a sharp retail analyst for a drive-thru mini-market in Lebanon.
+Store hours: 08:00–02:00 (next day). Hours 03:00–07:59 are closed — ignore them entirely.
+Currency: LBP. Always convert key figures to USD (1 USD = 89,000 LBP) and show both.
+Hours in the raw data use an internal index (0–23) shifted by +8 to get real clock time — e.g. index 0 = 08:00, index 16 = 00:00.
+Top categories by margin: Tobacco, Alcohol, Energy Drinks. Daily staples: Water, Coffee, Soft Drinks. Snacks: Biscuits, Chocolate, Croissants.
+Write in plain English. Be specific and concise — name exact hours, amounts, and percentages. No filler phrases like "It's worth noting" or "Overall".
+"""
+
+WIDGET_PROMPTS = {
+    "sales_hourly": {
+        "instructions": STORE_CONTEXT + """
+You are analysing TODAY's hourly sales data vs the same weekday over the past 4 weeks.
+Data format: array of {hour (0-based index), sales (LBP)}.
+Your output: 2–3 punchy sentences covering:
+1. Peak hour and its sales (convert to USD).
+2. Quietest hour during open hours.
+3. Whether today is pacing above or below the 4-week pattern for the same weekday, with a % difference if calculable.
+Be specific: name real clock times (add 8 to each index, wrap at 24).
+""",
+        "input_hint": "Hourly sales for today (each item = one hour of business):"
+    },
+
+    "sales_category": {
+        "instructions": STORE_CONTEXT + """
+You are analysing today's sales breakdown by product category (subgroup).
+Data format: array of {subgroup, sales (LBP)}.
+Your output: 2–3 sentences covering:
+1. The top category and its share of total sales (%).
+2. Any surprising category — unexpectedly high or low vs typical mix (Tobacco/Alcohol usually dominate).
+3. One actionable observation (e.g. a lagging staple category, a spike worth investigating).
+Always mention total sales across all categories in LBP and USD.
+""",
+        "input_hint": "Category sales breakdown for today:"
+    },
+
+    "sales_hourly_cumulative": {
+        "instructions": STORE_CONTEXT + """
+You are analysing cumulative sales progression across the business day — today vs the same weekday over the past 4 weeks.
+Data format: array of series, each with a date and cumulative sales by hour.
+Your output: 2–3 sentences covering:
+1. At what point in the day today's cumulative line diverged from the historical average (ahead or behind, and by how much).
+2. The steepest sales window today (where the curve climbed fastest = busiest rush).
+3. End-of-day projection: if today maintains its current pace, is it trending above or below the average day?
+Name real clock times (index + 8, wrap at 24).
+""",
+        "input_hint": "Cumulative hourly sales series (today + past weeks):"
+    },
+
+    "sales_last14days": {
+        "instructions": STORE_CONTEXT + """
+You are analysing the last 14 business days of daily sales.
+Data format: array of {date (YYYY-MM-DD), sales_total (LBP)}.
+Your output: 3 sentences covering:
+1. Best day and worst day in the period — dates and amounts in LBP + USD.
+2. Overall trend direction: is revenue rising, falling, or flat? Include % change from day 1 to day 14.
+3. Weekend effect: are Fri/Sat noticeably higher or lower than weekdays in this window?
+""",
+        "input_hint": "Daily sales for the last 14 business days:"
+    },
+}
+
 def summarize_widget(widget: str, data: dict) -> str:
     key = _cache_key(widget, data)
     if key in _cache and datetime.datetime.now() - _cache[key]["time"] < timedelta(minutes=CACHE_TTL_MINUTES):
         return _cache[key]["summary"]
 
-    serialized = json.dumps(data)[:4000]
+    prompt_cfg = WIDGET_PROMPTS.get(widget)
+    if prompt_cfg:
+        instructions = prompt_cfg["instructions"].strip()
+        input_hint   = prompt_cfg.get("input_hint", "Data:")
+    else:
+        # Fallback for unknown widgets
+        instructions = STORE_CONTEXT + "Write 2 concise sentences summarising the key insight from this data."
+        input_hint   = "Data:"
 
-    instructions = (
-        "You are an analytics assistant for a retail store."
-        "Write a one-sentence, human-friendly summary (max 50 words)"
-        "of the data. Mention major trends or anomalies."
-        "Time axis is strict 24-hour clock and shifted by +8 hours. make sure to adjust accordingly."
-        "This line should be taken into consideration while you are thinking: Opening time is 08:00. Closing time is 2AM max the next day, so hours make sure to ignore the hours between 3AM and 7AM."
-        "Currency is LBP, convert to USD where 1 USD = 89000 LBP."
-    )
+    serialized = json.dumps(data, ensure_ascii=False)[:5000]
+    user_input = f"{input_hint}\n{serialized}"
 
     try:
         response = client.responses.create(
             model="gpt-5.4-nano-2026-03-17",
             instructions=instructions,
-            input=serialized,
-            max_output_tokens=2000
+            input=user_input,
+            max_output_tokens=300
         )
         summary = response.output_text.strip()
     except Exception as e:
