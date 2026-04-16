@@ -43,6 +43,10 @@ from helpers_intelligence import (
     get_pos_sales_daily_by_range,
 )
 
+from license_client import get_hw_fingerprint, activate as license_activate
+from license_heartbeat import start_heartbeat_thread, notify_activated
+from license_middleware import register_license_middleware
+
 
 # ───────────────────────────────
 # Flask app
@@ -53,6 +57,12 @@ app.config["SQLALCHEMY_DATABASE_URI"] = config.DATABASE_URL
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
+
+# Start license heartbeat daemon
+start_heartbeat_thread()
+
+# Register license middleware (runs before require_login)
+register_license_middleware(app)
 
 
 @app.context_processor
@@ -258,6 +268,41 @@ def settings():
 
 
 # ───────────────────────────────
+# License activation
+# ───────────────────────────────
+@app.route("/activate", methods=["GET", "POST"])
+def activate_page():
+    if request.method == "POST":
+        key = request.form.get("activation_key", "").strip()
+        if not key:
+            flash("Please enter an activation key.", "danger")
+            return render_template("activate.html")
+
+        try:
+            hw = get_hw_fingerprint()
+            blob, response = license_activate(config.LICENSE_SERVER_URL, key, hw)
+            notify_activated(key, blob)
+
+            # Append ACTIVATION_KEY to .env so heartbeat can use it on restart
+            env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+            with open(env_path, "a") as f:
+                f.write(f"\nACTIVATION_KEY={key}\n")
+
+            flash("License activated successfully!", "success")
+            return redirect("/login")
+        except RuntimeError as e:
+            flash(f"Activation failed: {e}", "danger")
+            return render_template("activate.html")
+
+    return render_template("activate.html")
+
+
+@app.route("/license-expired")
+def license_expired_page():
+    return render_template("license_expired.html", support_contact=config.SUPPORT_CONTACT)
+
+
+# ───────────────────────────────
 # Auth
 # ───────────────────────────────
 @app.route("/login", methods=["GET", "POST"])
@@ -296,7 +341,7 @@ app.register_blueprint(reorder_radar_bp)
 
 @app.before_request
 def require_login():
-    allowed_routes = ["login", "static"]
+    allowed_routes = ["login", "static", "activate_page", "license_expired_page"]
     if request.endpoint not in allowed_routes:
         if not session.get("logged_in"):
             return redirect(url_for("login"))

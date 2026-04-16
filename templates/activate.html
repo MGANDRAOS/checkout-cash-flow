@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title mb-3">
+                    <i class="bi bi-key me-2"></i>Activate Your License
+                </h4>
+                <p class="text-muted small mb-4">
+                    Paste the activation key you received to start using the dashboard.
+                </p>
+                <form method="POST" action="/activate">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Activation Key</label>
+                        <input type="text" name="activation_key" class="form-control font-monospace"
+                               placeholder="Paste your key here..." required autofocus>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-check-circle me-1"></i>Activate
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
