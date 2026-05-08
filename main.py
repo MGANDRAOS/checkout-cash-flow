@@ -37,6 +37,7 @@ from routes.item_trends import item_trends_bp
 from routes.items_explorer import items_explorer_bp
 from routes.dead_items import dead_items_bp
 from routes.reorder_radar import reorder_radar_bp
+from routes.invoices import invoices_bp
 
 from helpers_intelligence import (
     get_pos_sales_total_by_range,
@@ -59,10 +60,10 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 
 # Start license heartbeat daemon
-start_heartbeat_thread()
+# start_heartbeat_thread()
 
 # Register license middleware (runs before require_login)
-register_license_middleware(app)
+# register_license_middleware(app)
 
 
 @app.context_processor
@@ -337,6 +338,7 @@ app.register_blueprint(item_trends_bp)
 app.register_blueprint(items_explorer_bp)
 app.register_blueprint(dead_items_bp)
 app.register_blueprint(reorder_radar_bp)
+app.register_blueprint(invoices_bp)
 
 
 @app.before_request

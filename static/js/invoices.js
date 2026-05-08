@@ -70,9 +70,17 @@ window.InvoicesModule = (function () {
   }
 
   async function fetchJson(url) {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    return await res.json();
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error("fetchJson", url, "HTTP", res.status);
+        return null;
+      }
+      return await res.json();
+    } catch (e) {
+      console.error("fetchJson", url, e);
+      return null;
+    }
   }
 
   function formatMoney(v) {
@@ -157,8 +165,23 @@ window.InvoicesModule = (function () {
   }
 
   async function openInvoiceDetails(rcptId) {
+    await openModal(
+      `Invoice ${rcptId}`,
+      "Loading line items…",
+      `<div class="d-flex justify-content-center py-4">
+         <div class="spinner-border text-secondary" role="status"></div>
+       </div>`
+    );
+
     const data = await fetchJson(`/api/invoices/${encodeURIComponent(rcptId)}`);
-    if (!data) return;
+    if (!data) {
+      await openModal(
+        `Invoice ${rcptId}`,
+        "Failed to load",
+        `<div class="text-danger small">Could not load invoice details. Check the server log / browser console.</div>`
+      );
+      return;
+    }
 
     const rows = data.rows || [];
 
@@ -243,8 +266,23 @@ window.InvoicesModule = (function () {
   }
 
   async function openDailyDetail(bizDate) {
+    await openModal(
+      `Daily Items — ${bizDate}`,
+      "Loading items…",
+      `<div class="d-flex justify-content-center py-4">
+         <div class="spinner-border text-secondary" role="status"></div>
+       </div>`
+    );
+
     const data = await fetchJson(`/api/invoices/daily-items/${encodeURIComponent(bizDate)}`);
-    if (!data) return;
+    if (!data) {
+      await openModal(
+        `Daily Items — ${bizDate}`,
+        "Failed to load",
+        `<div class="text-danger small">Could not load daily items. Check the server log / browser console.</div>`
+      );
+      return;
+    }
 
     const rows = data.rows || [];
 

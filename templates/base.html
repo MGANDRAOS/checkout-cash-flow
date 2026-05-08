@@ -102,6 +102,10 @@
         class="sidebar-link {% if request.path.startswith('/sales-snapshot') %}active{% endif %}">
         <i class="bi bi-tv"></i><span>Snapshot</span>
       </a>
+      <a href="/invoices"
+        class="sidebar-link {% if request.path.startswith('/invoices') %}active{% endif %}">
+        <i class="bi bi-receipt"></i><span>Invoices</span>
+      </a>
       <a href="/sales"
         class="sidebar-link {% if request.path.startswith('/sales') and not request.path.startswith('/sales-snapshot') %}active{% endif %}">
         <i class="bi bi-graph-up-arrow"></i><span>Sales</span>
