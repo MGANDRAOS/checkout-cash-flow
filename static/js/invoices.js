@@ -108,6 +108,11 @@ window.InvoicesModule = (function () {
     if (bodyEl) bodyEl.innerHTML = bodyHtml || "";
 
     const modalEl = qs("invoiceModal");
+    // Reparent to <body> so the backdrop stacking context isn't trapped
+    // inside a transformed/animated ancestor (e.g. main.container fadeUp).
+    if (modalEl && modalEl.parentElement !== document.body) {
+      document.body.appendChild(modalEl);
+    }
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
   }
@@ -117,17 +122,36 @@ window.InvoicesModule = (function () {
   // ---------------------------
   async function loadInvoices() {
     const f = getFilters();
-    const url = buildUrl("/api/invoices", {
-      start: f.start,
-      end: f.end,
-      q: f.q,
-      item_code: f.item_code,
-      min_amount: f.min_amount,
-      max_amount: f.max_amount,
-      page: 1,
-      page_size: 80
-    });
-    return await fetchJson(url);
+    const pageSize = 500;
+    const allRows = [];
+    let total = 0;
+    let page = 1;
+
+    // Page through until we've fetched everything (cap at 50 pages = 25k rows for safety)
+    while (page <= 50) {
+      const url = buildUrl("/api/invoices", {
+        start: f.start,
+        end: f.end,
+        q: f.q,
+        item_code: f.item_code,
+        min_amount: f.min_amount,
+        max_amount: f.max_amount,
+        page,
+        page_size: pageSize
+      });
+      const payload = await fetchJson(url);
+      if (!payload) break;
+
+      const rows = payload.rows || [];
+      total = payload.total ?? total;
+      allRows.push(...rows);
+
+      if (rows.length < pageSize) break;        // last page
+      if (allRows.length >= total && total > 0) break;
+      page += 1;
+    }
+
+    return { total: total || allRows.length, rows: allRows };
   }
 
   function renderInvoices(payload) {
@@ -222,13 +246,31 @@ window.InvoicesModule = (function () {
   // ---------------------------
   async function loadDailyItems() {
     const f = getFilters();
-    const url = buildUrl("/api/invoices/daily-items", {
-      start: f.start,
-      end: f.end,
-      page: 1,
-      page_size: 60
-    });
-    return await fetchJson(url);
+    const pageSize = 500;
+    const allRows = [];
+    let total = 0;
+    let page = 1;
+
+    while (page <= 20) {
+      const url = buildUrl("/api/invoices/daily-items", {
+        start: f.start,
+        end: f.end,
+        page,
+        page_size: pageSize
+      });
+      const payload = await fetchJson(url);
+      if (!payload) break;
+
+      const rows = payload.rows || [];
+      total = payload.total ?? total;
+      allRows.push(...rows);
+
+      if (rows.length < pageSize) break;
+      if (allRows.length >= total && total > 0) break;
+      page += 1;
+    }
+
+    return { total: total || allRows.length, rows: allRows };
   }
 
   function renderDailyItems(payload) {

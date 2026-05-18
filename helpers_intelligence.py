@@ -2001,7 +2001,7 @@ def get_invoices_list(
     - Avoids any int conversions on item codes.
     """
     safe_page = max(1, int(page or 1))
-    safe_page_size = max(10, min(int(page_size or 50), 200))
+    safe_page_size = max(10, min(int(page_size or 50), 1000))
     row_start = (safe_page - 1) * safe_page_size + 1
     row_end = safe_page * safe_page_size
 
