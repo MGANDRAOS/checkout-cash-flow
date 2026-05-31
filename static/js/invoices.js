@@ -22,19 +22,55 @@ window.InvoicesModule = (function () {
     list.forEach(el => new bootstrap.Tooltip(el));
   }
 
-  function todayISO() {
-    const d = new Date();
+  function toISO(d) {
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     return `${d.getFullYear()}-${mm}-${dd}`;
   }
 
-  function daysAgoISO(days) {
-    const d = new Date();
-    d.setDate(d.getDate() - days);
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${d.getFullYear()}-${mm}-${dd}`;
+  // Returns {start, end} ISO strings for a named quick range.
+  function quickRange(key) {
+    const now = new Date();
+    const start = new Date(now);
+    const end = new Date(now);
+
+    if (key === "today") {
+      // start/end already today
+    } else if (key === "yesterday") {
+      start.setDate(start.getDate() - 1);
+      end.setDate(end.getDate() - 1);
+    } else if (key === "last7") {
+      start.setDate(start.getDate() - 6);
+    } else if (key === "thisMonth") {
+      start.setDate(1);
+    } else if (key === "lastMonth") {
+      const firstOfThis = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastOfLast = new Date(firstOfThis);
+      lastOfLast.setDate(lastOfLast.getDate() - 1);
+      start.setFullYear(lastOfLast.getFullYear(), lastOfLast.getMonth(), 1);
+      end.setFullYear(lastOfLast.getFullYear(), lastOfLast.getMonth(), lastOfLast.getDate());
+    }
+
+    return { start: toISO(start), end: toISO(end) };
+  }
+
+  function applyQuickRange(key) {
+    const startEl = qs("inv-start");
+    const endEl = qs("inv-end");
+    if (!startEl || !endEl) return;
+    const { start, end } = quickRange(key);
+    startEl.value = start;
+    endEl.value = end;
+  }
+
+  function setActiveChip(key) {
+    document.querySelectorAll("#inv-quick .snap-chip").forEach(c => {
+      c.classList.toggle("active", c.getAttribute("data-quick") === key);
+    });
+  }
+
+  function clearActiveChip() {
+    document.querySelectorAll("#inv-quick .snap-chip").forEach(c => c.classList.remove("active"));
   }
 
   function ensureDefaultDates() {
@@ -42,9 +78,8 @@ window.InvoicesModule = (function () {
     const endEl = qs("inv-end");
     if (!startEl || !endEl) return;
 
-    // If empty, default to last 30 calendar days (backend uses BizDate anyway)
-    if (!endEl.value) endEl.value = todayISO();
-    if (!startEl.value) startEl.value = daysAgoISO(30);
+    // Default to yesterday's BizDate (last fully-complete business day).
+    if (!startEl.value || !endEl.value) applyQuickRange("yesterday");
   }
 
   function getFilters() {
@@ -393,7 +428,6 @@ window.InvoicesModule = (function () {
   async function runAll() {
     try {
       setStatus("Loading...");
-      ensureDefaultDates();
 
       const [inv, daily] = await Promise.all([
         loadInvoices(),
@@ -413,6 +447,20 @@ window.InvoicesModule = (function () {
   function bindEvents() {
     qs("inv-run")?.addEventListener("click", runAll);
 
+    // Quick range chips: set dates, highlight, and load.
+    document.querySelectorAll("#inv-quick .snap-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const key = chip.getAttribute("data-quick");
+        applyQuickRange(key);
+        setActiveChip(key);
+        runAll();
+      });
+    });
+
+    // Manually editing dates clears the active chip.
+    qs("inv-start")?.addEventListener("change", clearActiveChip);
+    qs("inv-end")?.addEventListener("change", clearActiveChip);
+
     // Enter on search triggers apply
     qs("inv-search")?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") runAll();
@@ -424,7 +472,16 @@ window.InvoicesModule = (function () {
 
   function init() {
     initTooltips();
-    ensureDefaultDates();
+
+    // Deep-link from Item360 ("See all invoices"): show the item's full
+    // history rather than forcing a yesterday default that would hide it.
+    const prefillItem = (qs("inv-item-code")?.value || "").trim();
+    if (prefillItem) {
+      clearActiveChip();
+    } else {
+      ensureDefaultDates();
+    }
+
     bindEvents();
     runAll();
   }
