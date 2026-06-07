@@ -15,6 +15,13 @@ from cache_utils import ttl_cache
 # ---------- Connection ----------
 import config
 
+# Max seconds any single POS query may run before pyodbc aborts it.
+# Without this, a slow query on a high-volume day pins a waitress worker
+# thread indefinitely; with all threads pinned, even static files time out
+# until IIS/ARR's 120s proxy timeout fires and 502s the whole site.
+QUERY_TIMEOUT_SECONDS = 30
+LOGIN_TIMEOUT_SECONDS = 10
+
 
 def _conn_str() -> str:
     return (
@@ -30,7 +37,8 @@ def _conn_str() -> str:
 
 @contextmanager
 def _connect():
-    conn = pyodbc.connect(_conn_str())
+    conn = pyodbc.connect(_conn_str(), timeout=LOGIN_TIMEOUT_SECONDS)
+    conn.timeout = QUERY_TIMEOUT_SECONDS  # abort runaway queries instead of hanging a worker thread
     try:
         yield conn
     except Exception:
