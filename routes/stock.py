@@ -73,6 +73,9 @@ def _serialize_items():
             # 08:00 boundary (not the 07:00 used by intelligence KPIs): deduction must
             # match the daily sales totals the owner sees on the dashboard, which use
             # biz_date_range_8h. Open-ended (>= start) so all sales since the count subtract.
+            # NOTE: a count is anchored to the START of its business day (counts are taken at
+            # morning/closing per the agreed workflow). A mid-day recount would over-deduct
+            # that morning's sales until the next day — acceptable for Phase 1.
             start, _ = biz_date_range_8h(c.event_date)
             pairs.append((s.itm_code, start))
 
