@@ -71,6 +71,7 @@ MIN_TRACKING_DATE: date = datetime.strptime(
 
 # ---- Optional ----
 DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///checkout.db")
+OCR_MODEL: str = os.getenv("OCR_MODEL", "gpt-4o")  # vision model for invoice OCR (not required)
 
 # ---- Business constants ----
 # Controlled payment types for manual paid items in the Sales vs Spending page.
