@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import date
 
 from flask import Blueprint, jsonify, render_template, request
@@ -9,6 +10,10 @@ from models import db, StockItem, StockEvent, get_setting
 from helpers_stock import units_sold_since, compute_live, latest_count
 from pos_dates import biz_date_range_8h
 from helpers_items import list_items, list_subgroups
+from helpers_invoice_ocr import extract_invoice_lines
+from helpers_invoice_match import load_catalog, match_lines, upsert_alias
+
+_MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
 
 log = logging.getLogger(__name__)
 
@@ -206,3 +211,116 @@ def api_stock_alerts():
     rows, live_unavailable = _serialize_items()
     alerts = [r for r in rows if r["status"] in ("out", "low")]
     return jsonify({"items": alerts, "count": len(alerts), "live_unavailable": live_unavailable})
+
+
+@stock_bp.get("/stock/receive")
+def stock_receive_page():
+    return render_template("stock_receive.html")
+
+
+@stock_bp.post("/api/stock/receive/scan")
+def api_stock_receive_scan():
+    f = request.files.get("image")
+    if f is None or not f.filename:
+        return jsonify({"ok": False, "error": "no image uploaded"}), 400
+    if request.content_length and request.content_length > _MAX_UPLOAD_BYTES:
+        return jsonify({"ok": False, "error": "image too large (max 15MB)"}), 413
+    image_bytes = f.read()
+    if not image_bytes:
+        return jsonify({"ok": False, "error": "empty image"}), 400
+    if len(image_bytes) > _MAX_UPLOAD_BYTES:
+        return jsonify({"ok": False, "error": "image too large (max 15MB)"}), 413
+    media_type = f.mimetype or "image/jpeg"
+    try:
+        lines = extract_invoice_lines(image_bytes, media_type=media_type)
+    except Exception as e:
+        log.exception("invoice OCR failed")
+        return jsonify({"ok": False, "error": f"could not read invoice: {e}"}), 400
+    catalog = load_catalog()
+    matched = match_lines(lines, catalog)
+    tracked = {s.itm_code for s in StockItem.query.filter_by(active=True).all()}
+    for m in matched:
+        code = (m.get("match") or {}).get("code")
+        m["tracked"] = code in tracked if code else False
+    return jsonify({"ok": True, "lines": matched})
+
+
+@stock_bp.post("/api/stock/receive/confirm")
+def api_stock_receive_confirm():
+    data = _body()
+    lines = data.get("lines") if isinstance(data, dict) else None
+    if not lines:
+        return jsonify({"ok": False, "error": "no lines to confirm"}), 400
+    batch_id = str(uuid.uuid4())  # 36-char hyphenated, matches StockEvent.batch_id String(36)
+    received = 0
+    try:
+        for ln in lines:
+            itm_code = (str(ln.get("itm_code") or "")).strip()
+            if not itm_code:
+                continue
+            try:
+                qty = float(ln.get("qty"))
+            except (TypeError, ValueError):
+                continue
+            if qty <= 0:
+                continue
+            raw_cost = ln.get("unit_cost")
+            try:
+                cost_cents = int(round(float(raw_cost) * 100)) if raw_cost not in (None, "") else None
+            except (TypeError, ValueError):
+                cost_cents = None
+            if cost_cents is not None and cost_cents < 0:
+                cost_cents = None  # a negative cost is noise, not data
+            title = (str(ln.get("title") or "")).strip()
+            subgroup = (str(ln.get("subgroup") or "")).strip()
+
+            si = StockItem.query.filter_by(itm_code=itm_code).first()
+            if si and si.active:
+                event_type = "receive"
+            elif si and not si.active:
+                si.active = True
+                event_type = "receive"
+            else:
+                si = StockItem(itm_code=itm_code, title=title, subgroup=subgroup,
+                               alert_threshold=_default_threshold(), active=True)
+                db.session.add(si)
+                db.session.flush()
+                event_type = "count"  # first delivery is the baseline for a new item
+            db.session.add(StockEvent(stock_item_id=si.id, event_type=event_type, qty=qty,
+                                      event_date=date.today(), source="invoice",
+                                      unit_cost_cents=cost_cents, batch_id=batch_id))
+            raw = (str(ln.get("raw_description") or "")).strip()
+            if raw:
+                upsert_alias(raw, itm_code)
+            received += 1
+        if received == 0:
+            db.session.rollback()
+            return jsonify({"ok": False, "error": "no valid lines"}), 400
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        log.exception("invoice receive confirm failed")
+        return jsonify({"ok": False, "error": "could not save received items"}), 500
+    return jsonify({"ok": True, "batch_id": batch_id, "received": received})
+
+
+@stock_bp.post("/api/stock/receive/undo")
+def api_stock_receive_undo():
+    data = _body()
+    batch_id = (str(data.get("batch_id") or "")).strip()
+    if not batch_id:
+        return jsonify({"ok": False, "error": "batch_id required"}), 400
+    events = StockEvent.query.filter_by(batch_id=batch_id).all()
+    affected = {e.stock_item_id for e in events}
+    for e in events:
+        db.session.delete(e)
+    db.session.flush()
+    removed_items = 0
+    for sid in affected:
+        if StockEvent.query.filter_by(stock_item_id=sid).count() == 0:
+            si = db.session.get(StockItem, sid)
+            if si is not None:
+                db.session.delete(si)
+                removed_items += 1
+    db.session.commit()
+    return jsonify({"ok": True, "events_removed": len(events), "items_removed": removed_items})
