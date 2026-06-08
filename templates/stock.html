@@ -59,7 +59,7 @@ async function loadSubgroups(){
     const sel = document.getElementById("subgroupSelect");
     (d.subgroups||[]).forEach(s => {
       const o = document.createElement("option");
-      o.value = s.subgroup; o.textContent = `${s.subgroup} (${s.count})`;
+      o.value = s.id; o.textContent = `${s.subgroup} (${s.count})`;
       sel.appendChild(o);
     });
   }catch(e){ /* non-fatal */ }
