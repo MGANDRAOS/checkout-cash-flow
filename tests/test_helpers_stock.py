@@ -1,7 +1,13 @@
 from datetime import date, datetime
 from types import SimpleNamespace
 
-from helpers_stock import latest_count, receives_after, status_for, compute_live
+from helpers_stock import (
+    latest_count,
+    receives_after,
+    status_for,
+    compute_live,
+    build_units_sold_query,
+)
 
 
 def _ev(event_type, qty, event_date, created_at):
@@ -67,3 +73,21 @@ def test_compute_live_no_baseline():
     assert info["has_baseline"] is False
     assert info["live"] is None
     assert info["status"] == "unknown"
+
+
+def test_build_units_sold_query_param_shape():
+    pairs = (("ALM330", datetime(2026, 6, 8, 8)), ("PEPSI1L", datetime(2026, 6, 7, 8)))
+    sql, params = build_units_sold_query(pairs)
+    # one (?,?) values row per pair
+    assert sql.count("(?, ?)") == 2
+    # params are flattened code, start, code, start (positional)
+    assert params == ["ALM330", datetime(2026, 6, 8, 8), "PEPSI1L", datetime(2026, 6, 7, 8)]
+    assert "HISTORIC_RECEIPT_CONTENTS" in sql
+    assert "SUM(c.ITM_QUANTITY)" in sql
+    assert "r.RCPT_DATE >= v.win_start" in sql
+
+
+def test_build_units_sold_query_empty():
+    sql, params = build_units_sold_query(())
+    assert sql == ""
+    assert params == []
