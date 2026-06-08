@@ -59,7 +59,11 @@ def api_stock_search():
         subgroup_id = int(subgroup_id_raw) if subgroup_id_raw else None
     except (TypeError, ValueError):
         subgroup_id = None
-    payload = list_items(page=1, page_size=25, q=q, subgroup_id=subgroup_id)
+    try:
+        page = max(1, int(request.args.get("page") or 1))
+    except (TypeError, ValueError):
+        page = 1
+    payload = list_items(page=page, page_size=25, q=q, subgroup_id=subgroup_id)
     tracked = {s.itm_code for s in StockItem.query.filter_by(active=True).all()}
     for it in payload.get("items", []):
         it["tracked"] = it.get("code") in tracked

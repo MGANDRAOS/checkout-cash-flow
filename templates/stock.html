@@ -65,31 +65,74 @@ async function loadSubgroups(){
   }catch(e){ /* non-fatal */ }
 }
 
+let _searchState = null;
+
+function itemRowHtml(it){
+  return `<div class="d-flex align-items-center gap-2 border-bottom py-2 flex-wrap">
+    <div class="flex-grow-1">
+      <div class="fw-semibold">${esc(it.title || it.code)}</div>
+      <div class="text-muted small">${esc(it.code)} · ${esc(it.subgroup || "")}</div>
+    </div>
+    ${it.tracked
+      ? '<span class="badge bg-success">Tracked</span>'
+      : `<input type="number" min="0" step="1" class="form-control form-control-sm qtyIn" style="width:90px" placeholder="Qty">
+         <button class="btn btn-sm btn-outline-primary addBtn"
+           data-code="${encodeURIComponent(it.code)}"
+           data-title="${encodeURIComponent(it.title||'')}"
+           data-subgroup="${encodeURIComponent(it.subgroup||'')}">Add</button>`}
+  </div>`;
+}
+
+function bindAddBtns(container){
+  container.querySelectorAll(".addBtn").forEach(b => b.addEventListener("click", onAdd));
+}
+
 async function doSearch(){
   const q = document.getElementById("searchInput").value.trim();
   const sg = document.getElementById("subgroupSelect").value;
+  _searchState = {q, sg, page: 1, loaded: 0, total: 0};
   const wrap = document.getElementById("searchResults");
   wrap.innerHTML = '<div class="text-muted small">Searching…</div>';
   try{
-    const d = await jget(`/api/stock/search?q=${encodeURIComponent(q)}&subgroup=${encodeURIComponent(sg)}`);
+    const d = await jget(`/api/stock/search?q=${encodeURIComponent(q)}&subgroup=${encodeURIComponent(sg)}&page=1`);
     const items = d.items || [];
+    _searchState.loaded = items.length;
+    _searchState.total = d.total || items.length;
     if(!items.length){ wrap.innerHTML = '<div class="text-muted small">No items.</div>'; return; }
-    wrap.innerHTML = items.map(it => `
-      <div class="d-flex align-items-center gap-2 border-bottom py-2 flex-wrap">
-        <div class="flex-grow-1">
-          <div class="fw-semibold">${esc(it.title || it.code)}</div>
-          <div class="text-muted small">${esc(it.code)} · ${esc(it.subgroup || "")}</div>
-        </div>
-        ${it.tracked
-          ? '<span class="badge bg-success">Tracked</span>'
-          : `<input type="number" min="0" step="1" class="form-control form-control-sm qtyIn" style="width:90px" placeholder="Qty">
-             <button class="btn btn-sm btn-outline-primary addBtn"
-               data-code="${encodeURIComponent(it.code)}"
-               data-title="${encodeURIComponent(it.title||'')}"
-               data-subgroup="${encodeURIComponent(it.subgroup||'')}">Add</button>`}
-      </div>`).join("");
-    wrap.querySelectorAll(".addBtn").forEach(b => b.addEventListener("click", onAdd));
+    const remaining = _searchState.total - _searchState.loaded;
+    wrap.innerHTML = items.map(itemRowHtml).join("") +
+      (remaining > 0 ? `<div id="loadMoreWrap" class="pt-2">
+        <button class="btn btn-sm btn-outline-secondary" id="loadMoreBtn">Load more (${remaining} remaining)</button>
+      </div>` : `<div class="text-muted small pt-1">${_searchState.total} item(s)</div>`);
+    bindAddBtns(wrap);
+    document.getElementById("loadMoreBtn")?.addEventListener("click", loadMore);
   }catch(e){ wrap.innerHTML = '<div class="text-danger small">Search failed.</div>'; }
+}
+
+async function loadMore(){
+  if(!_searchState) return;
+  _searchState.page += 1;
+  const btn = document.getElementById("loadMoreBtn");
+  if(btn) btn.disabled = true;
+  try{
+    const {q, sg, page} = _searchState;
+    const d = await jget(`/api/stock/search?q=${encodeURIComponent(q)}&subgroup=${encodeURIComponent(sg)}&page=${page}`);
+    const items = d.items || [];
+    _searchState.loaded += items.length;
+    const wrap = document.getElementById("searchResults");
+    const moreWrap = document.getElementById("loadMoreWrap");
+    const frag = document.createElement("div");
+    frag.innerHTML = items.map(itemRowHtml).join("");
+    bindAddBtns(frag);
+    if(moreWrap) wrap.insertBefore(frag, moreWrap);
+    const remaining = _searchState.total - _searchState.loaded;
+    if(remaining > 0 && moreWrap){
+      moreWrap.innerHTML = `<button class="btn btn-sm btn-outline-secondary" id="loadMoreBtn">Load more (${remaining} remaining)</button>`;
+      document.getElementById("loadMoreBtn").addEventListener("click", loadMore);
+    } else if(moreWrap){
+      moreWrap.remove();
+    }
+  }catch(e){ if(btn){ btn.disabled = false; btn.textContent = "Retry"; } }
 }
 
 async function onAdd(e){
