@@ -75,17 +75,25 @@ def build_units_sold_query(pairs: Tuple[Tuple[str, object], ...]) -> Tuple[str, 
     for code, start in pairs:
         params.append(str(code))
         params.append(start)
+    # UNION ALL covers both today's live receipts (dbo.RECEIPT/RECEIPT_CONTENTS) and
+    # finalized historical receipts (dbo.HISTORIC_RECEIPT/HISTORIC_RECEIPT_CONTENTS).
+    # Without the live tables, today's sales would never deduct from stock until end-of-day.
     # CAST(c.ITM_CODE AS nvarchar(128)): ITM_CODE is not reliably string-typed in the POS
-    # schema — every other query in this codebase casts it before comparing. Without the
-    # cast, a non-numeric code vs an int column raises a conversion error (caught upstream
-    # -> silent "live unavailable") and defeats the ITM_CODE index.
+    # schema — every other query in this codebase casts it before comparing.
     sql = f"""
         SET NOCOUNT ON;
         SELECT v.itm_code AS itm_code, SUM(c.ITM_QUANTITY) AS sold
         FROM (VALUES {values_rows}) AS v(itm_code, win_start)
-        JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON CAST(c.ITM_CODE AS nvarchar(128)) = v.itm_code
-        JOIN dbo.HISTORIC_RECEIPT r
-          ON r.RCPT_ID = c.RCPT_ID AND r.RCPT_DATE >= v.win_start
+        JOIN (
+            SELECT RCPT_ID, ITM_CODE, ITM_QUANTITY FROM dbo.HISTORIC_RECEIPT_CONTENTS
+            UNION ALL
+            SELECT RCPT_ID, ITM_CODE, ITM_QUANTITY FROM dbo.RECEIPT_CONTENTS
+        ) c ON CAST(c.ITM_CODE AS nvarchar(128)) = v.itm_code
+        JOIN (
+            SELECT RCPT_ID, RCPT_DATE FROM dbo.HISTORIC_RECEIPT
+            UNION ALL
+            SELECT RCPT_ID, RCPT_DATE FROM dbo.RECEIPT
+        ) r ON r.RCPT_ID = c.RCPT_ID AND r.RCPT_DATE >= v.win_start
         GROUP BY v.itm_code;
     """
     return sql, params
