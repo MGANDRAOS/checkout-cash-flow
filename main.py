@@ -38,6 +38,7 @@ from routes.items_explorer import items_explorer_bp
 from routes.dead_items import dead_items_bp
 from routes.reorder_radar import reorder_radar_bp
 from routes.invoices import invoices_bp
+from routes.stock import stock_bp
 
 from helpers_intelligence import (
     get_pos_sales_total_by_range,
@@ -339,6 +340,7 @@ app.register_blueprint(items_explorer_bp)
 app.register_blueprint(dead_items_bp)
 app.register_blueprint(reorder_radar_bp)
 app.register_blueprint(invoices_bp)
+app.register_blueprint(stock_bp)
 
 
 @app.before_request

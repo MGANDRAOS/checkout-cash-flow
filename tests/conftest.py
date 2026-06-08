@@ -26,13 +26,8 @@ def app():
 
     # Import here so model classes are registered on db.metadata before create_all.
     import models  # noqa: F401
-    # routes/stock.py is added in a later task; the try/except guard below can
-    # be removed once that task lands and the blueprint exists.
-    try:
-        from routes.stock import stock_bp
-        app.register_blueprint(stock_bp)
-    except ImportError:
-        pass
+    from routes.stock import stock_bp
+    app.register_blueprint(stock_bp)
 
     with app.app_context():
         _db.create_all()
