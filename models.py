@@ -109,8 +109,26 @@ class StockEvent(db.Model):
     event_date = db.Column(db.Date, nullable=False, index=True)
     source = db.Column(db.String(16), nullable=False, default="manual")  # 'manual' | 'invoice'
     invoice_id = db.Column(db.Integer, nullable=True)  # Phase 2 seam
+    unit_cost_cents = db.Column(db.Integer, nullable=True)   # per-unit cost from invoice (Phase 2)
+    batch_id = db.Column(db.String(36), nullable=True, index=True)  # groups one invoice import
     note = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def __repr__(self):
         return f"<StockEvent item={self.stock_item_id} {self.event_type} qty={self.qty} {self.event_date}>"
+
+
+class StockItemAlias(db.Model):
+    """Remembers that an invoice's printed item text maps to a POS item code.
+
+    Lets repeat invoices auto-match instantly. Global (not per-supplier) by design.
+    """
+    __tablename__ = "stock_item_aliases"
+
+    id = db.Column(db.Integer, primary_key=True)
+    raw_description = db.Column(db.String(255), nullable=False, unique=True, index=True)
+    itm_code = db.Column(db.String(128), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<StockItemAlias {self.raw_description!r} -> {self.itm_code}>"
