@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3" id="receiveApp">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0"><i class="bi bi-upload"></i> Receive from invoice</h4>
+    <a href="/stock" class="btn btn-sm btn-outline-secondary">← Back to Stock</a>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-8">
+          <label class="form-label small mb-1">Invoice photo (JPG/PNG)</label>
+          <input id="fileInput" type="file" accept="image/*" class="form-control">
+        </div>
+        <div class="col-12 col-md-4">
+          <button id="scanBtn" class="btn btn-primary w-100"><i class="bi bi-magic"></i> Read invoice</button>
+        </div>
+      </div>
+      <div id="scanStatus" class="small text-muted mt-2"></div>
+    </div>
+  </div>
+
+  <div id="reviewWrap"></div>
+</div>
+
+<script>
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+let LINES = [];
+
+async function scan(){
+  const f = document.getElementById("fileInput").files[0];
+  if(!f){ alert("Choose a photo first."); return; }
+  const status = document.getElementById("scanStatus");
+  const btn = document.getElementById("scanBtn");
+  btn.disabled = true; status.textContent = "Reading invoice… this can take a few seconds.";
+  try{
+    const fd = new FormData(); fd.append("image", f);
+    const r = await fetch("/api/stock/receive/scan", {method:"POST", body:fd});
+    const d = await r.json();
+    if(!r.ok || !d.ok){ status.innerHTML = '<span class="text-danger">'+esc(d.error||"Failed to read invoice.")+'</span>'; return; }
+    LINES = d.lines || [];
+    status.textContent = `Found ${LINES.length} line(s). Review and confirm below.`;
+    renderReview();
+  }catch(e){ status.innerHTML = '<span class="text-danger">Network error.</span>'; }
+  finally{ btn.disabled = false; }
+}
+
+function lineRow(ln, i){
+  const m = ln.match || null;
+  const matchLabel = m ? `${esc(m.title || m.code)} <span class="text-muted">(${esc(m.code)})</span>` : '<span class="text-danger">No match — search</span>';
+  const badge = m ? (ln.tracked ? '<span class="badge bg-secondary">Tracked</span>' : '<span class="badge bg-info">New</span>') : '';
+  return `<tr data-i="${i}">
+    <td><div class="small text-muted">${esc(ln.raw_description)}</div></td>
+    <td>${matchLabel} ${badge}
+        <div><input class="form-control form-control-sm mt-1 matchSearch" placeholder="change match…" style="max-width:240px"></div>
+        <div class="matchResults"></div></td>
+    <td><input type="number" min="0" step="1" value="${ln.qty ?? ''}" class="form-control form-control-sm qtyIn" style="width:90px"></td>
+    <td><input type="number" min="0" step="0.01" value="${ln.unit_cost ?? ''}" class="form-control form-control-sm costIn" style="width:100px"></td>
+    <td><button class="btn btn-sm btn-outline-danger dropBtn">Drop</button></td>
+  </tr>`;
+}
+
+function renderReview(){
+  const wrap = document.getElementById("reviewWrap");
+  if(!LINES.length){ wrap.innerHTML = '<div class="text-muted">No line items found.</div>'; return; }
+  wrap.innerHTML = `
+    <div class="table-responsive"><table class="table align-middle">
+      <thead><tr><th>Invoice text</th><th>Matched item</th><th>Qty</th><th>Unit cost</th><th></th></tr></thead>
+      <tbody>${LINES.map(lineRow).join("")}</tbody>
+    </table></div>
+    <button id="confirmBtn" class="btn btn-success"><i class="bi bi-check2-circle"></i> Confirm & add to stock</button>
+    <div id="confirmStatus" class="mt-2 small"></div>`;
+
+  wrap.querySelectorAll(".dropBtn").forEach(b => b.addEventListener("click", e => {
+    const tr = e.currentTarget.closest("tr"); LINES.splice(+tr.dataset.i, 1); renderReview();
+  }));
+  wrap.querySelectorAll(".qtyIn").forEach(inp => inp.addEventListener("change", e => {
+    LINES[+e.currentTarget.closest("tr").dataset.i].qty = parseFloat(e.currentTarget.value);
+  }));
+  wrap.querySelectorAll(".costIn").forEach(inp => inp.addEventListener("change", e => {
+    const v = parseFloat(e.currentTarget.value); LINES[+e.currentTarget.closest("tr").dataset.i].unit_cost = isNaN(v)?null:v;
+  }));
+  wrap.querySelectorAll(".matchSearch").forEach(inp => inp.addEventListener("keyup", debounceSearch));
+  document.getElementById("confirmBtn").addEventListener("click", confirmReceive);
+}
+
+let searchTimer = null;
+function debounceSearch(e){
+  clearTimeout(searchTimer);
+  const inp = e.currentTarget;
+  searchTimer = setTimeout(async () => {
+    const q = inp.value.trim(); if(q.length < 2) return;
+    const tr = inp.closest("tr");
+    let d;
+    try{ d = await (await fetch(`/api/stock/search?q=${encodeURIComponent(q)}`)).json(); }
+    catch(e){ return; }
+    const box = tr.querySelector(".matchResults");
+    box.innerHTML = (d.items||[]).slice(0,6).map(it =>
+      `<button class="btn btn-sm btn-outline-primary me-1 mt-1 pickBtn" data-code="${encodeURIComponent(it.code)}" data-title="${encodeURIComponent(it.title||'')}" data-subgroup="${encodeURIComponent(it.subgroup||'')}">${esc(it.title||it.code)}</button>`
+    ).join("");
+    box.querySelectorAll(".pickBtn").forEach(b => b.addEventListener("click", ev => {
+      const i = +tr.dataset.i, ds = ev.currentTarget.dataset;
+      LINES[i].match = {code: decodeURIComponent(ds.code), title: decodeURIComponent(ds.title), subgroup: decodeURIComponent(ds.subgroup), score: 1};
+      renderReview();
+    }));
+  }, 350);
+}
+
+async function confirmReceive(){
+  const payload = {lines: LINES.filter(l => l.match && l.qty > 0).map(l => ({
+    itm_code: l.match.code, title: l.match.title, subgroup: l.match.subgroup,
+    qty: l.qty, unit_cost: l.unit_cost, raw_description: l.raw_description,
+  }))};
+  const status = document.getElementById("confirmStatus");
+  if(!payload.lines.length){ status.innerHTML = '<span class="text-danger">Nothing to confirm — match items and set quantities.</span>'; return; }
+  let d;
+  try{
+    const r = await fetch("/api/stock/receive/confirm", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+    d = await r.json();
+    if(!r.ok || !d.ok){ status.innerHTML = '<span class="text-danger">'+esc(d.error||"Failed.")+'</span>'; return; }
+  }catch(e){ status.innerHTML = '<span class="text-danger">Network error — nothing was saved. Try again.</span>'; return; }
+  status.innerHTML = `<span class="text-success">Added ${d.received} item(s) to stock.</span>
+    <button class="btn btn-sm btn-outline-danger ms-2" id="undoBtn">Undo</button>
+    <a class="btn btn-sm btn-primary ms-1" href="/stock">View stock</a>`;
+  document.getElementById("undoBtn").addEventListener("click", async () => {
+    try{
+      const ur = await fetch("/api/stock/receive/undo", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({batch_id: d.batch_id})});
+      const ud = await ur.json();
+      status.innerHTML = (ur.ok && ud.ok)
+        ? '<span class="text-muted">Import undone.</span>'
+        : '<span class="text-danger">Undo failed.</span>';
+    }catch(e){ status.innerHTML = '<span class="text-danger">Undo failed — network error.</span>'; }
+  });
+  LINES = []; document.querySelector("#reviewWrap table tbody").innerHTML = "";
+}
+
+document.getElementById("scanBtn").addEventListener("click", scan);
+</script>
+{% endblock %}
