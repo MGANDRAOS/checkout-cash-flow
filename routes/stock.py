@@ -112,7 +112,7 @@ def _serialize_items():
             "q0": info["q0"], "d0": str(info["d0"]) if info["d0"] else None,
             "sold": info["sold"], "has_baseline": info["has_baseline"],
         })
-    rows.sort(key=lambda r: (_STATUS_ORDER.get(r["status"], 9), (r["title"] or "").lower()))
+    rows.sort(key=lambda r: (float("inf") if r["live"] is None else r["live"], (r["title"] or "").lower()))
     return rows, live_unavailable
 
 
