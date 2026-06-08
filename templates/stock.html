@@ -68,13 +68,15 @@ async function loadSubgroups(){
 let _searchState = null;
 
 function itemRowHtml(it){
+  const tick = it.tracked ? '<i class="bi bi-check-circle-fill text-success me-1"></i>' : '';
+  const meta = [esc(it.code), esc(it.subgroup || ""), it.last_purchased ? 'Last: ' + esc(it.last_purchased) : ''].filter(Boolean).join(' · ');
   return `<div class="d-flex align-items-center gap-2 border-bottom py-2 flex-wrap">
     <div class="flex-grow-1">
-      <div class="fw-semibold">${esc(it.title || it.code)}</div>
-      <div class="text-muted small">${esc(it.code)} · ${esc(it.subgroup || "")}</div>
+      <div class="fw-semibold">${tick}${esc(it.title || it.code)}</div>
+      <div class="text-muted small">${meta}</div>
     </div>
     ${it.tracked
-      ? '<span class="badge bg-success">Tracked</span>'
+      ? ''
       : `<input type="number" min="0" step="1" class="form-control form-control-sm qtyIn" style="width:90px" placeholder="Qty">
          <button class="btn btn-sm btn-outline-primary addBtn"
            data-code="${encodeURIComponent(it.code)}"
@@ -137,7 +139,8 @@ async function loadMore(){
 
 async function onAdd(e){
   const btn = e.currentTarget;
-  const qtyEl = btn.parentElement.querySelector(".qtyIn");
+  const row = btn.closest(".d-flex");
+  const qtyEl = row.querySelector(".qtyIn");
   const qty = parseFloat(qtyEl && qtyEl.value);
   if(isNaN(qty)){ alert("Enter a quantity."); return; }
   btn.disabled = true;
@@ -147,8 +150,16 @@ async function onAdd(e){
     subgroup: decodeURIComponent(btn.dataset.subgroup),
     qty: qty,
   });
-  if(res.ok){ await doSearch(); await loadTracked(); }
-  else { alert(res.error || "Failed."); btn.disabled = false; }
+  if(res.ok){
+    qtyEl.remove();
+    btn.remove();
+    const titleEl = row.querySelector(".fw-semibold");
+    titleEl.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>' + titleEl.innerHTML;
+    loadTracked();
+  } else {
+    alert(res.error || "Failed.");
+    btn.disabled = false;
+  }
 }
 
 function rowHtml(r){
