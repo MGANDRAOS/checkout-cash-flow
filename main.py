@@ -309,6 +309,8 @@ def license_expired_page():
 # ───────────────────────────────
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    if session.get("logged_in"):
+        return redirect("/")
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
