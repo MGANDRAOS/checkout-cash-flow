@@ -107,6 +107,10 @@ class StockEvent(db.Model):
     event_type = db.Column(db.String(16), nullable=False)   # 'count' | 'receive'
     qty = db.Column(db.Float, nullable=False)
     event_date = db.Column(db.Date, nullable=False, index=True)
+    # Exact moment a 'count' was taken, in LOCAL time (comparable to POS RCPT_DATE).
+    # The deduction window starts here, so a count taken any time of day only
+    # deducts sales AFTER it. NULL on receives and on legacy counts (-> 08:00 fallback).
+    counted_at = db.Column(db.DateTime, nullable=True)
     source = db.Column(db.String(16), nullable=False, default="manual")  # 'manual' | 'invoice'
     invoice_id = db.Column(db.Integer, nullable=True)  # Phase 2 seam
     unit_cost_cents = db.Column(db.Integer, nullable=True)   # per-unit cost from invoice (Phase 2)

@@ -7,12 +7,28 @@ from helpers_stock import (
     status_for,
     compute_live,
     build_units_sold_query,
+    count_window_start,
 )
 
 
-def _ev(event_type, qty, event_date, created_at):
+def _ev(event_type, qty, event_date, created_at, counted_at=None):
     return SimpleNamespace(event_type=event_type, qty=qty,
-                           event_date=event_date, created_at=created_at)
+                           event_date=event_date, created_at=created_at,
+                           counted_at=counted_at)
+
+
+def test_count_window_start_uses_counted_at_when_present():
+    # A 15:00 count -> the window starts at the exact count moment, NOT 08:00,
+    # so morning sales already in the counted number are not re-deducted.
+    ts = datetime(2026, 6, 14, 15, 30)
+    ev = _ev("count", 20, date(2026, 6, 14), datetime(2026, 6, 14, 15, 30), counted_at=ts)
+    assert count_window_start(ev) == ts
+
+
+def test_count_window_start_falls_back_to_0800_for_legacy_counts():
+    # Legacy count with no counted_at -> business-day 08:00 boundary (old behaviour).
+    ev = _ev("count", 20, date(2026, 6, 14), datetime(2026, 6, 14, 8), counted_at=None)
+    assert count_window_start(ev) == datetime(2026, 6, 14, 8, 0, 0)
 
 
 def test_latest_count_picks_newest_by_date_then_created_at():

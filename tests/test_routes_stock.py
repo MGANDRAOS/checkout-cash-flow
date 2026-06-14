@@ -152,8 +152,48 @@ def test_search_marks_tracked_items(client):
         {"code": "ALM330", "title": "Almaza 330", "subgroup": "Beer"},
         {"code": "PEPSI1L", "title": "Pepsi 1L", "subgroup": "Soda"},
     ], "total": 2, "page": 1, "page_size": 25}
-    with patch("routes.stock.list_items", return_value=fake):
+    # live_last_sold hits the POS; mock it so the test stays offline and fast.
+    with patch("routes.stock.list_items", return_value=fake), \
+         patch("routes.stock.live_last_sold", return_value={}):
         items = client.get("/api/stock/search?q=a").get_json()["items"]
     by_code = {it["code"]: it["tracked"] for it in items}
     assert by_code["ALM330"] is True
     assert by_code["PEPSI1L"] is False
+
+
+def test_set_count_stamps_counted_at(client, app):
+    _add(client, qty=22, threshold=6)
+    with app.app_context():
+        sid = StockItem.query.filter_by(itm_code="ALM330").one().id
+    r = client.post("/api/stock/set-count", json={"stock_item_id": sid, "qty": 30})
+    assert r.status_code == 200
+    with app.app_context():
+        ev = (StockEvent.query
+              .filter_by(stock_item_id=sid, event_type="count", qty=30).one())
+        assert ev.counted_at is not None
+
+
+def test_add_stamps_counted_at(client, app):
+    _add(client, qty=22)
+    with app.app_context():
+        ev = StockEvent.query.filter_by(event_type="count").one()
+        assert ev.counted_at is not None
+
+
+def test_list_window_uses_counted_at_not_0800(client, app):
+    # A mid-day count must make the deduction window start at the count moment,
+    # so units_sold_since is asked for sales since counted_at (not the 08:00 boundary).
+    _add(client, qty=22, threshold=6)
+    with app.app_context():
+        ev = StockEvent.query.filter_by(event_type="count").one()
+        expected_start = ev.counted_at
+        code = StockItem.query.filter_by(itm_code="ALM330").one().itm_code
+    captured = {}
+
+    def _fake(pairs):
+        captured["pairs"] = pairs
+        return {}
+
+    with patch("routes.stock.units_sold_since", side_effect=_fake):
+        client.get("/api/stock/list")
+    assert captured["pairs"] == ((code, expected_start),)

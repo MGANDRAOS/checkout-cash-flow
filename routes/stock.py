@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from flask import Blueprint, jsonify, render_template, request
 
 from models import db, StockItem, StockEvent, get_setting
-from helpers_stock import units_sold_since, compute_live, latest_count, live_last_sold
-from pos_dates import biz_date_range_8h
+from helpers_stock import (
+    units_sold_since, compute_live, latest_count, live_last_sold, count_window_start,
+)
 from helpers_items import list_items, list_subgroups
 from helpers_invoice_ocr import extract_invoice_lines
 from helpers_invoice_match import load_catalog, match_lines, upsert_alias
@@ -101,13 +102,12 @@ def _serialize_items():
     for s in items:
         c = latest_count(events_by_item[s.id])
         if c is not None:
-            # 08:00 boundary (not the 07:00 used by intelligence KPIs): deduction must
-            # match the daily sales totals the owner sees on the dashboard, which use
-            # biz_date_range_8h. Open-ended (>= start) so all sales since the count subtract.
-            # NOTE: a count is anchored to the START of its business day (counts are taken at
-            # morning/closing per the agreed workflow). A mid-day recount would over-deduct
-            # that morning's sales until the next day — acceptable for Phase 1.
-            start, _ = biz_date_range_8h(c.event_date)
+            # Window starts at the exact moment the count was taken (counted_at), so a
+            # count set any time of day only deducts sales AFTER it; the counted number
+            # already reflects earlier sales. Legacy counts with no counted_at fall back
+            # to the business-day 08:00 boundary. (Both are local time, comparable to
+            # POS RCPT_DATE; the 08:00 boundary matches the dashboard's daily totals.)
+            start = count_window_start(c)
             pairs.append((s.itm_code, start))
 
     sold_map, live_unavailable = {}, False
@@ -181,7 +181,8 @@ def api_stock_add():
         db.session.flush()
 
     db.session.add(StockEvent(stock_item_id=si.id, event_type="count", qty=qty,
-                              event_date=date.today(), source="manual"))
+                              event_date=date.today(), counted_at=datetime.now(),
+                              source="manual"))
     db.session.commit()
     return jsonify({"ok": True, "id": si.id})
 
@@ -199,7 +200,8 @@ def api_stock_set_count():
     if qty < 0:
         return jsonify({"ok": False, "error": "qty must be >= 0"}), 400
     db.session.add(StockEvent(stock_item_id=si.id, event_type="count", qty=qty,
-                              event_date=date.today(), source="manual"))
+                              event_date=date.today(), counted_at=datetime.now(),
+                              source="manual"))
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -314,6 +316,7 @@ def api_stock_receive_confirm():
                 event_type = "count"  # first delivery is the baseline for a new item
             db.session.add(StockEvent(stock_item_id=si.id, event_type=event_type, qty=qty,
                                       event_date=date.today(), source="invoice",
+                                      counted_at=(datetime.now() if event_type == "count" else None),
                                       unit_cost_cents=cost_cents, batch_id=batch_id))
             raw = (str(ln.get("raw_description") or "")).strip()
             if raw:

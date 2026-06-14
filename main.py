@@ -60,6 +60,28 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
 
+
+def _ensure_schema_migrations():
+    """Idempotent additive column migrations for the local SQLite DB.
+
+    create_all() never ALTERs existing tables, and the server runs via waitress
+    (which skips the __main__ create_all), so additive columns must be applied at
+    import time. Safe to run repeatedly: a no-op when the column already exists or
+    the table does not yet exist. Keep changes additive (ADD COLUMN) only.
+    """
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    if "stock_events" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("stock_events")}
+    if "counted_at" not in cols:
+        db.session.execute(text("ALTER TABLE stock_events ADD COLUMN counted_at DATETIME"))
+        db.session.commit()
+
+
+with app.app_context():
+    _ensure_schema_migrations()
+
 # Start license heartbeat daemon
 # start_heartbeat_thread()
 

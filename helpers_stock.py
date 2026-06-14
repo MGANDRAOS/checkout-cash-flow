@@ -34,6 +34,20 @@ def receives_after(events: Iterable, count_event) -> float:
     return total
 
 
+def count_window_start(count_event) -> object:
+    """Start of the 'units sold since' window for a count = the moment it was taken.
+
+    Uses the count's `counted_at` (exact local timestamp) when present, so a count
+    taken at any time of day only deducts sales AFTER it. Falls back to the count's
+    business-day 08:00 start for legacy counts saved before `counted_at` existed.
+    """
+    ca = getattr(count_event, "counted_at", None)
+    if ca is not None:
+        return ca
+    from pos_dates import biz_date_range_8h  # lazy: keep this module import-light
+    return biz_date_range_8h(count_event.event_date)[0]
+
+
 def status_for(live: float, threshold: float) -> str:
     """Out (<=0), Low (<=threshold), else OK."""
     if live <= 0:
