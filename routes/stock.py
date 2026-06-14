@@ -7,7 +7,7 @@ from datetime import date
 from flask import Blueprint, jsonify, render_template, request
 
 from models import db, StockItem, StockEvent, get_setting
-from helpers_stock import units_sold_since, compute_live, latest_count
+from helpers_stock import units_sold_since, compute_live, latest_count, live_last_sold
 from pos_dates import biz_date_range_8h
 from helpers_items import list_items, list_subgroups
 from helpers_invoice_ocr import extract_invoice_lines
@@ -64,9 +64,27 @@ def api_stock_search():
     except (TypeError, ValueError):
         page = 1
     payload = list_items(page=page, page_size=25, q=q, subgroup_id=subgroup_id)
+    items = payload.get("items", [])
     tracked = {s.itm_code for s in StockItem.query.filter_by(active=True).all()}
-    for it in payload.get("items", []):
+    # list_items' "last_purchased" reads only the archived HISTORIC_RECEIPT tables, so an
+    # item whose only sale is today (still in the live dbo.RECEIPT tables) shows no date.
+    # Overlay today's live last-sold for the items on this page so the Stock search matches
+    # the live stock count, which already unions both table sets. Stock-page only by design.
+    codes = tuple(sorted({str(it.get("code")) for it in items if it.get("code") not in (None, "")}))
+    try:
+        live_sold = live_last_sold(codes)
+    except Exception:
+        # A POS hiccup here must not break search; fall back to historic-only dates.
+        log.exception("live_last_sold failed; serving historic last-purchased only")
+        live_sold = {}
+    for it in items:
         it["tracked"] = it.get("code") in tracked
+        lv = live_sold.get(str(it.get("code")))
+        if lv is not None:
+            lv_str = lv.strftime("%Y-%m-%d %H:%M") if hasattr(lv, "strftime") else str(lv)
+            # Both formats sort chronologically as strings; keep the most recent.
+            if not it.get("last_purchased") or lv_str > it["last_purchased"]:
+                it["last_purchased"] = lv_str
     return jsonify(payload)
 
 

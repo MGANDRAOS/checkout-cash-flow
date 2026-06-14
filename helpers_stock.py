@@ -118,3 +118,40 @@ def units_sold_since(pairs: Tuple[Tuple[str, object], ...]) -> Dict[str, float]:
         for row in cur.fetchall():
             out[str(row.itm_code)] = float(row.sold or 0.0)
     return out
+
+
+@ttl_cache(seconds=30)
+def live_last_sold(codes: Tuple[str, ...]) -> Dict[str, object]:
+    """Most-recent sale datetime per item from TODAY's live receipts only.
+
+    The Stock search's "last purchased" comes from helpers_items.list_items, whose
+    query reads only the archived dbo.HISTORIC_RECEIPT* tables -> an item whose only
+    sale is today (still in the live dbo.RECEIPT* tables) shows no date. This fills
+    that gap, mirroring units_sold_since which already unions both table sets.
+
+    `codes` MUST be a sorted tuple so the ttl_cache key is stable across reloads.
+    Returns {} for no codes; items with no live sale simply won't appear in the dict.
+    CAST(c.ITM_CODE AS nvarchar(128)): ITM_CODE is not reliably string-typed in the POS
+    schema, so every comparison casts it first (same as build_units_sold_query).
+    """
+    codes = tuple(str(c) for c in codes if c not in (None, ""))
+    if not codes:
+        return {}
+    placeholders = ",".join(["?"] * len(codes))
+    sql = f"""
+        SET NOCOUNT ON;
+        SELECT CAST(c.ITM_CODE AS nvarchar(128)) AS itm_code, MAX(r.RCPT_DATE) AS last_sold
+        FROM dbo.RECEIPT_CONTENTS c
+        JOIN dbo.RECEIPT r ON r.RCPT_ID = c.RCPT_ID
+        WHERE CAST(c.ITM_CODE AS nvarchar(128)) IN ({placeholders})
+        GROUP BY CAST(c.ITM_CODE AS nvarchar(128));
+    """
+    from helpers_intelligence import _connect  # lazy: avoids pyodbc import at module load
+    out: Dict[str, object] = {}
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, codes)
+        for row in cur.fetchall():
+            if row.last_sold is not None:
+                out[str(row.itm_code)] = row.last_sold
+    return out
