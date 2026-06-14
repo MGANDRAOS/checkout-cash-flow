@@ -6,6 +6,7 @@ POS is read-only and is NEVER used for stock levels (its stock field is unusable
 """
 from __future__ import annotations
 
+from datetime import date as _date
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from cache_utils import ttl_cache
@@ -74,6 +75,76 @@ def compute_live(events: Iterable, sold_units: float, threshold: float) -> dict:
     live = c.qty + r - sold
     return {"live": live, "status": status_for(live, threshold), "q0": c.qty,
             "d0": c.event_date, "receives": r, "sold": sold, "has_baseline": True}
+
+
+# Days of demand a reorder suggestion aims to cover, on top of the alert threshold.
+_REORDER_COVER_DAYS = 14
+
+
+def latest_receive_cost_cents(events: Iterable) -> Optional[int]:
+    """Most recent receive's unit_cost_cents (current cost basis), or None."""
+    costed = [e for e in events
+              if e.event_type == "receive" and getattr(e, "unit_cost_cents", None) is not None]
+    if not costed:
+        return None
+    return max(costed, key=lambda e: (e.event_date, e.created_at)).unit_cost_cents
+
+
+def stock_analytics(events: Iterable, info: dict, threshold: float,
+                    today: Optional[object] = None) -> dict:
+    """Derived per-item metrics from the ledger + a compute_live() result.
+
+    Pure Python (no DB/POS). Returns sales velocity (units/day over the observed
+    window), days of cover, a reorder suggestion, the current cost basis and the
+    inventory value at that basis. Safe to call on items with no baseline.
+    """
+    events = list(events)
+    receives = [e for e in events if e.event_type == "receive"]
+    counts = [e for e in events if e.event_type == "count"]
+    out = {
+        "velocity": None, "days_cover": None, "days_since_baseline": None,
+        "reorder_qty": 0, "needs_reorder": False,
+        "last_cost_cents": latest_receive_cost_cents(events), "value_cents": None,
+        "receive_count": len(receives), "count_count": len(counts),
+        "received_since": float(info.get("receives", 0.0) or 0.0),
+        "last_count_date": None,
+    }
+
+    if not info.get("has_baseline"):
+        return out
+
+    d0 = info.get("d0")
+    out["last_count_date"] = str(d0) if d0 else None
+
+    today = today or _date.today()
+    try:
+        days = max((today - d0).days, 0)
+    except Exception:
+        days = 0
+    out["days_since_baseline"] = days
+
+    sold = float(info.get("sold", 0.0) or 0.0)
+    live = info.get("live")
+    eff_days = max(days, 1)  # avoid div-by-zero and single-day velocity spikes
+    velocity = sold / eff_days if sold > 0 else 0.0
+    out["velocity"] = round(velocity, 3)
+
+    if velocity > 0 and live is not None:
+        out["days_cover"] = round(max(live, 0.0) / velocity, 1)
+    # velocity == 0 with stock on hand -> cover is effectively infinite (left None)
+
+    if out["last_cost_cents"] is not None and live is not None:
+        out["value_cents"] = int(round(max(live, 0.0) * out["last_cost_cents"]))
+
+    # Reorder when at/under the alert threshold or within the cover horizon.
+    if live is not None:
+        target = threshold + velocity * _REORDER_COVER_DAYS
+        need = target - live
+        within_horizon = out["days_cover"] is not None and out["days_cover"] <= _REORDER_COVER_DAYS
+        if need > 0 and (live <= threshold or within_horizon):
+            out["needs_reorder"] = True
+            out["reorder_qty"] = int(need) + (1 if need > int(need) else 0)  # ceil
+    return out
 
 
 def build_units_sold_query(pairs: Tuple[Tuple[str, object], ...]) -> Tuple[str, List[object]]:

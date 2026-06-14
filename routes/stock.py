@@ -9,8 +9,10 @@ from flask import Blueprint, jsonify, render_template, request
 from models import db, StockItem, StockEvent, get_setting
 from helpers_stock import (
     units_sold_since, compute_live, latest_count, live_last_sold, count_window_start,
+    stock_analytics,
 )
 from helpers_items import list_items, list_subgroups
+from config import CURRENCY
 from helpers_invoice_ocr import extract_invoice_lines
 from helpers_invoice_match import load_catalog, match_lines, upsert_alias
 
@@ -44,7 +46,7 @@ def _get_item(data):
 
 @stock_bp.get("/stock")
 def stock_page():
-    return render_template("stock.html")
+    return render_template("stock.html", currency=CURRENCY)
 
 
 @stock_bp.get("/api/stock/subgroups")
@@ -121,14 +123,23 @@ def _serialize_items():
 
     rows = []
     for s in items:
-        info = compute_live(events_by_item[s.id], sold_map.get(s.itm_code, 0.0),
-                            s.alert_threshold)
+        events = events_by_item[s.id]
+        info = compute_live(events, sold_map.get(s.itm_code, 0.0), s.alert_threshold)
         status = "unknown" if live_unavailable else info["status"]
+        a = stock_analytics(events, info, s.alert_threshold)
         rows.append({
             "id": s.id, "itm_code": s.itm_code, "title": s.title, "subgroup": s.subgroup,
             "threshold": s.alert_threshold, "live": info["live"], "status": status,
             "q0": info["q0"], "d0": str(info["d0"]) if info["d0"] else None,
             "sold": info["sold"], "has_baseline": info["has_baseline"],
+            "receives_since": info["receives"],
+            # Derived analytics (pure arithmetic — no extra POS hit):
+            "velocity": a["velocity"], "days_cover": a["days_cover"],
+            "days_since_baseline": a["days_since_baseline"],
+            "reorder_qty": a["reorder_qty"], "needs_reorder": a["needs_reorder"],
+            "last_cost_cents": a["last_cost_cents"], "value_cents": a["value_cents"],
+            "receive_count": a["receive_count"], "count_count": a["count_count"],
+            "last_count_date": a["last_count_date"],
         })
     rows.sort(key=lambda r: (float("inf") if r["live"] is None else r["live"], (r["title"] or "").lower()))
     return rows, live_unavailable
@@ -138,6 +149,73 @@ def _serialize_items():
 def api_stock_list():
     rows, live_unavailable = _serialize_items()
     return jsonify({"items": rows, "live_unavailable": live_unavailable})
+
+
+def _fmt_dt(dt, fmt="%Y-%m-%d %H:%M"):
+    return dt.strftime(fmt) if dt is not None and hasattr(dt, "strftime") else None
+
+
+@stock_bp.get("/api/stock/item/<int:item_id>")
+def api_stock_item(item_id):
+    """Full detail for one tracked item: live math, analytics, and the event ledger.
+
+    Lazily loaded when a row is expanded so the main list stays snappy. Uses local
+    SQLite for the ledger and ONE cached POS round-trip for this item's live sales.
+    """
+    si = db.session.get(StockItem, item_id)
+    if si is None or not si.active:
+        return jsonify({"ok": False, "error": "item not found"}), 404
+
+    events = StockEvent.query.filter_by(stock_item_id=si.id).all()
+    c = latest_count(events)
+    sold_map, live_unavailable = {}, False
+    if c is not None:
+        try:
+            sold_map = units_sold_since(((si.itm_code, count_window_start(c)),))
+        except Exception:
+            log.exception("units_sold_since failed for item detail %s", si.id)
+            live_unavailable = True
+    info = compute_live(events, sold_map.get(si.itm_code, 0.0), si.alert_threshold)
+    status = "unknown" if live_unavailable else info["status"]
+    analytics = stock_analytics(events, info, si.alert_threshold)
+
+    last_sold = None
+    try:
+        ls = live_last_sold((si.itm_code,)).get(si.itm_code)
+        last_sold = _fmt_dt(ls)
+    except Exception:
+        log.exception("live_last_sold failed for item detail %s", si.id)
+
+    # Ledger newest-first; receives carry a line total at their recorded unit cost.
+    ledger = []
+    for e in sorted(events, key=lambda e: (e.event_date, e.created_at), reverse=True):
+        is_receive = e.event_type == "receive"
+        line_total = (int(round(e.qty * e.unit_cost_cents))
+                      if is_receive and e.unit_cost_cents is not None else None)
+        ledger.append({
+            "id": e.id, "type": e.event_type, "qty": e.qty, "date": str(e.event_date),
+            "counted_at": _fmt_dt(e.counted_at), "source": e.source,
+            "unit_cost_cents": e.unit_cost_cents, "line_total_cents": line_total,
+            "batch_id": e.batch_id, "note": e.note, "created_at": _fmt_dt(e.created_at),
+        })
+    receives = [l for l in ledger if l["type"] == "receive"]
+    counts = [l for l in ledger if l["type"] == "count"]
+    received_units = sum(l["qty"] for l in receives)
+    received_value = sum(l["line_total_cents"] or 0 for l in receives)
+
+    return jsonify({
+        "ok": True,
+        "item": {"id": si.id, "itm_code": si.itm_code, "title": si.title,
+                 "subgroup": si.subgroup, "threshold": si.alert_threshold,
+                 "created_at": _fmt_dt(si.created_at, "%Y-%m-%d")},
+        "live": info["live"], "status": status, "live_unavailable": live_unavailable,
+        "q0": info["q0"], "d0": str(info["d0"]) if info["d0"] else None,
+        "sold": info["sold"], "receives_since": info["receives"],
+        "has_baseline": info["has_baseline"], "analytics": analytics, "last_sold": last_sold,
+        "ledger": ledger, "receives": receives, "counts": counts,
+        "totals": {"received_units": received_units, "received_value_cents": received_value,
+                   "events": len(ledger)},
+    })
 
 
 @stock_bp.post("/api/stock/add")

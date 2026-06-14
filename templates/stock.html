@@ -1,229 +1,102 @@
 {% extends "base.html" %}
+
+{% block head %}
+<link href="{{ url_for('static', filename='css/stock.css') }}?v=2" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid py-3" id="stockApp">
-  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <h4 class="mb-0"><i class="bi bi-boxes"></i> Stock</h4>
-    <div class="d-flex align-items-center gap-3">
-      <div id="alertBanner" class="text-muted small"></div>
-      <a href="/stock/receive" class="btn btn-sm btn-success"><i class="bi bi-upload"></i> Receive from invoice</a>
-    </div>
-  </div>
+<div id="stockRadar" class="sr" data-currency="{{ currency }}">
 
-  <!-- Add panel -->
-  <div class="card mb-3">
-    <div class="card-body">
-      <div class="row g-2 align-items-end">
-        <div class="col-12 col-md-5">
-          <label class="form-label small mb-1">Search POS items</label>
-          <input id="searchInput" class="form-control" placeholder="Name or code…" autocomplete="off">
-        </div>
-        <div class="col-8 col-md-5">
-          <label class="form-label small mb-1">Subgroup</label>
-          <select id="subgroupSelect" class="form-select"><option value="">All</option></select>
-        </div>
-        <div class="col-4 col-md-2">
-          <button id="searchBtn" class="btn btn-primary w-100">Search</button>
-        </div>
+  <!-- ══ Command bar ══════════════════════════════════════════ -->
+  <header class="sr-cmd">
+    <div class="sr-cmd__sweep" aria-hidden="true"></div>
+    <div class="sr-cmd__id">
+      <div class="sr-cmd__mark"><i class="bi bi-radar"></i></div>
+      <div class="sr-cmd__txt">
+        <h1 class="sr-cmd__title">Stock Radar</h1>
+        <p class="sr-cmd__sub">Inventory command center</p>
       </div>
-      <div id="searchResults" class="mt-3"></div>
     </div>
-  </div>
+    <div class="sr-cmd__meta">
+      <div class="sr-pos sr-pos--wait" id="srPos" title="Live POS feed">
+        <span class="sr-pos__dot"></span><span class="sr-pos__txt">Connecting…</span>
+      </div>
+      <span class="sr-updated" id="srUpdated"></span>
+      <button class="sr-btn sr-btn--ghost" id="srRefresh" title="Refresh (R)" aria-label="Refresh">
+        <i class="bi bi-arrow-repeat"></i>
+      </button>
+      <button class="sr-btn sr-btn--gold" id="srAddToggle">
+        <i class="bi bi-plus-lg"></i><span>Track item</span>
+      </button>
+      <a class="sr-btn sr-btn--solid" href="/stock/receive">
+        <i class="bi bi-upload"></i><span>Receive invoice</span>
+      </a>
+    </div>
+  </header>
 
-  <!-- Tracked items -->
-  <div id="trackedWrap">
-    <div class="text-muted">Loading tracked items…</div>
-  </div>
+  <!-- ══ Track-item panel (collapsible) ═══════════════════════ -->
+  <section class="sr-add" id="srAdd" hidden>
+    <div class="sr-add__bar">
+      <div class="sr-search sr-search--lg">
+        <i class="bi bi-search"></i>
+        <input id="srAddSearch" placeholder="Search POS catalog by name or code…" autocomplete="off">
+      </div>
+      <select id="srAddSubgroup" class="sr-select"><option value="">All subgroups</option></select>
+      <button class="sr-btn sr-btn--solid" id="srAddSearchBtn">Search</button>
+      <button class="sr-btn sr-btn--ghost" id="srAddClose" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="sr-add__results" id="srAddResults">
+      <div class="sr-hint"><i class="bi bi-stars"></i> Search the POS catalog to start tracking an item.</div>
+    </div>
+  </section>
+
+  <!-- ══ KPI tiles ════════════════════════════════════════════ -->
+  <section class="sr-kpis" id="srKpis" aria-label="Inventory summary">
+    <div class="sr-kpi sr-skel" style="height:104px"></div>
+    <div class="sr-kpi sr-skel" style="height:104px"></div>
+    <div class="sr-kpi sr-skel" style="height:104px"></div>
+    <div class="sr-kpi sr-skel" style="height:104px"></div>
+  </section>
+
+  <!-- ══ Overview: radar + spotlight ══════════════════════════ -->
+  <section class="sr-overview">
+    <div class="sr-panel sr-radar" id="srRadar">
+      <div class="sr-skel" style="height:200px;border-radius:var(--r-lg)"></div>
+    </div>
+    <div class="sr-panel sr-spot" id="srSpot">
+      <div class="sr-skel" style="height:200px;border-radius:var(--r-lg)"></div>
+    </div>
+  </section>
+
+  <!-- ══ Toolbar ══════════════════════════════════════════════ -->
+  <section class="sr-toolbar">
+    <div class="sr-filters" id="srFilters"></div>
+    <div class="sr-tools">
+      <div class="sr-search">
+        <i class="bi bi-funnel"></i>
+        <input id="srSearch" placeholder="Filter list…" autocomplete="off">
+      </div>
+      <select id="srSort" class="sr-select" aria-label="Sort">
+        <option value="urgency">Urgency</option>
+        <option value="cover">Days of cover</option>
+        <option value="velocity">Velocity</option>
+        <option value="live">Live qty</option>
+        <option value="value">Value</option>
+        <option value="name">Name A–Z</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- ══ Item list ════════════════════════════════════════════ -->
+  <section class="sr-list" id="srList">
+    <div class="sr-skel" style="height:64px"></div>
+    <div class="sr-skel" style="height:64px"></div>
+    <div class="sr-skel" style="height:64px"></div>
+  </section>
+
 </div>
+{% endblock %}
 
-<script>
-const fmt = (n) => (n === null || n === undefined) ? "—" : (Math.round(n * 100) / 100);
-const badge = (s) => ({out:"danger", low:"warning", ok:"success", unknown:"secondary"}[s] || "secondary");
-// Escape POS-sourced free text (item titles can contain < or ") before innerHTML.
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => (
-  {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
-
-async function jget(url){
-  const r = await fetch(url);
-  if(!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}
-async function jpost(url, body){
-  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-  if(!r.ok && r.status !== 400) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}
-
-async function loadSubgroups(){
-  try{
-    const d = await jget("/api/stock/subgroups");
-    const sel = document.getElementById("subgroupSelect");
-    (d.subgroups||[]).forEach(s => {
-      const o = document.createElement("option");
-      o.value = s.id; o.textContent = `${s.subgroup} (${s.count})`;
-      sel.appendChild(o);
-    });
-  }catch(e){ /* non-fatal */ }
-}
-
-let _searchState = null;
-
-function itemRowHtml(it){
-  const tick = it.tracked ? '<i class="bi bi-check-circle-fill text-success me-1"></i>' : '';
-  const meta = [esc(it.code), esc(it.subgroup || ""), it.last_purchased ? 'Last: ' + esc(it.last_purchased) : ''].filter(Boolean).join(' · ');
-  return `<div class="d-flex align-items-center gap-2 border-bottom py-2 flex-wrap">
-    <div class="flex-grow-1">
-      <div class="fw-semibold">${tick}${esc(it.title || it.code)}</div>
-      <div class="text-muted small">${meta}</div>
-    </div>
-    ${it.tracked
-      ? ''
-      : `<input type="number" min="0" step="1" class="form-control form-control-sm qtyIn" style="width:90px" placeholder="Qty">
-         <button class="btn btn-sm btn-outline-primary addBtn"
-           data-code="${encodeURIComponent(it.code)}"
-           data-title="${encodeURIComponent(it.title||'')}"
-           data-subgroup="${encodeURIComponent(it.subgroup||'')}">Add</button>`}
-  </div>`;
-}
-
-function bindAddBtns(container){
-  container.querySelectorAll(".addBtn").forEach(b => b.addEventListener("click", onAdd));
-}
-
-async function doSearch(){
-  const q = document.getElementById("searchInput").value.trim();
-  const sg = document.getElementById("subgroupSelect").value;
-  _searchState = {q, sg, page: 1, loaded: 0, total: 0};
-  const wrap = document.getElementById("searchResults");
-  wrap.innerHTML = '<div class="text-muted small">Searching…</div>';
-  try{
-    const d = await jget(`/api/stock/search?q=${encodeURIComponent(q)}&subgroup=${encodeURIComponent(sg)}&page=1`);
-    const items = d.items || [];
-    _searchState.loaded = items.length;
-    _searchState.total = d.total || items.length;
-    if(!items.length){ wrap.innerHTML = '<div class="text-muted small">No items.</div>'; return; }
-    const remaining = _searchState.total - _searchState.loaded;
-    wrap.innerHTML = items.map(itemRowHtml).join("") +
-      (remaining > 0 ? `<div id="loadMoreWrap" class="pt-2">
-        <button class="btn btn-sm btn-outline-secondary" id="loadMoreBtn">Load more (${remaining} remaining)</button>
-      </div>` : `<div class="text-muted small pt-1">${_searchState.total} item(s)</div>`);
-    bindAddBtns(wrap);
-    document.getElementById("loadMoreBtn")?.addEventListener("click", loadMore);
-  }catch(e){ wrap.innerHTML = '<div class="text-danger small">Search failed.</div>'; }
-}
-
-async function loadMore(){
-  if(!_searchState) return;
-  _searchState.page += 1;
-  const btn = document.getElementById("loadMoreBtn");
-  if(btn) btn.disabled = true;
-  try{
-    const {q, sg, page} = _searchState;
-    const d = await jget(`/api/stock/search?q=${encodeURIComponent(q)}&subgroup=${encodeURIComponent(sg)}&page=${page}`);
-    const items = d.items || [];
-    _searchState.loaded += items.length;
-    const wrap = document.getElementById("searchResults");
-    const moreWrap = document.getElementById("loadMoreWrap");
-    const frag = document.createElement("div");
-    frag.innerHTML = items.map(itemRowHtml).join("");
-    bindAddBtns(frag);
-    if(moreWrap) wrap.insertBefore(frag, moreWrap);
-    const remaining = _searchState.total - _searchState.loaded;
-    if(remaining > 0 && moreWrap){
-      moreWrap.innerHTML = `<button class="btn btn-sm btn-outline-secondary" id="loadMoreBtn">Load more (${remaining} remaining)</button>`;
-      document.getElementById("loadMoreBtn").addEventListener("click", loadMore);
-    } else if(moreWrap){
-      moreWrap.remove();
-    }
-  }catch(e){ if(btn){ btn.disabled = false; btn.textContent = "Retry"; } }
-}
-
-async function onAdd(e){
-  const btn = e.currentTarget;
-  const row = btn.closest(".d-flex");
-  const qtyEl = row.querySelector(".qtyIn");
-  const qty = parseFloat(qtyEl && qtyEl.value);
-  if(isNaN(qty)){ alert("Enter a quantity."); return; }
-  btn.disabled = true;
-  const res = await jpost("/api/stock/add", {
-    itm_code: decodeURIComponent(btn.dataset.code),
-    title: decodeURIComponent(btn.dataset.title),
-    subgroup: decodeURIComponent(btn.dataset.subgroup),
-    qty: qty,
-  });
-  if(res.ok){
-    qtyEl.remove();
-    btn.remove();
-    const titleEl = row.querySelector(".fw-semibold");
-    titleEl.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>' + titleEl.innerHTML;
-    loadTracked();
-  } else {
-    alert(res.error || "Failed.");
-    btn.disabled = false;
-  }
-}
-
-function rowHtml(r){
-  const liveTxt = r.has_baseline ? fmt(r.live) : "—";
-  return `
-   <tr>
-     <td><div class="fw-semibold">${esc(r.title || r.itm_code)}</div>
-         <div class="text-muted small">${esc(r.itm_code)} · ${esc(r.subgroup || "")}</div></td>
-     <td class="text-center"><span class="fs-5 fw-bold text-${badge(r.status)}">${liveTxt}</span></td>
-     <td class="text-center"><span class="badge bg-${badge(r.status)}">${r.status.toUpperCase()}</span></td>
-     <td class="text-center">
-       <input type="number" min="0" step="1" value="${r.threshold}" class="form-control form-control-sm thrIn"
-              data-id="${r.id}" style="width:80px;display:inline-block">
-     </td>
-     <td class="text-end">
-       <button class="btn btn-sm btn-outline-secondary setBtn" data-id="${r.id}" data-title="${encodeURIComponent(r.title||'')}">Set count</button>
-       <button class="btn btn-sm btn-outline-danger rmBtn" data-id="${r.id}">Remove</button>
-     </td>
-   </tr>`;
-}
-
-async function loadTracked(){
-  const wrap = document.getElementById("trackedWrap");
-  let d;
-  try{
-    d = await jget("/api/stock/list");
-  }catch(e){
-    wrap.innerHTML = '<div class="text-danger">Could not load stock. Refresh to retry.</div>';
-    return;
-  }
-  const rows = d.items || [];
-  const lowOut = rows.filter(r => r.status === "low" || r.status === "out");
-  document.getElementById("alertBanner").innerHTML = d.live_unavailable
-    ? '<span class="text-warning">Live sales unavailable — showing baseline.</span>'
-    : (lowOut.length ? `<span class="text-danger fw-semibold">${rows.filter(r=>r.status==='out').length} out · ${rows.filter(r=>r.status==='low').length} low</span>` : 'All good.');
-  if(!rows.length){ wrap.innerHTML = '<div class="text-muted">No tracked items yet. Search above to add some.</div>'; return; }
-  wrap.innerHTML = `
-    <div class="table-responsive"><table class="table align-middle">
-      <thead><tr><th>Item</th><th class="text-center">Live</th><th class="text-center">Status</th><th class="text-center">Alert ≤</th><th></th></tr></thead>
-      <tbody>${rows.map(rowHtml).join("")}</tbody>
-    </table></div>`;
-  wrap.querySelectorAll(".rmBtn").forEach(b => b.addEventListener("click", async (e)=>{
-    if(!confirm("Stop tracking this item?")) return;
-    await jpost("/api/stock/remove", {stock_item_id: e.currentTarget.dataset.id});
-    await loadTracked();
-  }));
-  wrap.querySelectorAll(".setBtn").forEach(b => b.addEventListener("click", async (e)=>{
-    const v = prompt("New counted quantity for " + decodeURIComponent(e.currentTarget.dataset.title) + ":");
-    if(v === null) return;
-    const qty = parseFloat(v);
-    if(isNaN(qty)){ alert("Not a number."); return; }
-    await jpost("/api/stock/set-count", {stock_item_id: e.currentTarget.dataset.id, qty});
-    await loadTracked();
-  }));
-  wrap.querySelectorAll(".thrIn").forEach(inp => inp.addEventListener("change", async (e)=>{
-    const t = parseInt(e.currentTarget.value, 10);
-    if(isNaN(t)) return;
-    await jpost("/api/stock/set-threshold", {stock_item_id: e.currentTarget.dataset.id, threshold: t});
-    await loadTracked();
-  }));
-}
-
-document.getElementById("searchBtn").addEventListener("click", doSearch);
-document.getElementById("searchInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") doSearch(); });
-loadSubgroups(); loadTracked();
-</script>
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/stock.js') }}?v=2"></script>
 {% endblock %}
