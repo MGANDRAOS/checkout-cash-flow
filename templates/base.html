@@ -89,6 +89,10 @@
         class="sidebar-link {% if request.path.startswith('/reports/item-trends') %}active{% endif %}">
         <i class="bi bi-activity"></i><span>Item Trends</span>
       </a>
+      <a href="/reports/items-sold"
+        class="sidebar-link {% if request.path.startswith('/reports/items-sold') %}active{% endif %}">
+        <i class="bi bi-card-checklist"></i><span>Items Sold</span>
+      </a>
       <a href="/reports/dead-items"
         class="sidebar-link {% if request.path.startswith('/reports/dead-items') %}active{% endif %}">
         <i class="bi bi-archive"></i><span>Dead Items</span>
