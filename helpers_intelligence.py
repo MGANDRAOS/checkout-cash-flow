@@ -1364,6 +1364,176 @@ def get_items_sold_range(start_date, end_date, subgroup_label: Optional[str] = N
     return summary
 
 
+def _cost_coverage_summary(active, uncosted_active, dormant_uncosted, rows) -> Dict:
+    """
+    Pure shaping for the Cost Coverage report. No DB access.
+
+    rows: uncosted items that sold in the window
+          [{item_code, item, subgroup, qty, revenue, avg_price, last_sold}, ...]
+    Returns coverage %, revenue-at-risk (derived from rows so it always matches the
+    displayed worklist), the dormant count, and rows sorted by revenue desc.
+    """
+    rows = sorted(
+        [dict(r) for r in rows],
+        key=lambda r: (-(float(r.get("revenue") or 0.0)), str(r.get("item") or "")),
+    )
+    active = int(active or 0)
+    uncosted_active = int(uncosted_active or 0)
+    costed = max(active - uncosted_active, 0)
+    coverage_pct = round((costed / active) * 100, 1) if active else 0.0
+    at_risk_revenue = sum(float(r.get("revenue") or 0.0) for r in rows)
+
+    return {
+        "coverage": {
+            "active": active,
+            "uncosted_active": uncosted_active,
+            "coverage_pct": coverage_pct,
+        },
+        "at_risk": {"items": len(rows), "revenue": at_risk_revenue},
+        "dormant_uncosted": int(dormant_uncosted or 0),
+        "rows": rows,
+    }
+
+
+def get_cost_coverage(days: int = 90, subgroup_label: Optional[str] = None) -> Dict:
+    """
+    Cost-coverage worklist: which items lack a cost, prioritised by the revenue
+    we currently can't compute profit on.
+
+    - Coverage counts are catalog-wide (active vs active-uncosted).
+    - The worklist lists uncosted items that SOLD within the last `days` business
+      days (07:00 window), ranked by revenue-at-risk. Optional subgroup filter.
+    - Dormant = active+uncosted items that did not sell in the window.
+    """
+    days = max(1, min(int(days), 730))
+    today = datetime.now().date()
+    win_start, _ = biz_date_range_7h(today - timedelta(days=days - 1))
+    _, win_end_exclusive = biz_date_range_7h(today)
+
+    uncosted_sql = "(i.ITM_COST IS NULL OR i.ITM_COST = 0)"
+
+    subgroup_filter_sql = ""
+    subgroup_params: List = []
+    if subgroup_label and str(subgroup_label).strip():
+        subgroup_filter_sql = (
+            " AND UPPER(LTRIM(RTRIM(subgroup_label))) = UPPER(LTRIM(RTRIM(?))) "
+        )
+        subgroup_params.append(subgroup_label.strip())
+
+    rows_sql = f"""
+        SET NOCOUNT ON;
+
+        WITH Sold AS (
+          SELECT
+            CAST(c.ITM_CODE AS nvarchar(128)) AS item_code,
+            SUM(CAST(c.ITM_QUANTITY AS float)) AS qty,
+            SUM(CAST(c.ITM_QUANTITY AS float) * CAST(c.ITM_PRICE AS float)) AS revenue,
+            MAX(r.RCPT_DATE) AS last_sold
+          FROM dbo.HISTORIC_RECEIPT r
+          JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
+          WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
+          GROUP BY CAST(c.ITM_CODE AS nvarchar(128))
+        ),
+
+        Worklist AS (
+          SELECT
+            s.item_code,
+            CAST(
+              CASE
+                WHEN i.ITM_TITLE IS NOT NULL AND LTRIM(RTRIM(i.ITM_TITLE)) <> N''
+                  THEN i.ITM_TITLE
+                ELSE s.item_code
+              END
+            AS nvarchar(128)) AS item,
+            COALESCE(
+              s_id.SubGrp_Name, s_nm.SubGrp_Name, NULLIF(x.SubGrpText, N''), N'Unknown'
+            ) AS subgroup_label,
+            s.qty,
+            s.revenue,
+            CASE WHEN s.qty = 0 THEN 0 ELSE s.revenue / s.qty END AS avg_price,
+            s.last_sold
+          FROM Sold s
+          JOIN dbo.ITEMS i ON i.ITM_CODE = s.item_code
+          CROSS APPLY (
+            SELECT
+              CASE
+                WHEN i.ITM_SUBGROUP IS NULL THEN NULL
+                WHEN LTRIM(RTRIM(i.ITM_SUBGROUP)) = N'' THEN NULL
+                WHEN i.ITM_SUBGROUP NOT LIKE N'%[^0-9]%' THEN CONVERT(int, i.ITM_SUBGROUP)
+                ELSE NULL
+              END AS SubGrpID,
+              LTRIM(RTRIM(i.ITM_SUBGROUP)) AS SubGrpText
+          ) AS x
+          LEFT JOIN dbo.SUBGROUPS AS s_id ON s_id.SubGrp_ID = x.SubGrpID
+          LEFT JOIN dbo.SUBGROUPS AS s_nm ON LTRIM(RTRIM(s_nm.SubGrp_Name)) = x.SubGrpText
+          WHERE {uncosted_sql}
+        )
+
+        SELECT item_code, item, subgroup_label AS subgroup, qty, revenue, avg_price, last_sold
+        FROM Worklist
+        WHERE 1=1
+        {subgroup_filter_sql}
+        ORDER BY revenue DESC, item ASC;
+    """
+
+    coverage_sql = """
+        SET NOCOUNT ON;
+        SELECT
+          SUM(CASE WHEN ITM_ACTIVE = 1 THEN 1 ELSE 0 END) AS active,
+          SUM(CASE WHEN ITM_ACTIVE = 1 AND (ITM_COST IS NULL OR ITM_COST = 0) THEN 1 ELSE 0 END) AS uncosted_active
+        FROM dbo.ITEMS;
+    """
+
+    dormant_sql = """
+        SET NOCOUNT ON;
+        SELECT COUNT(*) AS dormant
+        FROM dbo.ITEMS i
+        WHERE i.ITM_ACTIVE = 1
+          AND (i.ITM_COST IS NULL OR i.ITM_COST = 0)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM dbo.HISTORIC_RECEIPT r
+            JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
+            WHERE c.ITM_CODE = i.ITM_CODE AND r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
+          );
+    """
+
+    with _connect() as cn:
+        cur = cn.cursor()
+
+        cur.execute(coverage_sql)
+        cov = cur.fetchone()
+        active = int(cov.active or 0)
+        uncosted_active = int(cov.uncosted_active or 0)
+
+        cur.execute(rows_sql, [win_start, win_end_exclusive] + subgroup_params)
+        sold_rows = cur.fetchall()
+
+        cur.execute(dormant_sql, [win_start, win_end_exclusive])
+        dormant = int(cur.fetchone().dormant or 0)
+
+    rows = [
+        {
+            "item_code": str(r.item_code),
+            "item": str(r.item),
+            "subgroup": str(r.subgroup),
+            "qty": float(r.qty or 0.0),
+            "revenue": float(r.revenue or 0.0),
+            "avg_price": float(r.avg_price or 0.0),
+            "last_sold": r.last_sold.date().isoformat() if r.last_sold else None,
+        }
+        for r in sold_rows
+    ]
+
+    summary = _cost_coverage_summary(active, uncosted_active, dormant, rows)
+    summary["meta"] = {
+        "days": days,
+        "subgroup": subgroup_label.strip() if (subgroup_label and subgroup_label.strip()) else None,
+        "generated_for": today.isoformat(),
+    }
+    return summary
+
+
 def get_item_trends(
     start_date,
     end_date,
