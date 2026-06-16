@@ -6,7 +6,7 @@ import pyodbc
 from contextlib import contextmanager
 from datetime import datetime, timedelta, date
 from typing import Any, Dict, List, Tuple, Optional
-from pos_dates import cutoff_dt_7h
+from pos_dates import cutoff_dt_7h, biz_date_range_7h
 from cache_utils import ttl_cache
 
 # NOTE: assumes you already have _connect() defined in helpers_intelligence.py
@@ -1194,6 +1194,130 @@ def _summarize_items_sold(raw_rows: List[Dict]) -> Dict:
             "revenue": total_revenue,
         },
     }
+
+
+def get_items_sold_range(start_date, end_date, subgroup_label: Optional[str] = None) -> Dict:
+    """
+    Flat per-item sales aggregation over an inclusive 07:00 business-day range,
+    optionally filtered to a single subgroup.
+
+    Window: business day [start_date] 07:00  ->  [end_date + 1] 07:00 (exclusive),
+    which is index-friendly on RCPT_DATE (see pos_dates.biz_date_range_7h).
+
+    Returns:
+      {
+        "rows": [{subgroup, item_code, item, qty, revenue, avg_price, txns, share}, ...],
+        "totals": {items, qty, revenue},
+        "meta": {start_date, end_date, subgroup, days},
+      }
+    """
+    win_start, _ = biz_date_range_7h(start_date)
+    _, win_end_exclusive = biz_date_range_7h(end_date)
+
+    subgroup_filter_sql = ""
+    subgroup_params: List = []
+    if subgroup_label and str(subgroup_label).strip():
+        subgroup_filter_sql = (
+            " AND UPPER(LTRIM(RTRIM(subgroup_label))) = UPPER(LTRIM(RTRIM(?))) "
+        )
+        subgroup_params.append(subgroup_label.strip())
+
+    sql = f"""
+        SET NOCOUNT ON;
+
+        WITH Lines AS (
+          SELECT
+            CAST(c.ITM_CODE AS nvarchar(128)) AS item_code,
+
+            CAST(
+              CASE
+                WHEN i.ITM_TITLE IS NOT NULL AND LTRIM(RTRIM(i.ITM_TITLE)) <> N''
+                  THEN i.ITM_TITLE
+                ELSE CAST(c.ITM_CODE AS nvarchar(128))
+              END
+            AS nvarchar(128)) AS item_label,
+
+            COALESCE(
+              s_id.SubGrp_Name,
+              s_nm.SubGrp_Name,
+              NULLIF(x.SubGrpText, N''),
+              N'Unknown'
+            ) AS subgroup_label,
+
+            CAST(c.ITM_QUANTITY AS float) AS qty,
+            CAST(c.ITM_QUANTITY AS float) * CAST(c.ITM_PRICE AS float) AS revenue,
+            c.RCPT_ID AS rcpt_id
+
+          FROM dbo.HISTORIC_RECEIPT r
+          JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
+          LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+
+          CROSS APPLY (
+            SELECT
+              CASE
+                WHEN i.ITM_SUBGROUP IS NULL THEN NULL
+                WHEN LTRIM(RTRIM(i.ITM_SUBGROUP)) = N'' THEN NULL
+                WHEN i.ITM_SUBGROUP NOT LIKE N'%[^0-9]%' THEN CONVERT(int, i.ITM_SUBGROUP)
+                ELSE NULL
+              END AS SubGrpID,
+              LTRIM(RTRIM(i.ITM_SUBGROUP)) AS SubGrpText
+          ) AS x
+
+          LEFT JOIN dbo.SUBGROUPS AS s_id ON s_id.SubGrp_ID = x.SubGrpID
+          LEFT JOIN dbo.SUBGROUPS AS s_nm
+            ON LTRIM(RTRIM(s_nm.SubGrp_Name)) = x.SubGrpText
+
+          WHERE r.RCPT_DATE >= ? AND r.RCPT_DATE < ?
+        ),
+
+        Filtered AS (
+          SELECT * FROM Lines
+          WHERE 1=1
+          {subgroup_filter_sql}
+        )
+
+        SELECT
+          subgroup_label                AS subgroup,
+          item_code,
+          item_label                    AS item,
+          SUM(qty)                      AS qty,
+          SUM(revenue)                  AS revenue,
+          CASE WHEN SUM(qty) = 0 THEN 0 ELSE SUM(revenue) / SUM(qty) END AS avg_price,
+          COUNT(DISTINCT rcpt_id)       AS txns
+        FROM Filtered
+        GROUP BY subgroup_label, item_code, item_label
+        ORDER BY revenue DESC, item ASC;
+    """
+
+    params: List = [win_start, win_end_exclusive]
+    params.extend(subgroup_params)
+
+    with _connect() as cn:
+        cur = cn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    raw = [
+        {
+            "subgroup": str(r.subgroup),
+            "item_code": str(r.item_code),
+            "item": str(r.item),
+            "qty": float(r.qty or 0.0),
+            "revenue": float(r.revenue or 0.0),
+            "avg_price": float(r.avg_price or 0.0),
+            "txns": int(r.txns or 0),
+        }
+        for r in rows
+    ]
+
+    summary = _summarize_items_sold(raw)
+    summary["meta"] = {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "subgroup": subgroup_label.strip() if (subgroup_label and subgroup_label.strip()) else None,
+        "days": (end_date - start_date).days + 1,
+    }
+    return summary
 
 
 def get_item_trends(
