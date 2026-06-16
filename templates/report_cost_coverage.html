@@ -1,0 +1,80 @@
+{# templates/report_cost_coverage.html #}
+{% extends "base.html" %}
+
+{% block head %}
+<link href="{{ url_for('static', filename='css/items_sold.css') }}" rel="stylesheet">
+<link href="{{ url_for('static', filename='css/cost_coverage.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div id="costCoveragePage" class="is-page py-4">
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header class="is-header">
+    <div class="is-title-block">
+      <div class="is-eyebrow">POS · Data Health</div>
+      <h1>Cost Coverage</h1>
+      <p>Items missing a cost — ranked by the sales you can't see profit on yet.</p>
+    </div>
+    <div class="is-quick-chips" role="group" aria-label="Lookback window">
+      <button class="is-chip" data-days="30" type="button">30d</button>
+      <button class="is-chip active" data-days="90" type="button">90d</button>
+      <button class="is-chip" data-days="180" type="button">180d</button>
+      <button class="is-chip" data-days="365" type="button">365d</button>
+    </div>
+  </header>
+
+  <!-- ── Coverage hero ──────────────────────────────────────────── -->
+  <section class="is-kpi-hero cc-hero" aria-live="polite">
+    <div class="cc-hero-top">
+      <div class="cc-cov">
+        <span class="is-kpi-label">Cost coverage</span>
+        <div class="cc-cov-num"><span id="ccCoveragePct">—</span><span class="cc-pct">%</span></div>
+      </div>
+      <div class="cc-risk">
+        <span class="is-kpi-label">Profit-blind sales (window)</span>
+        <div class="cc-risk-num"><span id="ccAtRiskRev">—</span> <span class="is-kpi-unit">LBP</span></div>
+        <div class="is-kpi-usd">≈ <span id="ccAtRiskUsd">—</span> USD</div>
+      </div>
+    </div>
+    <div id="ccBar" class="cc-bar"></div>
+    <div id="ccMeta" class="is-kpi-meta">
+      <span id="ccUncosted">—</span> items missing cost ·
+      <span id="ccAtRiskItems">—</span> sold in window ·
+      <span id="ccDormant">—</span> dormant
+    </div>
+  </section>
+
+  <!-- ── Filters ────────────────────────────────────────────────── -->
+  <div class="is-filter-strip">
+    <div class="is-field is-field-sub">
+      <label for="ccSubgroup">Subgroup</label>
+      <select id="ccSubgroup"><option value="">All subgroups</option></select>
+    </div>
+    <div class="is-field is-field-search">
+      <label for="ccSearch">Find item</label>
+      <input id="ccSearch" type="search" placeholder="Name or code…" autocomplete="off" />
+    </div>
+  </div>
+
+  <!-- ── Worklist ───────────────────────────────────────────────── -->
+  <section class="is-results-wrap">
+    <div class="is-results-bar">
+      <div class="is-results-title">Fix-first worklist <span id="ccHint" class="is-hint">—</span></div>
+      <div class="is-results-actions">
+        <button id="ccExport" class="is-export-btn" type="button">
+          <i class="bi bi-download"></i><span>Export CSV</span>
+        </button>
+      </div>
+    </div>
+    <div id="ccStatus" class="is-status"></div>
+    <div id="ccResults" class="is-results"></div>
+  </section>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/cost_coverage.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => CostCoverageModule.init());
+</script>
+{% endblock %}

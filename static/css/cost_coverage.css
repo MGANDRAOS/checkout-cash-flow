@@ -1,0 +1,128 @@
+/* ============================================================
+   Cost Coverage report — builds on items_sold.css (`is-` base).
+   Only the coverage-hero + worklist-row specifics live here.
+   ============================================================ */
+
+/* ── Coverage hero ───────────────────────────────────────── */
+.cc-hero-top {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.1rem;
+}
+
+.cc-cov-num {
+  display: flex;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--emerald);
+}
+.cc-cov-num > span:first-child { font-size: clamp(2.4rem, 9vw, 3.4rem); }
+.cc-pct { font-size: 1.4rem; color: var(--emerald); margin-left: 0.1rem; }
+
+.cc-risk-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: clamp(1.3rem, 5vw, 1.8rem);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* coverage progress: emerald = covered, reddish = the gap.
+   Painted as a gradient on the track itself (driven by --cov) so it
+   never depends on a child element's width resolution. */
+.cc-bar {
+  --cov: 0%;
+  height: 8px;
+  border-radius: 999px;
+  margin-top: 1rem;
+  background: linear-gradient(90deg,
+    var(--emerald) 0 var(--cov),
+    var(--crimson-dim) var(--cov) 100%);
+}
+
+@media (min-width: 600px) {
+  .cc-hero-top { grid-template-columns: 1fr 1fr; align-items: end; }
+}
+
+/* ── Worklist rows ───────────────────────────────────────── */
+.cc-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "code rev"
+    "id   id"
+    "meta meta";
+  gap: 0.3rem 0.75rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  position: relative;
+}
+.cc-row:first-child { border-top-left-radius: var(--r-md); border-top-right-radius: var(--r-md); }
+.cc-row:last-child { border-bottom: none; border-bottom-left-radius: var(--r-md); border-bottom-right-radius: var(--r-md); }
+.cc-row:nth-child(even) { background: rgba(0, 0, 0, 0.012); }
+.cc-row.cc-top { box-shadow: inset 3px 0 0 var(--gold); }
+
+.cc-code {
+  grid-area: code;
+  align-self: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.76rem;
+  color: var(--gold);
+  background: var(--gold-dim);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--r-sm);
+  padding: 0.18rem 0.5rem;
+  white-space: nowrap;
+}
+
+.cc-id { grid-area: id; min-width: 0; }
+.cc-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+  word-break: break-word;
+}
+.cc-sub {
+  font-size: 0.72rem;
+  color: var(--text-3);
+  margin-left: 0.45rem;
+}
+
+.cc-rev {
+  grid-area: rev;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.cc-rev small { display: block; font-size: 0.62rem; font-weight: 500; color: var(--text-3); letter-spacing: 0.04em; }
+
+.cc-rowmeta {
+  grid-area: meta;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.cc-rowmeta .u { color: var(--azure); font-weight: 600; }
+
+@media (min-width: 768px) {
+  .cc-row {
+    grid-template-columns: auto minmax(0, 1fr) auto 160px;
+    grid-template-areas: "code id meta rev";
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.65rem 1.1rem;
+  }
+  .cc-rowmeta { justify-content: flex-end; }
+}
