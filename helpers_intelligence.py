@@ -1176,6 +1176,11 @@ def _summarize_items_sold(raw_rows: List[Dict]) -> Dict:
     total_revenue = sum(float(r.get("revenue") or 0.0) for r in rows)
     total_qty = sum(float(r.get("qty") or 0.0) for r in rows)
 
+    cost_total = 0.0
+    profit_total = 0.0
+    costed_revenue = 0.0
+    uncosted_items = 0
+
     for r in rows:
         rev = float(r.get("revenue") or 0.0)
         r["qty"] = float(r.get("qty") or 0.0)
@@ -1183,6 +1188,28 @@ def _summarize_items_sold(raw_rows: List[Dict]) -> Dict:
         r["avg_price"] = float(r.get("avg_price") or 0.0)
         r["txns"] = int(r.get("txns") or 0)
         r["share"] = round((rev / total_revenue) * 100, 1) if total_revenue else 0.0
+
+        # Cost / profit / margin — only when the item has a known cost.
+        # unit_cost of None (ITM_COST 0/NULL) means "cost unknown": shown as "—",
+        # excluded from all profit math and from profit totals.
+        uc = r.get("unit_cost")
+        if uc is None:
+            r["unit_cost"] = None
+            r["total_cost"] = None
+            r["profit"] = None
+            r["margin"] = None
+            uncosted_items += 1
+        else:
+            uc = float(uc)
+            tc = uc * r["qty"]
+            pr = rev - tc
+            r["unit_cost"] = uc
+            r["total_cost"] = tc
+            r["profit"] = pr
+            r["margin"] = round((pr / rev) * 100, 1) if rev else 0.0
+            cost_total += tc
+            profit_total += pr
+            costed_revenue += rev
 
     rows.sort(key=lambda r: (-r["revenue"], str(r.get("item") or "")))
 
@@ -1192,6 +1219,12 @@ def _summarize_items_sold(raw_rows: List[Dict]) -> Dict:
             "items": len(rows),
             "qty": total_qty,
             "revenue": total_revenue,
+            "cost": cost_total,
+            "profit": profit_total,
+            "costed_revenue": costed_revenue,
+            # margin on COSTED revenue so uncosted items don't inflate it
+            "margin": round((profit_total / costed_revenue) * 100, 1) if costed_revenue else 0.0,
+            "uncosted_items": uncosted_items,
         },
     }
 
@@ -1246,11 +1279,19 @@ def get_items_sold_range(start_date, end_date, subgroup_label: Optional[str] = N
 
             CAST(c.ITM_QUANTITY AS float) AS qty,
             CAST(c.ITM_QUANTITY AS float) * CAST(c.ITM_PRICE AS float) AS revenue,
+
+            -- Unit cost in LBP = ITM_COST (stored in the item's buy currency)
+            -- x the buy currency's purchase parity (LL=1, USD=89000, ...).
+            -- COALESCE guards a missing/zero parity so cost is never silently zeroed.
+            CAST(i.ITM_COST AS float)
+              * COALESCE(NULLIF(CAST(cu.CURR_PURCHASE_PARITY AS float), 0), 1.0) AS unit_cost,
+
             c.RCPT_ID AS rcpt_id
 
           FROM dbo.HISTORIC_RECEIPT r
           JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = r.RCPT_ID
           LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+          LEFT JOIN dbo.CURRENCY cu ON cu.CURR_ID = i.ITM_BUYCURRENCY
 
           CROSS APPLY (
             SELECT
@@ -1283,7 +1324,8 @@ def get_items_sold_range(start_date, end_date, subgroup_label: Optional[str] = N
           SUM(qty)                      AS qty,
           SUM(revenue)                  AS revenue,
           CASE WHEN SUM(qty) = 0 THEN 0 ELSE SUM(revenue) / SUM(qty) END AS avg_price,
-          COUNT(DISTINCT rcpt_id)       AS txns
+          COUNT(DISTINCT rcpt_id)       AS txns,
+          MAX(unit_cost)                AS unit_cost
         FROM Filtered
         GROUP BY subgroup_label, item_code, item_label
         ORDER BY revenue DESC, item ASC;
@@ -1306,6 +1348,8 @@ def get_items_sold_range(start_date, end_date, subgroup_label: Optional[str] = N
             "revenue": float(r.revenue or 0.0),
             "avg_price": float(r.avg_price or 0.0),
             "txns": int(r.txns or 0),
+            # ITM_COST 0/NULL -> unknown cost (None); _summarize handles the rest
+            "unit_cost": (float(r.unit_cost) if (r.unit_cost is not None and float(r.unit_cost) > 0) else None),
         }
         for r in rows
     ]
