@@ -1,0 +1,102 @@
+{# templates/report_items_sold.html #}
+{% extends "base.html" %}
+
+{% block head %}
+<link href="{{ url_for('static', filename='css/items_sold.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div id="itemsSoldPage" class="is-page py-4">
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header class="is-header">
+    <div class="is-title-block">
+      <div class="is-eyebrow">POS · Reports</div>
+      <h1>Items Sold</h1>
+      <p>Everything that moved between two dates — grouped by subgroup.</p>
+    </div>
+    <div class="is-quick-chips" role="group" aria-label="Quick date ranges">
+      <button class="is-chip" data-quick="today" type="button">Today</button>
+      <button class="is-chip" data-quick="yesterday" type="button">Yesterday</button>
+      <button class="is-chip active" data-quick="last7" type="button">Last 7</button>
+      <button class="is-chip" data-quick="last30" type="button">Last 30</button>
+      <button class="is-chip" data-quick="thisMonth" type="button">This Month</button>
+    </div>
+  </header>
+
+  <!-- ── Filter strip ───────────────────────────────────────────── -->
+  <div class="is-filter-strip">
+    <div class="is-field is-field-date">
+      <label for="isFrom">From</label>
+      <input id="isFrom" type="date" />
+    </div>
+    <span class="is-arrow" aria-hidden="true">→</span>
+    <div class="is-field is-field-date">
+      <label for="isTo">To</label>
+      <input id="isTo" type="date" />
+    </div>
+    <div class="is-field is-field-sub">
+      <label for="isSubgroup">Subgroup</label>
+      <select id="isSubgroup">
+        <option value="">All subgroups</option>
+      </select>
+    </div>
+    <div class="is-field is-field-search">
+      <label for="isSearch">Find item</label>
+      <input id="isSearch" type="search" placeholder="Name or code…" autocomplete="off" />
+    </div>
+    <button id="isApply" class="is-apply" type="button">
+      <i class="bi bi-arrow-repeat"></i><span>Apply</span>
+    </button>
+  </div>
+
+  <!-- ── KPI hero ───────────────────────────────────────────────── -->
+  <section class="is-kpi-hero" aria-live="polite">
+    <div class="is-kpi-grid">
+      <div class="is-kpi is-kpi-primary">
+        <span class="is-kpi-label">Revenue</span>
+        <div class="is-kpi-money">
+          <span id="isKpiRevLbp" class="is-kpi-number">—</span>
+          <span class="is-kpi-unit">LBP</span>
+        </div>
+        <div class="is-kpi-usd">≈ <span id="isKpiRevUsd">—</span> USD</div>
+      </div>
+      <div class="is-kpi">
+        <span class="is-kpi-label">Units sold</span>
+        <span id="isKpiUnits" class="is-kpi-number sm">—</span>
+      </div>
+      <div class="is-kpi">
+        <span class="is-kpi-label">Distinct items</span>
+        <span id="isKpiItems" class="is-kpi-number sm">—</span>
+      </div>
+    </div>
+    <div id="isMeta" class="is-kpi-meta">Pick a range to load sales.</div>
+  </section>
+
+  <!-- ── Results ────────────────────────────────────────────────── -->
+  <section class="is-results-wrap">
+    <div class="is-results-bar">
+      <div class="is-results-title">
+        Breakdown <span id="isResultsHint" class="is-hint">—</span>
+      </div>
+      <div class="is-results-actions">
+        <button id="isExpandAll" class="is-ghost-btn" type="button">
+          <i class="bi bi-arrows-expand"></i><span>Expand all</span>
+        </button>
+        <button id="isExport" class="is-export-btn" type="button">
+          <i class="bi bi-download"></i><span>Export CSV</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="isStatus" class="is-status"></div>
+    <div id="isResults" class="is-results"></div>
+  </section>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/items_sold.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => ItemsSoldModule.init());
+</script>
+{% endblock %}
