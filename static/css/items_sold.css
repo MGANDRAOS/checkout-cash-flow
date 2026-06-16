@@ -247,6 +247,45 @@
   border-top: 1px dashed var(--border-mid);
 }
 
+/* Profit unit chip uses emerald to distinguish from revenue's gold */
+.is-kpi-unit.alt {
+  color: var(--emerald);
+  background: var(--emerald-dim);
+}
+
+/* Margin badge beside the Profit label */
+.is-kpi-margin {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  margin-left: 0.35rem;
+}
+
+/* Color-coded margin (shared by KPI badge, item rows, group headers) */
+.is-margin { font-weight: 600; }
+.is-margin.pos, .is-kpi-margin.pos { color: var(--emerald); }
+.is-margin.neg, .is-kpi-margin.neg { color: var(--crimson); }
+.is-margin.na,  .is-kpi-margin.na  { color: var(--text-3); }
+.is-kpi-margin.pos { background: var(--emerald-dim); }
+.is-kpi-margin.neg { background: var(--crimson-dim); }
+
+/* Caveat line under the results bar */
+.is-caveat {
+  font-size: 0.74rem;
+  color: var(--text-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.is-caveat i { color: var(--gold); margin-right: 0.25rem; }
+
 /* ── Results shell ───────────────────────────────────────── */
 .is-results-bar {
   display: flex;
@@ -502,8 +541,8 @@
   color: var(--text-3);
 }
 .is-row-stats .qty { color: var(--azure); font-weight: 600; }
+.is-row-stats .cost { color: var(--text-3); }
 .is-row-stats .avg { color: var(--text-3); }
-.is-row-stats .share { color: var(--text-2); font-weight: 600; }
 .is-row-stats .is-microbar {
   flex: 1;
   height: 3px;
@@ -523,6 +562,9 @@
 
 /* ── Desktop: denser, single-line item rows ──────────────── */
 @media (min-width: 768px) {
+  /* Revenue + Profit sit side-by-side (instead of each spanning full width) */
+  .is-kpi-primary { grid-column: auto; }
+
   .is-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, auto) 150px;
     grid-template-areas: "id stats rev";

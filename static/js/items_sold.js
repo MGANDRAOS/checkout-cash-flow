@@ -33,6 +33,15 @@ const ItemsSoldModule = (() => {
   function clearChips() {
     document.querySelectorAll('.is-chip').forEach(b => b.classList.remove('active'));
   }
+  function marginClass(m) {
+    if (m == null) return 'na';
+    if (m < 0) return 'neg';
+    if (m > 0) return 'pos';
+    return 'na';
+  }
+  function marginText(m) {
+    return (m == null) ? '—' : `${Number(m).toFixed(1)}%`;
+  }
 
   function setRange(from, to) {
     els.from.value = ymd(from);
@@ -119,11 +128,29 @@ const ItemsSoldModule = (() => {
 
   // ── rendering ────────────────────────────────────────────
   function renderKpis(body) {
-    const t = (body && body.totals) || { items: 0, qty: 0, revenue: 0, revenue_usd: 0 };
+    const t = (body && body.totals) || {};
     els.kpiRevLbp.textContent = nfInt.format(t.revenue || 0);
     els.kpiRevUsd.textContent = nfUsd.format(t.revenue_usd || 0);
+    els.kpiProfitLbp.textContent = nfInt.format(t.profit || 0);
+    els.kpiProfitUsd.textContent = nfUsd.format(t.profit_usd || 0);
     els.kpiUnits.textContent = fmtQty(t.qty || 0);
     els.kpiItems.textContent = nfInt.format(t.items || 0);
+
+    // margin badge next to Profit (color-coded)
+    const margin = (t.margin == null) ? null : t.margin;
+    els.kpiMargin.textContent = (margin == null) ? '—' : `${margin.toFixed(1)}% margin`;
+    els.kpiMargin.className = 'is-kpi-margin ' + marginClass(margin);
+
+    // caveat: how many items lack a cost (excluded from profit)
+    const unc = t.uncosted_items || 0;
+    if (unc > 0) {
+      els.caveat.style.display = '';
+      els.caveat.innerHTML = `<i class="bi bi-info-circle"></i> Profit uses each item's current cost · ` +
+        `${nfInt.format(unc)} item${unc === 1 ? ' has' : 's have'} no cost set (excluded from profit).`;
+    } else {
+      els.caveat.style.display = 'none';
+      els.caveat.textContent = '';
+    }
 
     const m = (body && body.meta) || {};
     if (m.start_date) {
@@ -152,6 +179,8 @@ const ItemsSoldModule = (() => {
     const rev = Number(it.revenue) || 0;
     const isTop = topItemRev > 0 && rev === topItemRev;
     const microW = topItemRev ? (rev / topItemRev * 100) : 0;
+    const costTxt = (it.unit_cost == null) ? '—' : nfInt.format(it.unit_cost);
+    const mCls = marginClass(it.margin);
     return `
       <div class="is-row${isTop ? ' is-top' : ''}">
         <div class="is-row-id">
@@ -159,9 +188,10 @@ const ItemsSoldModule = (() => {
         </div>
         <div class="is-row-stats">
           <span class="qty">${fmtQty(it.qty)} u</span>
+          <span class="cost">cost ${costTxt}</span>
           <span class="avg">@${nfInt.format(Number(it.avg_price) || 0)}</span>
           <span class="is-microbar"><span style="width:${microW.toFixed(1)}%"></span></span>
-          <span class="share">${(Number(it.share) || 0).toFixed(1)}%</span>
+          <span class="is-margin ${mCls}">${marginText(it.margin)}</span>
         </div>
         <div class="is-row-rev">${nfInt.format(rev)}</div>
       </div>`;
@@ -170,7 +200,6 @@ const ItemsSoldModule = (() => {
   function renderResults() {
     if (!data) return;
     const q = searchText();
-    const grand = (data.totals && data.totals.revenue) || 0;
     const groups = buildGroups(data.rows);
 
     let visibleItems = 0;
@@ -182,7 +211,17 @@ const ItemsSoldModule = (() => {
       visibleItems += items.length;
       const rev = items.reduce((s, it) => s + (Number(it.revenue) || 0), 0);
       const qty = items.reduce((s, it) => s + (Number(it.qty) || 0), 0);
-      return { name: g.name, items, rev, qty };
+      // group profit/margin over costed items only (mirrors the server rule)
+      let cost = 0, profit = 0, costedRev = 0;
+      items.forEach(it => {
+        if (it.unit_cost != null && it.profit != null) {
+          cost += Number(it.total_cost) || 0;
+          profit += Number(it.profit) || 0;
+          costedRev += Number(it.revenue) || 0;
+        }
+      });
+      const margin = costedRev ? (profit / costedRev * 100) : null;
+      return { name: g.name, items, rev, qty, cost, profit, margin };
     }).filter(Boolean);
 
     if (!rendered.length) {
@@ -197,7 +236,6 @@ const ItemsSoldModule = (() => {
 
     els.results.innerHTML = rendered.map(g => {
       const open = q ? true : expanded.has(g.name);   // searching reveals matches
-      const sharePct = grand ? (g.rev / grand * 100) : 0;
       const barPct = g.rev / maxGroupRev * 100;
       const topItemRev = g.items.reduce((m, it) => Math.max(m, Number(it.revenue) || 0), 0);
       const rows = g.items.map(it => rowHtml(it, topItemRev)).join('');
@@ -208,7 +246,7 @@ const ItemsSoldModule = (() => {
             <span class="is-group-name">${esc(g.name)} <span class="is-count">${nfInt.format(g.items.length)}</span></span>
             <span class="is-group-figs">
               <span class="is-group-rev">${nfInt.format(g.rev)}</span>
-              <span class="is-group-sub">${fmtQty(g.qty)} u · ${sharePct.toFixed(1)}%</span>
+              <span class="is-group-sub">${fmtQty(g.qty)} u · <span class="is-margin ${marginClass(g.margin)}">${marginText(g.margin)}</span> margin</span>
             </span>
           </button>
           <div class="is-sharebar"><span style="width:${barPct.toFixed(1)}%"></span></div>
@@ -256,9 +294,13 @@ const ItemsSoldModule = (() => {
       expandAll: document.getElementById('isExpandAll'),
       kpiRevLbp: document.getElementById('isKpiRevLbp'),
       kpiRevUsd: document.getElementById('isKpiRevUsd'),
+      kpiProfitLbp: document.getElementById('isKpiProfitLbp'),
+      kpiProfitUsd: document.getElementById('isKpiProfitUsd'),
+      kpiMargin: document.getElementById('isKpiMargin'),
       kpiUnits: document.getElementById('isKpiUnits'),
       kpiItems: document.getElementById('isKpiItems'),
       meta: document.getElementById('isMeta'),
+      caveat: document.getElementById('isCaveat'),
       hint: document.getElementById('isResultsHint'),
       results: document.getElementById('isResults'),
       status: document.getElementById('isStatus'),
