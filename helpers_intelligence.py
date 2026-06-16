@@ -1161,6 +1161,41 @@ def get_subgroups_list() -> List[Dict]:
         return [{"id": int(r.id), "name": str(r.name)} for r in rows]
 
 
+def _summarize_items_sold(raw_rows: List[Dict]) -> Dict:
+    """
+    Pure aggregation over already-aggregated per-item rows.
+
+    Input rows: [{subgroup, item_code, item, qty, revenue, avg_price, txns}, ...]
+    - Adds `share` (= item revenue / total revenue * 100) to each row.
+    - Sorts rows by revenue DESC, then item ASC.
+    - Computes grand totals (items = distinct rows, qty, revenue).
+
+    No DB access — unit-testable in isolation.
+    """
+    rows = [dict(r) for r in raw_rows]
+    total_revenue = sum(float(r.get("revenue") or 0.0) for r in rows)
+    total_qty = sum(float(r.get("qty") or 0.0) for r in rows)
+
+    for r in rows:
+        rev = float(r.get("revenue") or 0.0)
+        r["qty"] = float(r.get("qty") or 0.0)
+        r["revenue"] = rev
+        r["avg_price"] = float(r.get("avg_price") or 0.0)
+        r["txns"] = int(r.get("txns") or 0)
+        r["share"] = round((rev / total_revenue) * 100, 1) if total_revenue else 0.0
+
+    rows.sort(key=lambda r: (-r["revenue"], str(r.get("item") or "")))
+
+    return {
+        "rows": rows,
+        "totals": {
+            "items": len(rows),
+            "qty": total_qty,
+            "revenue": total_revenue,
+        },
+    }
+
+
 def get_item_trends(
     start_date,
     end_date,
