@@ -2425,14 +2425,48 @@ def get_invoices_list(
           )
         )
     ),
+    LineAgg AS (
+      -- One set-based pass over receipt contents (replaces a per-row correlated
+      -- COUNT). unit_cost reuses the items-sold formula: ITM_COST x buy-currency
+      -- purchase parity; a line is "uncosted" when that resolves to 0/NULL.
+      SELECT
+        c.RCPT_ID,
+        COUNT(*) AS lines_count,
+        SUM(CAST(COALESCE(c.ITM_QUANTITY, 0) AS float)) AS total_qty,
+        SUM(
+          CASE
+            WHEN CAST(i.ITM_COST AS float)
+                 * COALESCE(NULLIF(CAST(cu.CURR_PURCHASE_PARITY AS float), 0), 1.0) > 0
+            THEN CAST(COALESCE(c.ITM_QUANTITY, 0) AS float)
+                 * CAST(i.ITM_COST AS float)
+                 * COALESCE(NULLIF(CAST(cu.CURR_PURCHASE_PARITY AS float), 0), 1.0)
+            ELSE 0
+          END
+        ) AS cost,
+        SUM(
+          CASE
+            WHEN CAST(i.ITM_COST AS float)
+                 * COALESCE(NULLIF(CAST(cu.CURR_PURCHASE_PARITY AS float), 0), 1.0) > 0
+            THEN 0 ELSE 1
+          END
+        ) AS uncosted_lines
+      FROM dbo.HISTORIC_RECEIPT_CONTENTS c
+      LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+      LEFT JOIN dbo.CURRENCY cu ON cu.CURR_ID = i.ITM_BUYCURRENCY
+      GROUP BY c.RCPT_ID
+    ),
     Enriched AS (
       SELECT
         f.RCPT_ID,
         f.RCPT_DATE,
         f.RCPT_AMOUNT,
         f.BizDate,
-        (SELECT COUNT(*) FROM dbo.HISTORIC_RECEIPT_CONTENTS c WHERE c.RCPT_ID = f.RCPT_ID) AS lines_count
+        COALESCE(la.lines_count, 0)    AS lines_count,
+        COALESCE(la.total_qty, 0)      AS total_qty,
+        COALESCE(la.cost, 0)           AS cost,
+        COALESCE(la.uncosted_lines, 0) AS uncosted_lines
       FROM Filtered f
+      LEFT JOIN LineAgg la ON la.RCPT_ID = f.RCPT_ID
     ),
     Numbered AS (
       SELECT
@@ -2446,7 +2480,10 @@ def get_invoices_list(
       CONVERT(varchar(19), n.RCPT_DATE, 120) AS rcpt_date,
       CONVERT(varchar(10), n.BizDate, 120) AS biz_date,
       CAST(n.RCPT_AMOUNT AS float) AS amount,
-      CAST(n.lines_count AS int) AS lines_count
+      CAST(n.lines_count AS int) AS lines_count,
+      CAST(n.total_qty AS float) AS total_qty,
+      CAST(n.cost AS float) AS cost,
+      CAST(n.uncosted_lines AS int) AS uncosted_lines
     FROM Numbered n
     WHERE n.rn BETWEEN ? AND ?
     ORDER BY n.rn ASC;
@@ -2480,6 +2517,9 @@ def get_invoices_list(
             "biz_date": r.biz_date,
             "amount": float(r.amount or 0.0),
             "lines_count": int(r.lines_count or 0),
+            "total_qty": float(r.total_qty or 0.0),
+            "cost": float(r.cost or 0.0),
+            "uncosted_lines": int(r.uncosted_lines or 0),
         })
 
     return {"total": total, "rows": result_rows}
@@ -2572,15 +2612,64 @@ def get_daily_items_summary(start_date: str = "", end_date: str = "", page: int 
       JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = f.RCPT_ID
       GROUP BY f.BizDate
     ),
+    -- Per-receipt line cost + uncosted-line flag (same cost formula as items-sold).
+    RcptCost AS (
+      SELECT
+        f.RCPT_ID,
+        f.BizDate,
+        f.RCPT_AMOUNT,
+        SUM(
+          CASE
+            WHEN CAST(i.ITM_COST AS float)
+                 * COALESCE(NULLIF(CAST(cu.CURR_PURCHASE_PARITY AS float), 0), 1.0) > 0
+            THEN CAST(COALESCE(c.ITM_QUANTITY, 0) AS float)
+                 * CAST(i.ITM_COST AS float)
+                 * COALESCE(NULLIF(CAST(cu.CURR_PURCHASE_PARITY AS float), 0), 1.0)
+            ELSE 0
+          END
+        ) AS cost,
+        SUM(
+          CASE
+            WHEN CAST(i.ITM_COST AS float)
+                 * COALESCE(NULLIF(CAST(cu.CURR_PURCHASE_PARITY AS float), 0), 1.0) > 0
+            THEN 0 ELSE 1
+          END
+        ) AS uncosted_lines
+      FROM Filtered f
+      JOIN dbo.HISTORIC_RECEIPT_CONTENTS c ON c.RCPT_ID = f.RCPT_ID
+      LEFT JOIN dbo.ITEMS i ON i.ITM_CODE = c.ITM_CODE
+      LEFT JOIN dbo.CURRENCY cu ON cu.CURR_ID = i.ITM_BUYCURRENCY
+      GROUP BY f.RCPT_ID, f.BizDate, f.RCPT_AMOUNT
+    ),
+    CostAgg AS (
+      -- cost              = all costed-line cost that day (true goods cost, any receipt)
+      -- costed_sales      = revenue of receipts where EVERY line is costed
+      -- costed_recpt_cost = cost of those same fully-costed receipts (matches
+      --                     costed_sales, so profit = costed_sales - costed_recpt_cost
+      --                     never subtracts a partial cost from a full revenue)
+      SELECT
+        rc.BizDate,
+        SUM(rc.cost) AS cost,
+        SUM(CASE WHEN rc.uncosted_lines = 0 THEN rc.RCPT_AMOUNT ELSE 0 END) AS costed_sales,
+        SUM(CASE WHEN rc.uncosted_lines = 0 THEN rc.cost ELSE 0 END) AS costed_recpt_cost,
+        SUM(CASE WHEN rc.uncosted_lines = 0 THEN 1 ELSE 0 END) AS costed_receipts
+      FROM RcptCost rc
+      GROUP BY rc.BizDate
+    ),
     Joined AS (
       SELECT
         d.BizDate,
         d.receipts_count,
         CAST(d.total_sales AS float) AS total_sales,
         i.unique_items,
-        CAST(i.total_qty AS float) AS total_qty
+        CAST(i.total_qty AS float) AS total_qty,
+        CAST(COALESCE(ca.cost, 0) AS float) AS cost,
+        CAST(COALESCE(ca.costed_sales, 0) AS float) AS costed_sales,
+        CAST(COALESCE(ca.costed_recpt_cost, 0) AS float) AS costed_recpt_cost,
+        CAST(COALESCE(ca.costed_receipts, 0) AS int) AS costed_receipts
       FROM DayAgg d
       LEFT JOIN ItemAgg i ON i.BizDate = d.BizDate
+      LEFT JOIN CostAgg ca ON ca.BizDate = d.BizDate
     ),
     Numbered AS (
       SELECT
@@ -2594,7 +2683,11 @@ def get_daily_items_summary(start_date: str = "", end_date: str = "", page: int 
       CAST(COALESCE(unique_items, 0) AS int) AS unique_items,
       CAST(COALESCE(total_qty, 0) AS float) AS total_qty,
       CAST(COALESCE(receipts_count, 0) AS int) AS receipts_count,
-      CAST(COALESCE(total_sales, 0) AS float) AS total_sales
+      CAST(COALESCE(total_sales, 0) AS float) AS total_sales,
+      CAST(COALESCE(cost, 0) AS float) AS cost,
+      CAST(COALESCE(costed_sales, 0) AS float) AS costed_sales,
+      CAST(COALESCE(costed_recpt_cost, 0) AS float) AS costed_recpt_cost,
+      CAST(COALESCE(costed_receipts, 0) AS int) AS costed_receipts
     FROM Numbered
     WHERE rn BETWEEN ? AND ?
     ORDER BY rn ASC;
@@ -2620,6 +2713,10 @@ def get_daily_items_summary(start_date: str = "", end_date: str = "", page: int 
             "total_qty": float(r.total_qty or 0.0),
             "receipts_count": int(r.receipts_count or 0),
             "total_sales": float(r.total_sales or 0.0),
+            "cost": float(r.cost or 0.0),
+            "costed_sales": float(r.costed_sales or 0.0),
+            "costed_recpt_cost": float(r.costed_recpt_cost or 0.0),
+            "costed_receipts": int(r.costed_receipts or 0),
         })
 
     return {"total": total, "rows": out}

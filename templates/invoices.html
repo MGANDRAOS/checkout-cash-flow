@@ -1,6 +1,53 @@
 {% extends "base.html" %}
 {% block content %}
 
+<style>
+    /* KPI summary strip — mobile-first horizontal scroll, grid on wider screens */
+    .inv-kpis {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(130px, 1fr);
+        gap: 8px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 2px;
+    }
+    @media (min-width: 992px) {
+        .inv-kpis { grid-auto-flow: row; grid-template-columns: repeat(7, 1fr); overflow-x: visible; }
+    }
+    .inv-kpi {
+        background: var(--bg-surface);
+        border: 1px solid var(--border, rgba(0,0,0,.08));
+        border-radius: 10px;
+        padding: 10px 12px;
+        min-width: 0;
+    }
+    .inv-kpi-label {
+        font-size: 0.7rem; text-transform: uppercase; letter-spacing: .05em;
+        color: var(--text-3); white-space: nowrap;
+    }
+    .inv-kpi-value {
+        font-family: var(--font-heading); font-weight: 700; font-size: 1.1rem;
+        color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    /* Margin color scale (mirrors items-sold) */
+    .inv-margin.pos { color: var(--emerald); font-weight: 600; }
+    .inv-margin.neg { color: var(--crimson); font-weight: 600; }
+    .inv-margin.na  { color: var(--text-3); }
+    .inv-cost { color: var(--text-3); }
+    /* "partly costed" marker */
+    .inv-partial {
+        display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+        background: var(--amber, #d97706); margin-left: 4px; vertical-align: middle;
+    }
+    #invoices-table tfoot td, #daily-table tfoot td {
+        border-top: 2px solid var(--border, rgba(0,0,0,.12));
+        font-weight: 700;
+        background: var(--bg-surface);
+        position: sticky; bottom: 0;
+    }
+</style>
+
 <div class="pt-4">
 
     <!-- Page header -->
@@ -69,6 +116,39 @@
         </div>
     </div>
 
+    <!-- KPI summary strip (filled by JS; hidden until first load) -->
+    <div id="inv-kpis" class="inv-kpis mb-2" hidden>
+        <div class="inv-kpi">
+            <div class="inv-kpi-label">Receipts</div>
+            <div class="inv-kpi-value" id="kpi-receipts">—</div>
+        </div>
+        <div class="inv-kpi">
+            <div class="inv-kpi-label">Total Sales</div>
+            <div class="inv-kpi-value" id="kpi-sales">—</div>
+        </div>
+        <div class="inv-kpi">
+            <div class="inv-kpi-label">Avg Ticket</div>
+            <div class="inv-kpi-value" id="kpi-avg">—</div>
+        </div>
+        <div class="inv-kpi">
+            <div class="inv-kpi-label">Items Sold</div>
+            <div class="inv-kpi-value" id="kpi-qty">—</div>
+        </div>
+        <div class="inv-kpi">
+            <div class="inv-kpi-label">Cost</div>
+            <div class="inv-kpi-value" id="kpi-cost">—</div>
+        </div>
+        <div class="inv-kpi">
+            <div class="inv-kpi-label">Profit</div>
+            <div class="inv-kpi-value" id="kpi-profit">—</div>
+        </div>
+        <div class="inv-kpi">
+            <div class="inv-kpi-label">Margin</div>
+            <div class="inv-kpi-value" id="kpi-margin">—</div>
+        </div>
+    </div>
+    <div id="inv-kpi-caveat" class="mb-3" style="font-size:0.75rem;color:var(--text-3);" hidden></div>
+
     <!-- Tabs -->
     <ul class="nav nav-tabs" role="tablist">
         <li class="nav-item" role="presentation">
@@ -95,14 +175,18 @@
                 <table class="table table-hover align-middle mb-0" id="invoices-table">
                     <thead style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);">
                         <tr>
-                            <th style="width:120px;">Receipt</th>
-                            <th style="width:160px;">BizDate</th>
-                            <th style="width:180px;">Receipt Time</th>
-                            <th class="text-end" style="width:140px;">Amount</th>
-                            <th class="text-end" style="width:120px;">Lines</th>
+                            <th style="width:110px;">Receipt</th>
+                            <th style="width:120px;">BizDate</th>
+                            <th style="width:150px;">Receipt Time</th>
+                            <th class="text-end" style="width:120px;">Amount</th>
+                            <th class="text-end" style="width:70px;">Lines</th>
+                            <th class="text-end" style="width:110px;">Cost</th>
+                            <th class="text-end" style="width:110px;">Profit</th>
+                            <th class="text-end" style="width:90px;">Margin</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
+                    <tfoot></tfoot>
                 </table>
             </div>
         </div>
@@ -118,14 +202,18 @@
                 <table class="table table-hover align-middle mb-0" id="daily-table">
                     <thead style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);">
                         <tr>
-                            <th style="width:140px;">BizDate</th>
+                            <th style="width:120px;">BizDate</th>
                             <th class="text-end">Unique items</th>
                             <th class="text-end">Total qty</th>
                             <th class="text-end">Receipts</th>
                             <th class="text-end">Total sales</th>
+                            <th class="text-end">Cost</th>
+                            <th class="text-end">Profit</th>
+                            <th class="text-end">Margin</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
+                    <tfoot></tfoot>
                 </table>
             </div>
         </div>

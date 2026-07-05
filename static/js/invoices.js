@@ -130,6 +130,50 @@ window.InvoicesModule = (function () {
     return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
 
+  function formatInt(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "—";
+    return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  }
+
+  // Margin color class, mirroring the items-sold report (pos / neg / na).
+  function marginClass(m) {
+    if (m == null || !Number.isFinite(m)) return "na";
+    if (m < 0) return "neg";
+    if (m > 0) return "pos";
+    return "na";
+  }
+
+  function marginCell(m) {
+    const cls = marginClass(m);
+    const txt = (m == null || !Number.isFinite(m)) ? "—" : `${Number(m).toFixed(1)}%`;
+    return `<span class="inv-margin ${cls}">${txt}</span>`;
+  }
+
+  // A receipt is fully costed when every line has a known cost. Only then do we
+  // show profit/margin (full receipt revenue minus a partial cost overstates it).
+  function receiptProfit(r) {
+    const amount = Number(r.amount || 0);
+    const cost = Number(r.cost || 0);
+    const fully = Number(r.uncosted_lines || 0) === 0 && Number(r.lines_count || 0) > 0;
+    if (!fully) return { fully: false, profit: null, margin: null };
+    const profit = amount - cost;
+    const margin = amount ? (profit / amount) * 100 : null;
+    return { fully: true, profit, margin };
+  }
+
+  // Day-level profit uses only that day's fully-costed receipts — revenue AND
+  // cost from the same receipt set, so the two bases match.
+  function dayProfit(r) {
+    const costedSales = Number(r.costed_sales || 0);
+    const costedCost = Number(r.costed_recpt_cost || 0);
+    const costedReceipts = Number(r.costed_receipts || 0);
+    if (costedReceipts <= 0) return { profit: null, margin: null };
+    const profit = costedSales - costedCost;
+    const margin = costedSales ? (profit / costedSales) * 100 : null;
+    return { profit, margin };
+  }
+
   // ---------------------------
   // Modal
   // ---------------------------
@@ -202,17 +246,33 @@ window.InvoicesModule = (function () {
     const countEl = qs("inv-count");
     if (countEl) countEl.textContent = `${rows.length} shown • ${total} total`;
 
+    let totAmount = 0, totLines = 0, totCost = 0, totProfit = 0, totCostedSales = 0;
+
     rows.forEach(r => {
       const tr = document.createElement("tr");
       tr.style.cursor = "pointer";
       tr.dataset.rcptId = r.rcpt_id;
+
+      const p = receiptProfit(r);
+      const partial = Number(r.uncosted_lines || 0) > 0;
+      const dot = partial
+        ? `<span class="inv-partial" data-bs-toggle="tooltip" title="${formatInt(r.uncosted_lines)} of ${formatInt(r.lines_count)} lines have no cost"></span>`
+        : "";
+
+      totAmount += Number(r.amount || 0);
+      totLines += Number(r.lines_count || 0);
+      totCost += Number(r.cost || 0);
+      if (p.fully) { totProfit += p.profit; totCostedSales += Number(r.amount || 0); }
 
       tr.innerHTML = `
         <td class="fw-semibold">${escapeHtml(r.rcpt_id)}</td>
         <td>${escapeHtml(r.biz_date || "")}</td>
         <td>${escapeHtml(r.rcpt_date || "")}</td>
         <td class="text-end">${formatMoney(r.amount)}</td>
-        <td class="text-end">${formatNumber(r.lines_count)}</td>
+        <td class="text-end">${formatInt(r.lines_count)}${dot}</td>
+        <td class="text-end inv-cost">${formatMoney(r.cost)}</td>
+        <td class="text-end">${p.profit == null ? "—" : formatMoney(p.profit)}</td>
+        <td class="text-end">${marginCell(p.margin)}</td>
       `;
 
       tr.addEventListener("click", async () => {
@@ -221,6 +281,25 @@ window.InvoicesModule = (function () {
 
       tbody.appendChild(tr);
     });
+
+    const blended = totCostedSales ? (totProfit / totCostedSales) * 100 : null;
+    const tfoot = table.querySelector("tfoot");
+    if (tfoot) {
+      tfoot.innerHTML = rows.length ? `
+        <tr>
+          <td class="fw-semibold">Totals</td>
+          <td></td>
+          <td class="text-end text-secondary small">${rows.length} receipts</td>
+          <td class="text-end">${formatMoney(totAmount)}</td>
+          <td class="text-end">${formatInt(totLines)}</td>
+          <td class="text-end inv-cost">${formatMoney(totCost)}</td>
+          <td class="text-end">${formatMoney(totProfit)}</td>
+          <td class="text-end">${marginCell(blended)}</td>
+        </tr>
+      ` : "";
+    }
+
+    initTooltips();
   }
 
   async function openInvoiceDetails(rcptId) {
@@ -321,17 +400,36 @@ window.InvoicesModule = (function () {
     const countEl = qs("daily-count");
     if (countEl) countEl.textContent = `${rows.length} days shown • ${total} total`;
 
+    let totQty = 0, totReceipts = 0, totSales = 0, totCost = 0, totCostedSales = 0, totCostedCost = 0, totProfit = 0;
+
     rows.forEach(r => {
       const tr = document.createElement("tr");
       tr.style.cursor = "pointer";
       tr.dataset.bizDate = r.biz_date;
 
+      const p = dayProfit(r);
+      const partial = Number(r.costed_receipts || 0) < Number(r.receipts_count || 0);
+      const dot = (partial && Number(r.receipts_count || 0) > 0)
+        ? `<span class="inv-partial" data-bs-toggle="tooltip" title="${formatInt(r.costed_receipts)} of ${formatInt(r.receipts_count)} receipts fully costed"></span>`
+        : "";
+
+      totQty += Number(r.total_qty || 0);
+      totReceipts += Number(r.receipts_count || 0);
+      totSales += Number(r.total_sales || 0);
+      totCost += Number(r.cost || 0);
+      totCostedSales += Number(r.costed_sales || 0);
+      totCostedCost += Number(r.costed_recpt_cost || 0);
+      if (Number(r.costed_receipts || 0) > 0) totProfit += (Number(r.costed_sales || 0) - Number(r.costed_recpt_cost || 0));
+
       tr.innerHTML = `
         <td class="fw-semibold">${escapeHtml(r.biz_date)}</td>
-        <td class="text-end">${formatNumber(r.unique_items)}</td>
+        <td class="text-end">${formatInt(r.unique_items)}</td>
         <td class="text-end">${formatNumber(r.total_qty)}</td>
-        <td class="text-end">${formatNumber(r.receipts_count)}</td>
+        <td class="text-end">${formatInt(r.receipts_count)}${dot}</td>
         <td class="text-end">${formatMoney(r.total_sales)}</td>
+        <td class="text-end inv-cost">${formatMoney(r.cost)}</td>
+        <td class="text-end">${p.profit == null ? "—" : formatMoney(p.profit)}</td>
+        <td class="text-end">${marginCell(p.margin)}</td>
       `;
 
       tr.addEventListener("click", async () => {
@@ -340,6 +438,25 @@ window.InvoicesModule = (function () {
 
       tbody.appendChild(tr);
     });
+
+    const blended = totCostedSales ? (totProfit / totCostedSales) * 100 : null;
+    const tfoot = table.querySelector("tfoot");
+    if (tfoot) {
+      tfoot.innerHTML = rows.length ? `
+        <tr>
+          <td class="fw-semibold">Totals</td>
+          <td class="text-end text-secondary small">${rows.length} days</td>
+          <td class="text-end">${formatNumber(totQty)}</td>
+          <td class="text-end">${formatInt(totReceipts)}</td>
+          <td class="text-end">${formatMoney(totSales)}</td>
+          <td class="text-end inv-cost">${formatMoney(totCost)}</td>
+          <td class="text-end">${formatMoney(totProfit)}</td>
+          <td class="text-end">${marginCell(blended)}</td>
+        </tr>
+      ` : "";
+    }
+
+    initTooltips();
   }
 
   async function openDailyDetail(bizDate) {
@@ -423,6 +540,56 @@ window.InvoicesModule = (function () {
   }
 
   // ---------------------------
+  // KPI summary strip (computed from the loaded invoice rows)
+  // ---------------------------
+  function renderKpis(invoicePayload) {
+    const strip = qs("inv-kpis");
+    const caveat = qs("inv-kpi-caveat");
+    const rows = invoicePayload?.rows || [];
+
+    if (!rows.length) {
+      if (strip) strip.hidden = true;
+      if (caveat) caveat.hidden = true;
+      return;
+    }
+
+    let receipts = rows.length;
+    let sales = 0, qty = 0, cost = 0, profit = 0, costedSales = 0, costedReceipts = 0;
+
+    rows.forEach(r => {
+      sales += Number(r.amount || 0);
+      qty += Number(r.total_qty || 0);
+      cost += Number(r.cost || 0);
+      const p = receiptProfit(r);
+      if (p.fully) { profit += p.profit; costedSales += Number(r.amount || 0); costedReceipts += 1; }
+    });
+
+    const avg = receipts ? sales / receipts : 0;
+    const margin = costedSales ? (profit / costedSales) * 100 : null;
+
+    const set = (id, txt) => { const el = qs(id); if (el) el.textContent = txt; };
+    set("kpi-receipts", formatInt(receipts));
+    set("kpi-sales", formatMoney(sales));
+    set("kpi-avg", formatMoney(avg));
+    set("kpi-qty", formatNumber(qty));
+    set("kpi-cost", formatMoney(cost));
+    set("kpi-profit", formatMoney(profit));
+
+    const marginEl = qs("kpi-margin");
+    if (marginEl) {
+      marginEl.className = "inv-kpi-value";
+      marginEl.innerHTML = marginCell(margin);
+    }
+
+    if (strip) strip.hidden = false;
+    if (caveat) {
+      const pct = receipts ? Math.round((costedReceipts / receipts) * 100) : 0;
+      caveat.textContent = `Profit & margin over ${formatInt(costedReceipts)} of ${formatInt(receipts)} receipts fully costed (${pct}%). Cost totals include every costed line.`;
+      caveat.hidden = false;
+    }
+  }
+
+  // ---------------------------
   // Run
   // ---------------------------
   async function runAll() {
@@ -434,8 +601,10 @@ window.InvoicesModule = (function () {
         loadDailyItems()
       ]);
 
-      renderInvoices(inv || { total: 0, rows: [] });
+      const invPayload = inv || { total: 0, rows: [] };
+      renderInvoices(invPayload);
       renderDailyItems(daily || { total: 0, rows: [] });
+      renderKpis(invPayload);
 
       setStatus("");
     } catch (e) {
