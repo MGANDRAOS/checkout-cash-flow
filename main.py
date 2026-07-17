@@ -82,6 +82,7 @@ def _ensure_schema_migrations():
 
 
 with app.app_context():
+    db.create_all()  # additive only — creates any new tables; never touches existing ones
     _ensure_schema_migrations()
 
 # Start license heartbeat daemon

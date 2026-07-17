@@ -136,3 +136,48 @@ class StockItemAlias(db.Model):
 
     def __repr__(self):
         return f"<StockItemAlias {self.raw_description!r} -> {self.itm_code}>"
+
+
+class Supplier(db.Model):
+    """A goods supplier whose price catalog is imported/maintained locally."""
+    __tablename__ = "suppliers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False, unique=True)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    items = db.relationship("SupplierItem", backref="supplier",
+                            cascade="all, delete-orphan", lazy="select")
+
+    def __repr__(self):
+        return f"<Supplier {self.name}>"
+
+
+class SupplierItem(db.Model):
+    """One catalog line from a supplier's price list.
+
+    Prices are USD cents (the source spreadsheets' native currency; LBP is
+    derived at render time via config.USD_EXCHANGE_RATE, not stored). itm_code
+    links to StockItem.itm_code once matched via the /supplier-reorder/match
+    screen; NULL means unmatched (catalog-only, not tied to tracked stock).
+    """
+    __tablename__ = "supplier_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    supplier_id = db.Column(db.Integer, db.ForeignKey("suppliers.id"), nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(128), nullable=False, default="")
+    format_label = db.Column(db.String(64), nullable=False, default="")
+    case_price_usd_cents = db.Column(db.Integer, nullable=True)
+    unit_price_usd_cents = db.Column(db.Integer, nullable=False)
+    source_ref = db.Column(db.String(64), nullable=True)
+    source_date = db.Column(db.Date, nullable=True)
+    notes = db.Column(db.String(255), nullable=True)
+    itm_code = db.Column(db.String(128), nullable=True, index=True)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<SupplierItem {self.name!r} supplier={self.supplier_id} ${self.unit_price_usd_cents/100:.2f}>"
