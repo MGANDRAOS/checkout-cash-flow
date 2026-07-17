@@ -8,7 +8,12 @@
 
 **Tech Stack:** Flask blueprint + Jinja2 template + vanilla JS (no framework — matches `cost_coverage`/`stock` conventions), Flask-SQLAlchemy models, `openpyxl` for the one-time import (new dependency), plain CSS classes layered on the existing `static/css/items_sold.css` (`is-`) design system.
 
-**No automated test suite exists in this project** (confirmed in `CLAUDE.md`). Every task's "verify" step is therefore a concrete manual check — a Python one-liner run in the app context, an API call inspected with `curl`/`requests`, or a browser check via the `run` skill / preview tools — not `pytest`. This mirrors how `stock`, `cost_coverage`, and `invoices` were built and verified in this codebase.
+**Correction (added after Task 1's code review):** `CLAUDE.md`'s "no test suite" claim is stale — a real, git-tracked `pytest` suite exists at `tests/` (109 passing tests as of this writing: `conftest.py` + ~15 `test_*.py` files covering models, helpers, and routes). Every remaining task below (2 onward) should add tests under `tests/`, following the two established conventions found in that directory:
+- **Model/DB-backed helper tests**: use `tests/conftest.py`'s `app` fixture (in-memory SQLite, `db.create_all()` inside `app_context()`) — see `tests/test_models_stock.py` for the pattern.
+- **Route tests**: define a local `client` fixture in the test file that registers only the blueprint under test, and `unittest.mock.patch` the underlying helper function rather than hitting a real DB or POS — see `tests/test_routes_cost_coverage.py` for the pattern.
+- No JS test framework exists in this repo — front-end `static/js/*.js` tasks (8, 9) stay manually/browser-verified, consistent with how `stock.js`/`cost_coverage.js` are handled.
+
+The manual verification steps written into each task below are still valid and should still be run — they just no longer replace automated tests, they supplement them. (Task 1 itself shipped without tests before this was caught; a small follow-up test file for `Supplier`/`SupplierItem` was added retroactively.)
 
 ---
 
