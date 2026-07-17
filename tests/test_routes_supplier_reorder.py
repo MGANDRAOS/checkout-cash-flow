@@ -281,3 +281,222 @@ class TestExport:
         assert item_rows == [["Box4Less", "Good Row", "2", "1.00", "2.00"]]
         total_rows = [row for row in rows if len(row) >= 2 and row[1] == "TOTAL"]
         assert total_rows == [["Box4Less", "TOTAL", "", "", "2.00"]]
+
+    def test_formula_injection_in_name_and_supplier_is_neutralized(self, client):
+        r = client.post("/api/supplier-reorder/export", json={"lines": [
+            {"supplier": "=cmd|'/c calc'!A1", "name": "+SUM(1+1)", "qty": 1, "unit_price_usd_cents": 100},
+            {"supplier": "-2+3", "name": "@evil()", "qty": 1, "unit_price_usd_cents": 100},
+        ]})
+        assert r.status_code == 200
+        rows = list(csv.reader(io.StringIO(r.get_data(as_text=True))))
+        item_rows = [row for row in rows if len(row) >= 2 and row[1] not in ("item",) and row[1] != "TOTAL"]
+        assert item_rows[0][0] == " =cmd|'/c calc'!A1"
+        assert item_rows[0][1] == " +SUM(1+1)"
+        assert item_rows[1][0] == " -2+3"
+        assert item_rows[1][1] == " @evil()"
+        total_rows = [row for row in rows if len(row) >= 2 and row[1] == "TOTAL"]
+        supplier_totals = {row[0] for row in total_rows}
+        assert " =cmd|'/c calc'!A1" in supplier_totals
+        assert " -2+3" in supplier_totals
+
+
+class TestItemCreate:
+    def _supplier(self, client, name="Box4Less"):
+        from models import Supplier
+        with client.application.app_context():
+            s = Supplier(name=name, active=True)
+            _db.session.add(s)
+            _db.session.commit()
+            return s.id
+
+    def test_valid_payload_creates_item_and_persists(self, client):
+        supplier_id = self._supplier(client)
+        r = client.post("/api/supplier-reorder/item", json={
+            "supplier_id": supplier_id, "name": "Almaza Can 33cl",
+            "category": "beer", "unit_price_usd": "1.50",
+        })
+        assert r.status_code in (200, 201)
+        body = r.get_json()
+        assert body["ok"] is True
+        assert isinstance(body["id"], int)
+
+        from models import SupplierItem
+        with client.application.app_context():
+            item = _db.session.get(SupplierItem, body["id"])
+            assert item is not None
+            assert item.supplier_id == supplier_id
+            assert item.name == "Almaza Can 33cl"
+            assert item.unit_price_usd_cents == 150
+            assert item.active is True
+
+    def test_category_is_trimmed_and_uppercased(self, client):
+        supplier_id = self._supplier(client)
+        r = client.post("/api/supplier-reorder/item", json={
+            "supplier_id": supplier_id, "name": "Test Item",
+            "category": "  beer  ", "unit_price_usd": "1.00",
+        })
+        body = r.get_json()
+        from models import SupplierItem
+        with client.application.app_context():
+            item = _db.session.get(SupplierItem, body["id"])
+            assert item.category == "BEER"
+
+    def test_missing_supplier_id_is_400_and_creates_nothing(self, client):
+        from models import SupplierItem
+        r = client.post("/api/supplier-reorder/item", json={
+            "name": "Test Item", "unit_price_usd": "1.00",
+        })
+        assert r.status_code == 400
+        assert r.get_json()["ok"] is False
+        with client.application.app_context():
+            assert _db.session.query(SupplierItem).count() == 0
+
+    def test_non_numeric_supplier_id_is_400_and_creates_nothing(self, client):
+        from models import SupplierItem
+        r = client.post("/api/supplier-reorder/item", json={
+            "supplier_id": "not-a-number", "name": "Test Item", "unit_price_usd": "1.00",
+        })
+        assert r.status_code == 400
+        assert r.get_json()["ok"] is False
+        with client.application.app_context():
+            assert _db.session.query(SupplierItem).count() == 0
+
+    def test_missing_unit_price_is_400_and_creates_nothing(self, client):
+        from models import SupplierItem
+        supplier_id = self._supplier(client)
+        r = client.post("/api/supplier-reorder/item", json={
+            "supplier_id": supplier_id, "name": "Test Item",
+        })
+        assert r.status_code == 400
+        assert r.get_json()["ok"] is False
+        with client.application.app_context():
+            assert _db.session.query(SupplierItem).count() == 0
+
+    def test_non_numeric_unit_price_is_400_and_creates_nothing(self, client):
+        from models import SupplierItem
+        supplier_id = self._supplier(client)
+        r = client.post("/api/supplier-reorder/item", json={
+            "supplier_id": supplier_id, "name": "Test Item", "unit_price_usd": "not-a-number",
+        })
+        assert r.status_code == 400
+        assert r.get_json()["ok"] is False
+        with client.application.app_context():
+            assert _db.session.query(SupplierItem).count() == 0
+
+    def test_empty_name_is_400_and_creates_nothing(self, client):
+        from models import SupplierItem
+        supplier_id = self._supplier(client)
+        r = client.post("/api/supplier-reorder/item", json={
+            "supplier_id": supplier_id, "name": "   ", "unit_price_usd": "1.00",
+        })
+        assert r.status_code == 400
+        assert r.get_json()["ok"] is False
+        with client.application.app_context():
+            assert _db.session.query(SupplierItem).count() == 0
+
+    def test_missing_name_is_400_and_creates_nothing(self, client):
+        from models import SupplierItem
+        supplier_id = self._supplier(client)
+        r = client.post("/api/supplier-reorder/item", json={
+            "supplier_id": supplier_id, "unit_price_usd": "1.00",
+        })
+        assert r.status_code == 400
+        assert r.get_json()["ok"] is False
+        with client.application.app_context():
+            assert _db.session.query(SupplierItem).count() == 0
+
+    def test_nonexistent_supplier_id_is_404_and_creates_nothing(self, client):
+        from models import SupplierItem
+        r = client.post("/api/supplier-reorder/item", json={
+            "supplier_id": 999999, "name": "Test Item", "unit_price_usd": "1.00",
+        })
+        assert r.status_code == 404
+        assert r.get_json()["ok"] is False
+        with client.application.app_context():
+            assert _db.session.query(SupplierItem).count() == 0
+
+
+class TestItemUpdate:
+    def _item(self, client, **overrides):
+        from models import Supplier, SupplierItem
+        with client.application.app_context():
+            s = Supplier(name="Box4Less", active=True)
+            _db.session.add(s)
+            _db.session.commit()
+            defaults = dict(
+                supplier_id=s.id, name="Almaza Can 33cl", category="BEER",
+                format_label="33cl can", unit_price_usd_cents=150, active=True,
+            )
+            defaults.update(overrides)
+            item = SupplierItem(**defaults)
+            _db.session.add(item)
+            _db.session.commit()
+            return item.id
+
+    def test_updating_price_only_leaves_other_fields_unchanged(self, client):
+        from models import SupplierItem
+        item_id = self._item(client)
+        r = client.put(f"/api/supplier-reorder/item/{item_id}", json={"unit_price_usd": "2.25"})
+        assert r.status_code == 200
+        assert r.get_json() == {"ok": True}
+        with client.application.app_context():
+            item = _db.session.get(SupplierItem, item_id)
+            assert item.unit_price_usd_cents == 225
+            assert item.name == "Almaza Can 33cl"
+            assert item.category == "BEER"
+            assert item.format_label == "33cl can"
+
+    def test_updating_category_normalizes_it(self, client):
+        from models import SupplierItem
+        item_id = self._item(client)
+        r = client.put(f"/api/supplier-reorder/item/{item_id}", json={"category": "  dairy  "})
+        assert r.status_code == 200
+        with client.application.app_context():
+            item = _db.session.get(SupplierItem, item_id)
+            assert item.category == "DAIRY"
+
+    def test_nonexistent_item_id_is_404(self, client):
+        r = client.put("/api/supplier-reorder/item/999999", json={"unit_price_usd": "2.25"})
+        assert r.status_code == 404
+        assert r.get_json()["ok"] is False
+
+    def test_non_numeric_unit_price_is_400_and_price_unchanged(self, client):
+        from models import SupplierItem
+        item_id = self._item(client)
+        r = client.put(f"/api/supplier-reorder/item/{item_id}", json={"unit_price_usd": "not-a-number"})
+        assert r.status_code == 400
+        assert r.get_json()["ok"] is False
+        with client.application.app_context():
+            item = _db.session.get(SupplierItem, item_id)
+            assert item.unit_price_usd_cents == 150
+
+
+class TestItemDeactivate:
+    def _item(self, client):
+        from models import Supplier, SupplierItem
+        with client.application.app_context():
+            s = Supplier(name="Box4Less", active=True)
+            _db.session.add(s)
+            _db.session.commit()
+            item = SupplierItem(
+                supplier_id=s.id, name="Almaza Can 33cl", category="BEER",
+                format_label="33cl can", unit_price_usd_cents=150, active=True,
+            )
+            _db.session.add(item)
+            _db.session.commit()
+            return item.id
+
+    def test_deactivates_an_active_item(self, client):
+        from models import SupplierItem
+        item_id = self._item(client)
+        r = client.post(f"/api/supplier-reorder/item/{item_id}/deactivate")
+        assert r.status_code == 200
+        assert r.get_json() == {"ok": True}
+        with client.application.app_context():
+            item = _db.session.get(SupplierItem, item_id)
+            assert item.active is False
+
+    def test_nonexistent_item_id_is_404(self, client):
+        r = client.post("/api/supplier-reorder/item/999999/deactivate")
+        assert r.status_code == 404
+        assert r.get_json()["ok"] is False

@@ -136,10 +136,15 @@
             <div class="sup-card__title">${esc(item.name)}</div>
             <div class="sup-card__meta">${esc(item.supplier)} &middot; ${esc(item.category)}</div>
           </div>
-          <div class="sup-card__price">${usd(item.unit_price_usd_cents)}/u</div>
+          <div class="sup-card__price">
+            <span class="sup-price-display">${usd(item.unit_price_usd_cents)}/u</span>
+            <input class="sup-price-edit" type="number" step="0.01" min="0" hidden value="${(item.unit_price_usd_cents / 100).toFixed(2)}">
+          </div>
         </div>
         <div class="sup-card__row">
           <input class="sup-qty-input sup-catalog-qty" type="number" min="0" step="1" value="${qty}">
+          <button class="sup-edit-btn" type="button" title="Edit price"><i class="bi bi-pencil"></i></button>
+          <button class="sup-deactivate-btn" type="button" title="Remove from catalog"><i class="bi bi-trash"></i></button>
         </div>
       </div>`;
   }
@@ -209,6 +214,72 @@
     URL.revokeObjectURL(url);
   });
 
+  el.catalogList.addEventListener("click", async (e) => {
+    const card = e.target.closest(".sup-card");
+    if (!card) return;
+    const id = Number(card.dataset.supplierItemId);
+
+    if (e.target.closest(".sup-edit-btn")) {
+      const display = card.querySelector(".sup-price-display");
+      const editInput = card.querySelector(".sup-price-edit");
+      if (editInput.hidden) {
+        display.hidden = true;
+        editInput.hidden = false;
+        editInput.focus();
+        return;
+      }
+      const r = await fetch(`/api/supplier-reorder/item/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unit_price_usd: editInput.value }),
+      });
+      const body = await r.json();
+      if (body.ok) loadCatalog(el.catalogSearch.value.trim());
+      return;
+    }
+
+    if (e.target.closest(".sup-deactivate-btn")) {
+      if (!confirm("Remove this item from the catalog?")) return;
+      await fetch(`/api/supplier-reorder/item/${id}/deactivate`, { method: "POST" });
+      loadCatalog(el.catalogSearch.value.trim());
+    }
+  });
+
+  const addBtn = document.getElementById("supAddItemBtn");
+  const addPanel = document.getElementById("supAddItemPanel");
+  const addSupplierSel = document.getElementById("supAddSupplier");
+
+  addBtn.addEventListener("click", () => { addPanel.hidden = !addPanel.hidden; });
+
+  async function loadSuppliersForAdd() {
+    const r = await fetch("/api/supplier-reorder/suppliers");
+    const body = await r.json();
+    addSupplierSel.innerHTML = body.suppliers
+      .map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
+  }
+
+  document.getElementById("supAddSave").addEventListener("click", async () => {
+    const payload = {
+      supplier_id: Number(addSupplierSel.value),
+      name: document.getElementById("supAddName").value.trim(),
+      category: document.getElementById("supAddCategory").value.trim(),
+      unit_price_usd: document.getElementById("supAddPrice").value,
+    };
+    if (!payload.name || !payload.unit_price_usd) return;
+    const r = await fetch("/api/supplier-reorder/item", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = await r.json();
+    if (body.ok) {
+      addPanel.hidden = true;
+      document.getElementById("supAddName").value = "";
+      document.getElementById("supAddPrice").value = "";
+      loadCatalog(el.catalogSearch.value.trim());
+    }
+  });
+
   window.SupplierReorder = { esc, usd, renderTotals, order, loadReorderNow, loadUnmatchedCount, el };
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -216,6 +287,7 @@
     loadCatalog();
     loadCategories();
     loadUnmatchedCount();
+    loadSuppliersForAdd();
     renderTotals();
   });
 })();
