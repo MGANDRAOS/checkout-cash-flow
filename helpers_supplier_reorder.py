@@ -1,10 +1,13 @@
 """Supplier catalog logic: matching to tracked stock, reorder-now, browse, CRUD."""
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
 from models import db, StockItem, SupplierItem
 from helpers_invoice_match import rank_match
+
+log = logging.getLogger(__name__)
 
 
 def tracked_catalog() -> List[dict]:
@@ -73,6 +76,9 @@ def reorder_now() -> dict:
     try:
         sold_map = units_sold_since(tuple(sorted(pairs)))
     except Exception:
+        # Broad on purpose: POS outages/timeouts surface in many forms and reorder-now
+        # must never 500. Log it so a real bug here can't hide behind "live unavailable".
+        log.exception("units_sold_since failed; serving baseline without live sales")
         live_unavailable = True
 
     rows = []
