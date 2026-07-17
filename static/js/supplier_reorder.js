@@ -214,6 +214,22 @@
     URL.revokeObjectURL(url);
   });
 
+  // Keep the picked-order Map in sync when a catalog item is mutated out from
+  // under it, so the sticky total and export never reflect a stale/discontinued
+  // line. `opts.remove` drops the pick; `opts.unit_price_usd_cents` refreshes
+  // the cached price on an already-picked line.
+  function reconcileOrderEntry(id, opts) {
+    const key = `catalog:${id}`;
+    const entry = order.get(key);
+    if (!entry) return;
+    if (opts.remove) {
+      order.delete(key);
+    } else if (typeof opts.unit_price_usd_cents === "number") {
+      entry.unit_price_usd_cents = opts.unit_price_usd_cents;
+    }
+    renderTotals();
+  }
+
   el.catalogList.addEventListener("click", async (e) => {
     const card = e.target.closest(".sup-card");
     if (!card) return;
@@ -234,13 +250,17 @@
         body: JSON.stringify({ unit_price_usd: editInput.value }),
       });
       const body = await r.json();
-      if (body.ok) loadCatalog(el.catalogSearch.value.trim());
+      if (body.ok) {
+        reconcileOrderEntry(id, { unit_price_usd_cents: Math.round(parseFloat(editInput.value) * 100) });
+        loadCatalog(el.catalogSearch.value.trim());
+      }
       return;
     }
 
     if (e.target.closest(".sup-deactivate-btn")) {
       if (!confirm("Remove this item from the catalog?")) return;
       await fetch(`/api/supplier-reorder/item/${id}/deactivate`, { method: "POST" });
+      reconcileOrderEntry(id, { remove: true });
       loadCatalog(el.catalogSearch.value.trim());
     }
   });

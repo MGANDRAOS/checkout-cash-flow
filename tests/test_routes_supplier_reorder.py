@@ -470,6 +470,16 @@ class TestItemUpdate:
             item = _db.session.get(SupplierItem, item_id)
             assert item.unit_price_usd_cents == 150
 
+    def test_present_but_blank_name_is_400_and_name_unchanged(self, client):
+        from models import SupplierItem
+        item_id = self._item(client)
+        r = client.put(f"/api/supplier-reorder/item/{item_id}", json={"name": "   "})
+        assert r.status_code == 400
+        assert r.get_json()["ok"] is False
+        with client.application.app_context():
+            item = _db.session.get(SupplierItem, item_id)
+            assert item.name == "Almaza Can 33cl"
+
 
 class TestItemDeactivate:
     def _item(self, client):

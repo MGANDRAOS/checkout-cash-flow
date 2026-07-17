@@ -109,8 +109,11 @@ def api_supplier_reorder_item_update(item_id):
     if item is None:
         return jsonify({"ok": False, "error": "item not found"}), 404
     data = _body()
-    if "name" in data and str(data.get("name") or "").strip():
-        item.name = str(data.get("name")).strip()
+    if "name" in data:
+        new_name = str(data.get("name") or "").strip()
+        if not new_name:
+            return jsonify({"ok": False, "error": "name cannot be blank"}), 400
+        item.name = new_name
     if "category" in data:
         item.category = _normalize_category(data.get("category"))
     if "unit_price_usd" in data:
