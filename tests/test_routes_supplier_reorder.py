@@ -1,3 +1,5 @@
+import csv
+import io
 import os
 from unittest.mock import patch
 
@@ -187,3 +189,81 @@ def test_suppliers_endpoint_returns_only_active_sorted_by_name(client):
     names = [s["name"] for s in body["suppliers"]]
     assert names == ["Box4Less", "Zephyr Foods"]
     assert all(set(s.keys()) == {"id", "name"} for s in body["suppliers"])
+
+
+class TestExport:
+    def test_missing_lines_is_400(self, client):
+        r = client.post("/api/supplier-reorder/export", json={})
+        assert r.status_code == 400
+        body = r.get_json()
+        assert body["ok"] is False
+
+    def test_empty_lines_is_400(self, client):
+        r = client.post("/api/supplier-reorder/export", json={"lines": []})
+        assert r.status_code == 400
+        body = r.get_json()
+        assert body["ok"] is False
+
+    def test_valid_lines_returns_csv_with_correct_rows_and_totals(self, client):
+        r = client.post("/api/supplier-reorder/export", json={"lines": [
+            {"supplier": "Box4Less", "name": "Weidmann 50cl", "qty": 5, "unit_price_usd_cents": 91},
+            {"supplier": "Nice Food", "name": "Almaza NRB 25cl", "qty": 3, "unit_price_usd_cents": 63},
+        ]})
+        assert r.status_code == 200
+        assert r.content_type.startswith("text/csv")
+        assert r.headers.get("Content-Disposition") == 'attachment; filename="supplier_orders.csv"'
+
+        rows = list(csv.reader(io.StringIO(r.get_data(as_text=True))))
+        assert rows[0] == ["supplier", "item", "qty", "unit_price_usd", "line_total_usd"]
+        assert rows[1] == ["Box4Less", "Weidmann 50cl", "5", "0.91", "4.55"]
+        assert rows[2] == ["Nice Food", "Almaza NRB 25cl", "3", "0.63", "1.89"]
+        assert rows[3] == []
+        assert rows[4] == ["Box4Less", "TOTAL", "", "", "4.55"]
+        assert rows[5] == ["Nice Food", "TOTAL", "", "", "1.89"]
+        assert len(rows) == 6
+
+    def test_non_numeric_qty_is_skipped_without_crashing(self, client):
+        r = client.post("/api/supplier-reorder/export", json={"lines": [
+            {"supplier": "Box4Less", "name": "Bad Row", "qty": "N/A", "unit_price_usd_cents": 91},
+            {"supplier": "Box4Less", "name": "Good Row", "qty": 2, "unit_price_usd_cents": 100},
+        ]})
+        assert r.status_code == 200
+        rows = list(csv.reader(io.StringIO(r.get_data(as_text=True))))
+        item_rows = [row for row in rows if len(row) >= 2 and row[1] not in ("item", "TOTAL")]
+        names = [row[1] for row in item_rows]
+        assert "Bad Row" not in names
+        assert "Good Row" in names
+
+    def test_non_numeric_unit_price_is_skipped_without_crashing(self, client):
+        r = client.post("/api/supplier-reorder/export", json={"lines": [
+            {"supplier": "Box4Less", "name": "Bad Row", "qty": 2, "unit_price_usd_cents": "N/A"},
+            {"supplier": "Box4Less", "name": "Good Row", "qty": 2, "unit_price_usd_cents": 100},
+        ]})
+        assert r.status_code == 200
+        rows = list(csv.reader(io.StringIO(r.get_data(as_text=True))))
+        item_rows = [row for row in rows if len(row) >= 2 and row[1] not in ("item", "TOTAL")]
+        names = [row[1] for row in item_rows]
+        assert "Bad Row" not in names
+        assert "Good Row" in names
+
+    def test_zero_or_negative_qty_is_skipped(self, client):
+        r = client.post("/api/supplier-reorder/export", json={"lines": [
+            {"supplier": "Box4Less", "name": "Zero Qty", "qty": 0, "unit_price_usd_cents": 91},
+            {"supplier": "Box4Less", "name": "Negative Qty", "qty": -1, "unit_price_usd_cents": 91},
+            {"supplier": "Box4Less", "name": "Good Row", "qty": 1, "unit_price_usd_cents": 91},
+        ]})
+        assert r.status_code == 200
+        rows = list(csv.reader(io.StringIO(r.get_data(as_text=True))))
+        item_rows = [row for row in rows if len(row) >= 2 and row[1] not in ("item", "TOTAL")]
+        names = [row[1] for row in item_rows]
+        assert names == ["Good Row"]
+
+    def test_multiple_lines_same_supplier_sum_into_one_total_row(self, client):
+        r = client.post("/api/supplier-reorder/export", json={"lines": [
+            {"supplier": "Box4Less", "name": "Item A", "qty": 2, "unit_price_usd_cents": 100},
+            {"supplier": "Box4Less", "name": "Item B", "qty": 3, "unit_price_usd_cents": 200},
+        ]})
+        assert r.status_code == 200
+        rows = list(csv.reader(io.StringIO(r.get_data(as_text=True))))
+        total_rows = [row for row in rows if len(row) >= 2 and row[1] == "TOTAL"]
+        assert total_rows == [["Box4Less", "TOTAL", "", "", "8.00"]]

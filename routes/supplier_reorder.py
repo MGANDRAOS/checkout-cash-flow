@@ -1,4 +1,7 @@
-from flask import Blueprint, render_template, jsonify, request
+import csv
+import io
+
+from flask import Blueprint, render_template, jsonify, request, Response
 
 from config import CURRENCY
 from helpers_supplier_reorder import (
@@ -66,3 +69,37 @@ def api_supplier_reorder_categories():
 def api_supplier_reorder_suppliers():
     rows = Supplier.query.filter_by(active=True).order_by(Supplier.name).all()
     return jsonify({"suppliers": [{"id": s.id, "name": s.name} for s in rows]})
+
+
+@supplier_reorder_bp.post("/api/supplier-reorder/export")
+def api_supplier_reorder_export():
+    data = _body()
+    lines = data.get("lines") if isinstance(data, dict) else None
+    if not lines:
+        return jsonify({"ok": False, "error": "no lines to export"}), 400
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["supplier", "item", "qty", "unit_price_usd", "line_total_usd"])
+    totals = {}
+    for ln in lines:
+        supplier = str(ln.get("supplier") or "")
+        name = str(ln.get("name") or "")
+        try:
+            qty = int(ln.get("qty"))
+            unit_cents = int(ln.get("unit_price_usd_cents"))
+        except (TypeError, ValueError):
+            continue
+        if qty <= 0:
+            continue
+        line_total = qty * unit_cents / 100
+        totals[supplier] = totals.get(supplier, 0) + line_total
+        w.writerow([supplier, name, qty, f"{unit_cents/100:.2f}", f"{line_total:.2f}"])
+    w.writerow([])
+    for supplier, total in totals.items():
+        w.writerow([supplier, "TOTAL", "", "", f"{total:.2f}"])
+
+    return Response(
+        buf.getvalue(), mimetype="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="supplier_orders.csv"'},
+    )

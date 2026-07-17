@@ -189,6 +189,26 @@
     renderTotals();
   });
 
+  el.exportBtn.addEventListener("click", async () => {
+    const lines = [...order.values()];
+    if (lines.length === 0) return;
+    const r = await fetch("/api/supplier-reorder/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lines }),
+    });
+    if (!r.ok) return;
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "supplier_orders.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
   window.SupplierReorder = { esc, usd, renderTotals, order, loadReorderNow, loadUnmatchedCount, el };
 
   document.addEventListener("DOMContentLoaded", () => {
