@@ -112,3 +112,29 @@ def reorder_now() -> dict:
         "totals_by_supplier_cents": totals_by_supplier_cents,
         "unpriced_count": sum(1 for r in rows if not r["options"]),
     }
+
+
+def browse_catalog(q: str = "", category: str = "", page: int = 1, page_size: int = 30) -> dict:
+    """Search/filter active SupplierItems across both suppliers, paginated."""
+    query = SupplierItem.query.filter_by(active=True)
+    if q:
+        query = query.filter(SupplierItem.name.ilike(f"%{q.strip()}%"))
+    if category:
+        query = query.filter_by(category=category)
+    total = query.count()
+    items = (query.order_by(SupplierItem.category, SupplierItem.name)
+             .offset((page - 1) * page_size).limit(page_size).all())
+    rows = [{
+        "id": it.id, "name": it.name, "category": it.category,
+        "format_label": it.format_label, "supplier": it.supplier.name,
+        "supplier_id": it.supplier_id, "unit_price_usd_cents": it.unit_price_usd_cents,
+        "case_price_usd_cents": it.case_price_usd_cents, "itm_code": it.itm_code,
+    } for it in items]
+    return {"items": rows, "total": total, "page": page, "page_size": page_size}
+
+
+def list_categories() -> List[str]:
+    rows = (db.session.query(SupplierItem.category)
+            .filter(SupplierItem.active.is_(True), SupplierItem.category != "")
+            .distinct().order_by(SupplierItem.category).all())
+    return [r[0] for r in rows]
