@@ -267,3 +267,17 @@ class TestExport:
         rows = list(csv.reader(io.StringIO(r.get_data(as_text=True))))
         total_rows = [row for row in rows if len(row) >= 2 and row[1] == "TOTAL"]
         assert total_rows == [["Box4Less", "TOTAL", "", "", "8.00"]]
+
+    def test_non_dict_line_item_is_skipped_without_crashing(self, client):
+        r = client.post("/api/supplier-reorder/export", json={"lines": [
+            "not-a-dict",
+            123,
+            None,
+            {"supplier": "Box4Less", "name": "Good Row", "qty": 2, "unit_price_usd_cents": 100},
+        ]})
+        assert r.status_code == 200
+        rows = list(csv.reader(io.StringIO(r.get_data(as_text=True))))
+        item_rows = [row for row in rows if len(row) >= 2 and row[1] not in ("item", "TOTAL")]
+        assert item_rows == [["Box4Less", "Good Row", "2", "1.00", "2.00"]]
+        total_rows = [row for row in rows if len(row) >= 2 and row[1] == "TOTAL"]
+        assert total_rows == [["Box4Less", "TOTAL", "", "", "2.00"]]

@@ -83,6 +83,8 @@ def api_supplier_reorder_export():
     w.writerow(["supplier", "item", "qty", "unit_price_usd", "line_total_usd"])
     totals = {}
     for ln in lines:
+        if not isinstance(ln, dict):
+            continue
         supplier = str(ln.get("supplier") or "")
         name = str(ln.get("name") or "")
         try:
