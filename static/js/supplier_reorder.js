@@ -126,10 +126,74 @@
     el.unmatchedLabel.textContent = `${body.items.length} unmatched items`;
   }
 
+  function catalogRowHtml(item) {
+    return `
+      <div class="sup-card" data-supplier-item-id="${item.id}">
+        <div class="sup-card__top">
+          <div>
+            <div class="sup-card__title">${esc(item.name)}</div>
+            <div class="sup-card__meta">${esc(item.supplier)} &middot; ${esc(item.category)}</div>
+          </div>
+          <div class="sup-card__price">${usd(item.unit_price_usd_cents)}/u</div>
+        </div>
+        <div class="sup-card__row">
+          <input class="sup-qty-input sup-catalog-qty" type="number" min="0" step="1" value="0">
+        </div>
+      </div>`;
+  }
+
+  const catalogCategorySel = document.getElementById("supCatalogCategory");
+
+  let catalogItems = [];
+  async function loadCatalog(q = "") {
+    const category = catalogCategorySel.value;
+    const params = new URLSearchParams({ q, category, page: "1" });
+    const r = await fetch(`/api/supplier-reorder/catalog?${params.toString()}`);
+    const body = await r.json();
+    catalogItems = body.items;
+    el.catalogList.innerHTML = catalogItems.map(catalogRowHtml).join("") || "<p>No matching items.</p>";
+  }
+
+  async function loadCategories() {
+    const r = await fetch("/api/supplier-reorder/categories");
+    const body = await r.json();
+    catalogCategorySel.innerHTML = '<option value="">All categories</option>' +
+      body.categories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  }
+
+  let searchTimer;
+  el.catalogSearch.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadCatalog(el.catalogSearch.value.trim()), 250);
+  });
+  catalogCategorySel.addEventListener("change", () => loadCatalog(el.catalogSearch.value.trim()));
+
+  el.catalogList.addEventListener("input", (e) => {
+    if (!e.target.classList.contains("sup-catalog-qty")) return;
+    const card = e.target.closest(".sup-card");
+    const id = Number(card.dataset.supplierItemId);
+    const item = catalogItems.find(it => it.id === id);
+    if (!item) return;
+    const qty = Math.max(0, parseInt(e.target.value, 10) || 0);
+    const key = `catalog:${id}`;
+    if (qty > 0) {
+      order.set(key, {
+        supplier_item_id: id, supplier: item.supplier,
+        unit_price_usd_cents: item.unit_price_usd_cents, qty, name: item.name,
+      });
+    } else {
+      order.delete(key);
+    }
+    renderTotals();
+  });
+
   window.SupplierReorder = { esc, usd, renderTotals, order, loadReorderNow, loadUnmatchedCount, el };
 
   document.addEventListener("DOMContentLoaded", () => {
     loadReorderNow();
+    loadCatalog();
+    loadCategories();
     loadUnmatchedCount();
+    renderTotals();
   });
 })();

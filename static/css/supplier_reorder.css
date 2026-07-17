@@ -121,3 +121,18 @@
   background: var(--bg-elevated);
   color: var(--text);
 }
+
+.sup-catalog-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sup-catalog-filters .sup-search {
+  margin-bottom: 0;
+}
+
+.sup-catalog-filters #supCatalogCategory {
+  flex: 0 0 auto;
+  max-width: 160px;
+}
