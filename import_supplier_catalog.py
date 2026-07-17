@@ -96,8 +96,7 @@ def parse_workbook(path):
 
 
 def import_supplier(name, path):
-    from models import Supplier, SupplierItem
-    from main import db
+    from models import db, Supplier, SupplierItem
 
     supplier = Supplier.query.filter_by(name=name).first()
     if supplier is None:
@@ -107,6 +106,11 @@ def import_supplier(name, path):
 
     count = 0
     for row in parse_workbook(path):
+        if row["unit_price_usd_cents"] is None:
+            # Malformed/non-numeric unit price cell (e.g. "N/A"). SupplierItem.
+            # unit_price_usd_cents is NOT NULL, so letting this through would
+            # raise an uncaught IntegrityError and abort the whole batch.
+            continue
         existing = SupplierItem.query.filter_by(supplier_id=supplier.id, name=row["name"]).first()
         if existing is None:
             existing = SupplierItem(supplier_id=supplier.id, name=row["name"],
