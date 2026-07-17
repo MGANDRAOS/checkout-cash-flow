@@ -127,6 +127,8 @@
   }
 
   function catalogRowHtml(item) {
+    const existing = order.get(`catalog:${item.id}`);
+    const qty = existing ? existing.qty : 0;
     return `
       <div class="sup-card" data-supplier-item-id="${item.id}">
         <div class="sup-card__top">
@@ -137,7 +139,7 @@
           <div class="sup-card__price">${usd(item.unit_price_usd_cents)}/u</div>
         </div>
         <div class="sup-card__row">
-          <input class="sup-qty-input sup-catalog-qty" type="number" min="0" step="1" value="0">
+          <input class="sup-qty-input sup-catalog-qty" type="number" min="0" step="1" value="${qty}">
         </div>
       </div>`;
   }
