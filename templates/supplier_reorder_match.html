@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/items_sold.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/supplier_reorder.css') }}">
+{% endblock %}
+{% block content %}
+<div id="supplierMatch" class="is-page">
+  <div class="is-header">
+    <div class="is-title-block">
+      <h1>Match Supplier Items</h1>
+      <p class="is-hint">Link each supplier catalog item to a tracked stock item, or leave it unmatched if it's not one you track.</p>
+    </div>
+  </div>
+  <div id="supMatchList" class="sup-match-list"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/supplier_reorder_match.js') }}"></script>
+{% endblock %}

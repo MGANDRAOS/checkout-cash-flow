@@ -1,0 +1,123 @@
+/* supplier_reorder.css — layers on static/css/items_sold.css (is- base tokens) */
+
+.sup-reorder-list, .sup-catalog-list, .sup-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.sup-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+
+.sup-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sup-card__title {
+  font-weight: 600;
+}
+
+.sup-card__meta {
+  color: var(--text-3);
+  font-size: 0.8rem;
+}
+
+.sup-card__price {
+  text-align: right;
+}
+
+.sup-card__price-alt {
+  text-decoration: line-through;
+  color: var(--text-3);
+  font-size: 0.8rem;
+  margin-left: 4px;
+}
+
+.sup-card__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.sup-qty-input {
+  width: 70px;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.sup-line-total {
+  font-weight: 600;
+}
+
+.sup-order-bar {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  margin-top: 12px;
+}
+
+.sup-order-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
+.sup-search {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.sup-match-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+}
+
+.sup-match-name { flex: 1; }
+.sup-match-supplier { color: var(--text-3); font-size: 0.8rem; margin-left: 6px; }
+
+.sup-add-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  margin: 8px 0 16px;
+}
+
+.sup-add-panel input, .sup-add-panel select {
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+}

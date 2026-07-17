@@ -41,6 +41,7 @@ from routes.invoices import invoices_bp
 from routes.stock import stock_bp
 from routes.items_sold import items_sold_bp
 from routes.cost_coverage import cost_coverage_bp
+from routes.supplier_reorder import supplier_reorder_bp
 
 from helpers_intelligence import (
     get_pos_sales_total_by_range,
@@ -370,6 +371,7 @@ app.register_blueprint(invoices_bp)
 app.register_blueprint(stock_bp)
 app.register_blueprint(items_sold_bp)
 app.register_blueprint(cost_coverage_bp)
+app.register_blueprint(supplier_reorder_bp)
 
 
 @app.before_request
