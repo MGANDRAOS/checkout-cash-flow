@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/items_sold.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/supplier_reorder.css') }}">
+{% endblock %}
+{% block content %}
+<div id="supplierReorder" class="is-page" data-currency="{{ currency }}">
+  <div class="is-header">
+    <div class="is-title-block">
+      <h1>Supplier Reorder</h1>
+      <p class="is-hint">What needs restocking, from which supplier, and what it costs.</p>
+    </div>
+    <a href="/supplier-reorder/match" class="is-ghost-btn">
+      <i class="bi bi-link-45deg"></i><span id="supUnmatchedLabel">Unmatched items</span>
+    </a>
+  </div>
+
+  <div class="is-kpi-hero">
+    <div class="is-kpi-grid">
+      <div class="is-kpi-card">
+        <div class="is-kpi-number" id="supKpiCount">&mdash;</div>
+        <div class="is-kpi-label">need reorder</div>
+      </div>
+      <div class="is-kpi-card">
+        <div class="is-kpi-number" id="supKpiTotal">&mdash;</div>
+        <div class="is-kpi-label">est. total (USD)</div>
+      </div>
+      <div class="is-kpi-card">
+        <div class="is-kpi-number" id="supKpiUnpriced">&mdash;</div>
+        <div class="is-kpi-label">no supplier price</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="is-results-bar">
+    <div class="is-results-title">Reorder Now</div>
+  </div>
+  <div id="supReorderList" class="sup-reorder-list"></div>
+
+  <div class="is-results-bar">
+    <div class="is-results-title">Browse Full Catalog</div>
+  </div>
+  <div class="sup-catalog-filters">
+    <input id="supCatalogSearch" class="sup-search" type="search" placeholder="Search catalog...">
+    <select id="supCatalogCategory" class="sup-search"><option value="">All categories</option></select>
+  </div>
+  <div id="supCatalogList" class="sup-catalog-list"></div>
+
+  <button id="supAddItemBtn" class="is-ghost-btn" type="button">
+    <i class="bi bi-plus-lg"></i><span>Add catalog item</span>
+  </button>
+  <section id="supAddItemPanel" class="sup-add-panel" hidden>
+    <select id="supAddSupplier"></select>
+    <input id="supAddName" type="text" placeholder="Item name">
+    <input id="supAddCategory" type="text" placeholder="Category">
+    <input id="supAddPrice" type="number" step="0.01" min="0" placeholder="Unit price (USD)">
+    <button id="supAddSave" class="is-export-btn" type="button">Save</button>
+  </section>
+
+  <div id="supOrderBar" class="sup-order-bar">
+    <div id="supOrderTotals" class="sup-order-totals"><span>No items picked yet.</span></div>
+    <button id="supExportBtn" class="is-export-btn" type="button">
+      <i class="bi bi-download"></i><span>Export Orders</span>
+    </button>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/supplier_reorder.js') }}"></script>
+{% endblock %}

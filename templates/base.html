@@ -97,6 +97,10 @@
         class="sidebar-link {% if request.path.startswith('/reports/cost-coverage') %}active{% endif %}">
         <i class="bi bi-clipboard-check"></i><span>Cost Coverage</span>
       </a>
+      <a href="/supplier-reorder"
+        class="sidebar-link {% if request.path.startswith('/supplier-reorder') %}active{% endif %}">
+        <i class="bi bi-truck"></i><span>Supplier Reorder</span>
+      </a>
       <a href="/reports/dead-items"
         class="sidebar-link {% if request.path.startswith('/reports/dead-items') %}active{% endif %}">
         <i class="bi bi-archive"></i><span>Dead Items</span>
