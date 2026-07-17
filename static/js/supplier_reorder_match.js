@@ -36,11 +36,16 @@
     const row = btn.closest(".sup-match-row");
     const id = row.dataset.id;
     const itm_code = row.querySelector(".sup-match-select").value;
-    await fetch(API_CONFIRM, {
+    const r = await fetch(API_CONFIRM, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ supplier_item_id: Number(id), itm_code }),
     });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok || !body.ok) {
+      alert(`Failed to confirm match: ${body.error || r.statusText || "unknown error"}`);
+      return;
+    }
     row.remove();
   });
 
